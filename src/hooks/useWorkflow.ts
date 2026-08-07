@@ -7,14 +7,7 @@
 
 import React, { useState, useCallback, Dispatch, SetStateAction } from 'react';
 import { NodeData, NodeGroup, Viewport } from '../types';
-
-interface WorkflowData {
-    id: string | null;
-    title: string;
-    nodes: NodeData[];
-    groups: NodeGroup[];
-    viewport: Viewport;
-}
+import { loadVelaProject, saveVelaProject } from '../vela/services/projectService';
 
 interface UseWorkflowOptions {
     nodes: NodeData[];
@@ -51,27 +44,20 @@ export const useWorkflow = ({
      */
     const handleSaveWorkflow = useCallback(async () => {
         try {
-            const workflow: WorkflowData = {
+            const workflow = {
                 id: workflowId,
-                title: canvasTitle,
+                name: canvasTitle,
                 nodes,
                 groups,
                 viewport
             };
-
-            const response = await fetch('http://localhost:3001/api/workflows', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(workflow)
-            });
-
-            if (response.ok) {
-                const result = await response.json();
-                setWorkflowId(result.id);
-                console.log('Workflow saved:', result.id);
-            }
+            const result = await saveVelaProject(workflow);
+            setWorkflowId(result.id);
+            console.log('Vela project saved:', result.id);
+            return result.id;
         } catch (error) {
             console.error('Failed to save workflow:', error);
+            return null;
         }
     }, [workflowId, canvasTitle, nodes, groups, viewport]);
 
@@ -82,38 +68,21 @@ export const useWorkflow = ({
      */
     const handleLoadWorkflow = useCallback(async (id: string): Promise<{ nodeCount: number; title: string } | null> => {
         try {
-            // Check if loading a public workflow
-            const isPublic = id.startsWith('public:');
-            const workflowId = isPublic ? id.replace('public:', '') : id;
-            const endpoint = isPublic
-                ? `http://localhost:3001/api/public-workflows/${workflowId}`
-                : `http://localhost:3001/api/workflows/${workflowId}`;
-
-            const response = await fetch(endpoint);
-            if (response.ok) {
-                const workflow = await response.json();
-
-                // For public workflows, don't set the workflowId so it saves as a new workflow
-                if (!isPublic) {
-                    setWorkflowId(workflow.id);
-                } else {
-                    setWorkflowId(null); // New copy, not linked to public workflow
-                }
-
-                setCanvasTitle(workflow.title || 'Untitled');
-                setEditingTitleValue(workflow.title || 'Untitled');
+            const workflow = await loadVelaProject(id);
+                setWorkflowId(workflow.id);
+                setCanvasTitle(workflow.name || '未命名工作区');
+                setEditingTitleValue(workflow.name || '未命名工作区');
                 setNodes(workflow.nodes || []);
                 setGroups(workflow.groups || []); // Restore groups
                 // Reset selection
                 setSelectedNodeIds([]);
                 setIsWorkflowPanelOpen(false);
-                console.log(isPublic ? 'Public workflow loaded:' : 'Workflow loaded:', workflowId);
+                console.log('Vela project loaded:', workflow.id);
                 // Return info for tracking
                 return {
                     nodeCount: (workflow.nodes || []).length,
-                    title: workflow.title || 'Untitled'
+                    title: workflow.name || '未命名工作区'
                 };
-            }
         } catch (error) {
             console.error('Failed to load workflow:', error);
         }

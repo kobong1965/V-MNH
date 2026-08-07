@@ -1,12 +1,19 @@
 {
-  "name": "twitcanva",
+  "name": "vela-ai-canvas",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.4.0",
+  "description": "Vela AI 视频无限画布 Windows 桌面端",
+  "productName": "Vela AI视频画布",
+  "main": "electron/main.js",
   "type": "module",
   "scripts": {
     "dev": "concurrently \"npm run server\" \"vite\"",
     "server": "node server/index.js",
     "build": "vite build",
+    "desktop": "npm run build && electron .",
+    "pack:win": "npm run build && electron-builder --win --dir",
+    "build:win": "node scripts/build-win.mjs",
+    "test:node": "node --test shared/*.test.js server/providers/*.test.js server/vela/*.test.js server/routes/*.test.js electron/*.test.js",
     "preview": "vite preview",
     "setup:local-models": "node -e \"require('child_process').execSync(process.platform === 'win32' ? 'setup-local-models.bat' : 'bash setup-local-models.sh', {stdio: 'inherit'})\""
   },
@@ -20,6 +27,9 @@
     "@react-three/drei": "^10.7.7",
     "@react-three/fiber": "^9.5.0",
     "@types/three": "^0.182.0",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "express": "^5.2.1",
     "face-api.js": "^0.22.2",
     "form-data": "^4.0.5",
     "lucide-react": "^0.556.0",
@@ -28,16 +38,59 @@
     "react-dom": "^19.2.1",
     "sharp": "^0.34.5",
     "three": "^0.182.0",
-    "twitter-api-v2": "^1.28.0"
+    "twitter-api-v2": "^1.28.0",
+    "ws": "^8.18.3"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
     "@vitejs/plugin-react": "^5.0.0",
     "concurrently": "^9.2.1",
-    "cors": "^2.8.5",
-    "dotenv": "^17.2.3",
-    "express": "^5.2.1",
+    "electron": "^43.3.0",
+    "electron-builder": "^26.15.3",
     "typescript": "~5.8.2",
     "vite": "^6.2.0"
+  },
+  "build": {
+    "appId": "cc.yman.vela",
+    "productName": "Vela AI视频画布",
+    "artifactName": "Vela-Setup-${version}-${arch}.${ext}",
+    "asar": true,
+    "asarUnpack": [
+      "node_modules/sharp/**/*",
+      "node_modules/@img/**/*"
+    ],
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "server/**/*",
+      "shared/**/*",
+      "build/icon.png",
+      "package.json",
+      "!server/**/*.test.js",
+      "!electron/**/*.test.js"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": "always",
+      "createStartMenuShortcut": true,
+      "shortcutName": "Vela AI视频画布",
+      "deleteAppDataOnUninstall": false
+    }
   }
 }

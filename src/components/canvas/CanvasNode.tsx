@@ -11,9 +11,13 @@ import { NodeConnectors } from './NodeConnectors';
 import { NodeContent } from './NodeContent';
 import { NodeControls } from './NodeControls';
 import { ChangeAnglePanel } from './ChangeAnglePanel';
+import { VelaNodeControls } from '../../vela/components/VelaNodeControls';
+import type { VelaProfile } from '../../vela/services/profileService';
 
 interface CanvasNodeProps {
   data: NodeData;
+  profileName?: string;
+  profiles?: VelaProfile[];
   inputUrl?: string;
   connectedImageNodes?: { id: string; url: string; type?: NodeType }[]; // For frame-to-frame video mode and motion control
   onUpdate: (id: string, updates: Partial<NodeData>) => void;
@@ -52,6 +56,8 @@ interface CanvasNodeProps {
 
 export const CanvasNode: React.FC<CanvasNodeProps> = ({
   data,
+  profileName,
+  profiles,
   inputUrl,
   connectedImageNodes,
   onUpdate,
@@ -546,7 +552,7 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
 
   return (
     <div
-      className={`absolute group/node touch-none pointer-events-auto`}
+      className={`absolute group/node touch-none pointer-events-auto ${data.kind ? `vela-canvas-node vela-canvas-node--${data.kind}` : ''}`}
       style={{
         transform: `translate(${data.x}px, ${data.y}px)`,
         transition: 'box-shadow 0.2s',
@@ -561,9 +567,9 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
       <NodeConnectors nodeId={data.id} onConnectorDown={onConnectorDown} canvasTheme={canvasTheme} />
 
       {/* Relative wrapper for the Image Card to allow absolute positioning of controls below it */}
-      <div className="relative group/nodecard">
+      <div className={`relative group/nodecard ${data.kind ? 'vela-node-stack' : ''}`}>
         {/* Unified Toolbar - Appears above the card for Image nodes on hover */}
-        {data.type === NodeType.IMAGE && isSuccess && data.resultUrl && (
+        {!data.kind && data.type === NodeType.IMAGE && isSuccess && data.resultUrl && (
           <div
             className="absolute -top-12 left-0 right-0 flex justify-center opacity-0 group-hover/nodecard:opacity-100 transition-opacity z-20"
             style={{
@@ -736,7 +742,7 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
         )}
 
         {/* Video Toolbar - Appears above the card for Video nodes on hover */}
-        {data.type === NodeType.VIDEO && isSuccess && data.resultUrl && (
+        {!data.kind && data.type === NodeType.VIDEO && isSuccess && data.resultUrl && (
           <div
             className="absolute -top-20 left-0 right-0 flex justify-center opacity-0 group-hover/nodecard:opacity-100 transition-opacity z-20"
             style={{
@@ -853,7 +859,9 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
 
         {/* Main Node Card - Video nodes are wider to fit more controls */}
         <div
-          className={`relative ${data.type === NodeType.VIDEO ? 'w-[385px]' : 'w-[365px]'} rounded-2xl border transition-all duration-300 flex flex-col shadow-2xl ${isDark ? 'bg-[#0f0f0f]' : 'bg-white'} ${selected ? 'border-blue-500/50 ring-1 ring-blue-500/30' : isDark ? 'border-neutral-800' : 'border-neutral-200'}`}
+          className={data.kind
+            ? `vela-node-card relative transition-all duration-200 flex flex-col ${selected ? 'is-selected' : ''}`
+            : `relative ${data.type === NodeType.VIDEO ? 'w-[385px]' : 'w-[365px]'} rounded-2xl border transition-all duration-300 flex flex-col shadow-2xl ${isDark ? 'bg-[#0f0f0f]' : 'bg-white'} ${selected ? 'border-blue-500/50 ring-1 ring-blue-500/30' : isDark ? 'border-neutral-800' : 'border-neutral-200'}`}
         >
           {/* Header (Editable Title) - Positioned horizontally on top-left side */}
           {isEditingTitle ? (
@@ -873,13 +881,13 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
               }}
               onClick={(e) => e.stopPropagation()}
               onPointerDown={(e) => e.stopPropagation()}
-              className="absolute top-2 text-sm px-2 py-0.5 rounded font-medium bg-blue-500/20 text-blue-200 outline-none border border-blue-400 whitespace-nowrap"
-              style={{ right: 'calc(100% + 8px)', minWidth: '60px' }}
+              className={data.kind ? 'vela-node-title-input' : 'absolute top-2 text-sm px-2 py-0.5 rounded font-medium bg-blue-500/20 text-blue-200 outline-none border border-blue-400 whitespace-nowrap'}
+              style={data.kind ? { minWidth: '120px' } : { right: 'calc(100% + 8px)', minWidth: '60px' }}
             />
           ) : (
             <div
-              className={`absolute top-2 text-sm px-2 py-0.5 rounded font-medium transition-colors cursor-text whitespace-nowrap ${selected ? 'bg-blue-500/20 text-blue-200' : 'text-neutral-600'}`}
-              style={{ right: 'calc(100% + 8px)' }}
+              className={data.kind ? `vela-node-title-label ${selected ? 'is-selected' : ''}` : `absolute top-2 text-sm px-2 py-0.5 rounded font-medium transition-colors cursor-text whitespace-nowrap ${selected ? 'bg-blue-500/20 text-blue-200' : 'text-neutral-600'}`}
+              style={data.kind ? undefined : { right: 'calc(100% + 8px)' }}
               onDoubleClick={(e) => {
                 e.stopPropagation();
                 setIsEditingTitle(true);
@@ -915,7 +923,19 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
 
         {/* Control Panel - Only show when single node is selected (not in group selection) */}
         {/* Hide controls for storyboard-generated scenes */}
-        {selected && showControls && data.type !== NodeType.TEXT && !(data.prompt && data.prompt.startsWith('Extract panel #')) && (
+        {selected && showControls && data.kind && (
+          <div className="vela-node-controls-shell absolute top-[calc(100%+12px)] left-1/2 -translate-x-1/2 flex justify-center z-[100]">
+            <VelaNodeControls
+              data={data}
+              isLoading={isLoading}
+              profileName={profileName}
+              profiles={profiles}
+              onUpdate={onUpdate}
+              onGenerate={onGenerate}
+            />
+          </div>
+        )}
+        {selected && showControls && !data.kind && data.type !== NodeType.TEXT && !(data.prompt && data.prompt.startsWith('Extract panel #')) && (
           <div className="absolute top-[calc(100%+12px)] left-1/2 -translate-x-1/2 w-[600px] flex justify-center z-[100]">
             <NodeControls
               data={data}

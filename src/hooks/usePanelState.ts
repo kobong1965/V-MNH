@@ -83,7 +83,7 @@ export const usePanelState = () => {
     const handleAssetsClick = useCallback((e: React.MouseEvent, closeWorkflowPanel: () => void) => {
         const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
         setAssetLibraryY(rect.top);
-        setAssetLibraryVariant('panel');
+        setAssetLibraryVariant('modal');
         setIsAssetLibraryOpen(prev => !prev);
         setIsHistoryPanelOpen(false);
         closeWorkflowPanel();

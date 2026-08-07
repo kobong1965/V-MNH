@@ -7,6 +7,7 @@
 
 import React, { useState, useRef } from 'react';
 import { NodeData, NodeType, Viewport } from '../types';
+import { canConnectNodeKinds } from '../vela/nodeCatalog';
 
 interface ConnectionStart {
     nodeId: string;
@@ -135,6 +136,10 @@ export const useConnectionDragging = () => {
             const childNode = nodes.find(n => n.id === childId);
 
             if (!parentNode || !childNode) return false;
+
+            if (parentNode.kind && childNode.kind) {
+                return canConnectNodeKinds(parentNode.kind, childNode.kind);
+            }
 
             // AUDIO nodes not supported yet
             if (parentNode.type === NodeType.AUDIO || childNode.type === NodeType.AUDIO) {

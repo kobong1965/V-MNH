@@ -7,6 +7,11 @@
 
 import { useState } from 'react';
 import { NodeData, NodeType, NodeStatus, Viewport } from '../types';
+import {
+    getDefaultNodeTitle,
+    getNodeDefinition,
+    type VelaNodeKind
+} from '../vela/nodeCatalog';
 
 export const useNodeManagement = () => {
     // ============================================================================
@@ -33,22 +38,52 @@ export const useNodeManagement = () => {
         x: number,
         y: number,
         parentId: string | undefined,
-        viewport: Viewport
+        viewport: Viewport,
+        kind?: VelaNodeKind
     ) => {
         const canvasX = (x - viewport.x) / viewport.zoom;
         const canvasY = (y - viewport.y) / viewport.zoom;
 
+        const nodeSize = (nodeKind?: VelaNodeKind) => ({
+            width: nodeKind && ['prompt', 'gpt-prompt-optimizer'].includes(nodeKind) ? 370 : 656,
+            height: 370
+        });
+        const size = nodeSize(kind);
+        let nextX = parentId ? canvasX : canvasX - size.width / 2;
+        let nextY = parentId ? canvasY : canvasY - size.height / 2;
+
+        if (!parentId) {
+            for (let attempt = 0; attempt < 12; attempt += 1) {
+                const collision = nodes.find((node) => {
+                    const existing = nodeSize(node.kind);
+                    return nextX < node.x + existing.width + 70
+                        && nextX + size.width + 70 > node.x
+                        && nextY < node.y + existing.height + 70
+                        && nextY + size.height + 70 > node.y;
+                });
+                if (!collision) break;
+                const existing = nodeSize(collision.kind);
+                nextX = collision.x + existing.width + 90;
+                nextY = collision.y;
+            }
+        }
+
         const newNode: NodeData = {
             id: crypto.randomUUID(),
             type,
-            x: parentId ? canvasX : canvasX - 170,
-            y: parentId ? canvasY : canvasY - 100,
+            kind,
+            title: kind ? getDefaultNodeTitle(kind) : undefined,
+            x: nextX,
+            y: nextY,
             prompt: '',
             status: NodeStatus.IDLE,
             model: 'Banana Pro',
-            aspectRatio: 'Auto',
-            resolution: 'Auto',
-            parentIds: parentId ? [parentId] : []
+            aspectRatio: kind === 'h3-video' ? '9:16' : kind === 'gpt-image' ? '1:1' : 'Auto',
+            resolution: kind === 'h3-video' ? '1080p' : kind === 'gpt-image' ? '2K' : 'Auto',
+            parentIds: parentId ? [parentId] : [],
+            outputCount: 1,
+            imageModel: kind === 'gpt-image' ? 'gpt-image-1.5' : undefined,
+            videoModel: kind === 'h3-video' ? 'h3-comfy' : undefined
         };
 
         setNodes(prev => [...prev, newNode]);
@@ -99,7 +134,8 @@ export const useNodeManagement = () => {
         type: NodeType | 'DELETE',
         contextMenu: any,
         viewport: Viewport,
-        onCloseMenu: () => void
+        onCloseMenu: () => void,
+        kind?: VelaNodeKind
     ) => {
         // Handle Delete Action
         if (type === 'DELETE') {
@@ -125,28 +161,38 @@ export const useNodeManagement = () => {
                     newNode = {
                         id: newNodeId,
                         type,
+                        kind,
+                        title: kind ? getDefaultNodeTitle(kind) : undefined,
                         x: sourceNode.x + NODE_WIDTH + GAP,
                         y: sourceNode.y,
                         prompt: '',
                         status: NodeStatus.IDLE,
                         model: 'Banana Pro',
-                        aspectRatio: 'Auto',
-                        resolution: 'Auto',
-                        parentIds: contextMenu.sourceNodeId ? [contextMenu.sourceNodeId] : []
+                        aspectRatio: kind === 'h3-video' ? '9:16' : kind === 'gpt-image' ? '1:1' : 'Auto',
+                        resolution: kind === 'h3-video' ? '1080p' : kind === 'gpt-image' ? '2K' : 'Auto',
+                        parentIds: contextMenu.sourceNodeId ? [contextMenu.sourceNodeId] : [],
+                        outputCount: 1,
+                        imageModel: kind === 'gpt-image' ? 'gpt-image-1.5' : undefined,
+                        videoModel: kind === 'h3-video' ? 'h3-comfy' : undefined
                     };
                 } else {
                     // Prepend: New -> Source
                     newNode = {
                         id: newNodeId,
                         type,
+                        kind,
+                        title: kind ? getDefaultNodeTitle(kind) : undefined,
                         x: sourceNode.x - NODE_WIDTH - GAP,
                         y: sourceNode.y,
                         prompt: '',
                         status: NodeStatus.IDLE,
                         model: 'Banana Pro',
-                        aspectRatio: 'Auto',
-                        resolution: 'Auto',
-                        parentIds: []
+                        aspectRatio: kind === 'h3-video' ? '9:16' : kind === 'gpt-image' ? '1:1' : 'Auto',
+                        resolution: kind === 'h3-video' ? '1080p' : kind === 'gpt-image' ? '2K' : 'Auto',
+                        parentIds: [],
+                        outputCount: 1,
+                        imageModel: kind === 'gpt-image' ? 'gpt-image-1.5' : undefined,
+                        videoModel: kind === 'h3-video' ? 'h3-comfy' : undefined
                     };
                     // Update source to add new node as parent
                     const existingParentIds = sourceNode.parentIds || [];
@@ -158,10 +204,35 @@ export const useNodeManagement = () => {
             }
         } else {
             // Global menu - add at click position
-            addNode(type, contextMenu.x, contextMenu.y, undefined, viewport);
+            const isToolbarAdd = contextMenu.sourceNodeId === '__toolbar_add__';
+            const toolbarYRatio = kind && !['prompt', 'gpt-prompt-optimizer'].includes(kind) ? 0.405 : 0.39;
+            addNode(
+                type,
+                isToolbarAdd ? window.innerWidth / 2 : contextMenu.x,
+                isToolbarAdd ? window.innerHeight * toolbarYRatio : contextMenu.y,
+                undefined,
+                viewport,
+                kind
+            );
         }
 
         onCloseMenu();
+    };
+
+    const handleSelectKindFromMenu = (
+        kind: VelaNodeKind,
+        contextMenu: any,
+        viewport: Viewport,
+        onCloseMenu: () => void
+    ) => {
+        const definition = getNodeDefinition(kind);
+        handleSelectTypeFromMenu(
+            definition.legacyType as NodeType,
+            contextMenu,
+            viewport,
+            onCloseMenu,
+            kind
+        );
     };
 
     // ============================================================================
@@ -178,6 +249,7 @@ export const useNodeManagement = () => {
         deleteNode,
         deleteNodes,
         clearSelection,
-        handleSelectTypeFromMenu
+        handleSelectTypeFromMenu,
+        handleSelectKindFromMenu
     };
 };

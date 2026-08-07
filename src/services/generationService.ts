@@ -33,15 +33,31 @@ export interface GenerateVideoParams {
   nodeId?: string; // ID of the node initiating generation
 }
 
+type VelaImportMeta = ImportMeta & {
+  env?: {
+    VITE_VELA_FAKE_PROVIDER?: string;
+  };
+};
+
+export const isFakeProviderEnabled = () =>
+  (import.meta as VelaImportMeta).env?.VITE_VELA_FAKE_PROVIDER === 'true';
+
 /**
  * Generates an image by calling the backend API
  */
 export const generateImage = async (params: GenerateImageParams): Promise<string> => {
   try {
-    const response = await fetch('/api/generate-image', {
+    const useFakeProvider = isFakeProviderEnabled();
+    const response = await fetch(useFakeProvider ? '/api/vela/generate-image' : '/api/generate-image', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(params)
+      body: JSON.stringify(useFakeProvider
+        ? {
+            prompt: params.prompt,
+            aspectRatio: params.aspectRatio,
+            nodeId: params.nodeId
+          }
+        : params)
     });
 
     if (!response.ok) {
@@ -66,10 +82,17 @@ export const generateImage = async (params: GenerateImageParams): Promise<string
  */
 export const generateVideo = async (params: GenerateVideoParams): Promise<string> => {
   try {
-    const response = await fetch('/api/generate-video', {
+    const useFakeProvider = isFakeProviderEnabled();
+    const response = await fetch(useFakeProvider ? '/api/vela/generate-video' : '/api/generate-video', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(params)
+      body: JSON.stringify(useFakeProvider
+        ? {
+            prompt: params.prompt,
+            aspectRatio: params.aspectRatio,
+            nodeId: params.nodeId
+          }
+        : params)
     });
 
     if (!response.ok) {

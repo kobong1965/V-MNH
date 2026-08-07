@@ -1,15 +1,12 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>TwitCanva</title>
-  <link rel="icon" type="image/x-icon" href="/favicon.ico" />
-  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
-  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
-  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
-  <link rel="manifest" href="/site.webmanifest" />
+  <meta name="theme-color" content="#f8f8f7" />
+  <meta name="description" content="Vela AI 图片与视频生成画布" />
+  <title>Vela AI 生成画布</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     /* Custom scrollbar for better aesthetics */
@@ -19,21 +16,21 @@
     }
 
     ::-webkit-scrollbar-track {
-      background: #0f0f0f;
+      background: #f6f6f4;
     }
 
     ::-webkit-scrollbar-thumb {
-      background: #333;
+      background: #c9c9c5;
       border-radius: 4px;
     }
 
     ::-webkit-scrollbar-thumb:hover {
-      background: #444;
+      background: #a9a9a4;
     }
 
     body {
-      background-color: #050505;
-      color: #e5e5e5;
+      background-color: #f8f8f7;
+      color: #171717;
       overflow: hidden;
       /* Prevent body scroll, handle in canvas */
     }
@@ -41,7 +38,7 @@
 
 </head>
 
-<body>
+<body class="vela-body">
   <div id="root"></div>
   <script type="module" src="/src/index.tsx"></script>
 </body>

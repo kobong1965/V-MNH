@@ -7,8 +7,6 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Toolbar } from './components/Toolbar';
-import { TopBar } from './components/TopBar';
 import { CanvasNode } from './components/canvas/CanvasNode';
 import { ConnectionsLayer } from './components/canvas/ConnectionsLayer';
 import { ContextMenu } from './components/ContextMenu';
@@ -37,7 +35,6 @@ import { useGenerationRecovery } from './hooks/useGenerationRecovery';
 import { useVideoFrameExtraction } from './hooks/useVideoFrameExtraction';
 import { extractVideoLastFrame } from './utils/videoHelpers';
 import { SelectionBoundingBox } from './components/canvas/SelectionBoundingBox';
-import { WorkflowPanel } from './components/WorkflowPanel';
 import { HistoryPanel } from './components/HistoryPanel';
 import { ChatPanel, ChatBubble } from './components/ChatPanel';
 import { ImageEditorModal } from './components/modals/ImageEditorModal';
@@ -52,6 +49,17 @@ import { useTikTokImport } from './hooks/useTikTokImport';
 import { useStoryboardGenerator } from './hooks/useStoryboardGenerator';
 import { StoryboardGeneratorModal } from './components/modals/StoryboardGeneratorModal';
 import { StoryboardVideoModal } from './components/modals/StoryboardVideoModal';
+import { VelaComputePanel } from './vela/components/VelaComputePanel';
+import { VelaNodeRail } from './vela/components/VelaNodeRail';
+import { VelaTaskCenter } from './vela/components/VelaTaskCenter';
+import { VelaTopBar } from './vela/components/VelaTopBar';
+import { VelaMiniMap } from './vela/components/VelaMiniMap';
+import { createVelaPerformanceFixture } from './vela/performanceFixture';
+import { VelaProjectPanel } from './vela/components/VelaProjectPanel';
+import { useVelaJobs } from './vela/hooks/useVelaJobs';
+import { useVelaProfiles } from './vela/hooks/useVelaProfiles';
+import { createVelaJobGroup } from './vela/services/jobService';
+import { isFakeProviderEnabled } from './services/generationService';
 
 // ============================================================================
 // MAIN COMPONENT
@@ -76,6 +84,8 @@ const urlToBase64 = async (url: string): Promise<string> => {
   }
 };
 
+const VELA_P1_UI = true;
+
 export default function App() {
   // ============================================================================
   // STATE
@@ -89,7 +99,10 @@ export default function App() {
     type: 'global'
   });
 
-  const [canvasTheme, setCanvasTheme] = useState<'dark' | 'light'>('dark');
+  const [canvasTheme, setCanvasTheme] = useState<'dark' | 'light'>('light');
+  const [isTaskCenterOpen, setIsTaskCenterOpen] = useState(false);
+  const [isComputePanelOpen, setIsComputePanelOpen] = useState(false);
+  const { profiles: velaProfiles, error: velaProfilesError, refresh: refreshVelaProfiles } = useVelaProfiles();
 
   // Panel state management (history, chat, asset library, expand)
   const {
@@ -152,8 +165,35 @@ export default function App() {
     deleteNode,
     deleteNodes,
     clearSelection,
-    handleSelectTypeFromMenu
+    handleSelectTypeFromMenu,
+    handleSelectKindFromMenu
   } = useNodeManagement();
+
+  const handleAutoArrange = React.useCallback(() => {
+    const depthCache = new Map<string, number>();
+    const resolving = new Set<string>();
+    const getDepth = (node: NodeData): number => {
+      const cached = depthCache.get(node.id);
+      if (cached !== undefined) return cached;
+      if (resolving.has(node.id)) return 0;
+      resolving.add(node.id);
+      const parentDepths = (node.parentIds || [])
+        .map((parentId) => nodes.find((candidate) => candidate.id === parentId))
+        .filter((parent): parent is NodeData => Boolean(parent))
+        .map((parent) => getDepth(parent) + 1);
+      resolving.delete(node.id);
+      const depth = parentDepths.length > 0 ? Math.max(...parentDepths) : 0;
+      depthCache.set(node.id, depth);
+      return depth;
+    };
+    const rows = new Map<number, number>();
+    setNodes((current) => current.map((node) => {
+      const depth = getDepth(node);
+      const row = rows.get(depth) || 0;
+      rows.set(depth, row + 1);
+      return { ...node, x: 160 + depth * 440, y: 120 + row * 260 };
+    }));
+  }, [nodes, setNodes]);
 
   const {
     isDraggingConnection,
@@ -236,6 +276,14 @@ export default function App() {
     }
   });
 
+  const {
+    jobs: velaJobs,
+    error: velaJobsError,
+    refresh: refreshVelaJobs,
+    retry: retryVelaJob,
+    cancel: cancelVelaJob
+  } = useVelaJobs();
+
   // Simple dirty flag for unsaved changes tracking
   const [isDirty, setIsDirty] = React.useState(false);
   const hasUnsavedChanges = isDirty && nodes.length > 0;
@@ -285,6 +333,75 @@ export default function App() {
     updateNode
   });
 
+  const handleVelaGenerate = React.useCallback(async (id: string) => {
+    const node = nodes.find((candidate) => candidate.id === id);
+    if (!node?.kind || !['gpt-prompt-optimizer', 'gpt-image', 'h3-video'].includes(node.kind)) {
+      await handleGenerate(id);
+      return;
+    }
+    try {
+      const projectId = workflowId || await handleSaveWorkflow() || 'local-draft';
+      const isGptNode = node.kind.startsWith('gpt-');
+      if (isGptNode && !node.profileId && !isFakeProviderEnabled()) {
+        throw new Error('请先添加 GPT 账户，并在节点属性中选择账户');
+      }
+      const useFake = !isGptNode || isFakeProviderEnabled();
+      updateNode(id, { status: NodeStatus.LOADING });
+      const created = await createVelaJobGroup({
+        projectId,
+        nodeId: node.id,
+        profileId: useFake ? 'fake-local' : node.profileId!,
+        providerType: useFake ? 'fake' : 'gpt',
+        payload: {
+          prompt: node.prompt || '未填写描述',
+          nodeKind: node.kind,
+          referenceUrls: (node.parentIds || [])
+            .map((parentId) => nodes.find((candidate) => candidate.id === parentId)?.resultUrl)
+            .filter((url): url is string => Boolean(url)),
+          aspectRatio: node.aspectRatio || '16:9',
+          resolution: node.resolution || 'Auto'
+        },
+        count: node.kind === 'gpt-prompt-optimizer' ? 1 : node.outputCount || 1,
+        seedMode: 'increment',
+        seed: Date.now() % 2147483647
+      });
+      updateNode(id, { jobGroupId: created.group.id });
+      await refreshVelaJobs();
+      if (useFake && isFakeProviderEnabled() && node.kind !== 'gpt-prompt-optimizer') await handleGenerate(id);
+    } catch (error) {
+      updateNode(id, {
+        status: NodeStatus.ERROR,
+        errorMessage: error instanceof Error ? error.message : '任务创建失败'
+      });
+    }
+  }, [nodes, workflowId, handleSaveWorkflow, updateNode, refreshVelaJobs, handleGenerate]);
+
+  React.useEffect(() => {
+    const latestByNode = new Map<string, typeof velaJobs[number]>();
+    for (const job of velaJobs) {
+      const jobNode = nodes.find((candidate) => candidate.id === job.nodeId);
+      if (jobNode?.kind?.startsWith('gpt-') && jobNode.profileId && job.profileId !== jobNode.profileId) {
+        continue;
+      }
+      const current = latestByNode.get(job.nodeId);
+      if (!current || job.updatedAt > current.updatedAt) latestByNode.set(job.nodeId, job);
+    }
+    for (const [nodeId, job] of latestByNode) {
+      const node = nodes.find((candidate) => candidate.id === nodeId);
+      if (!node) continue;
+      const nextStatus = job.status === 'succeeded'
+        ? NodeStatus.SUCCESS
+        : job.status === 'failed' || job.status === 'cancelled'
+          ? NodeStatus.ERROR
+          : NodeStatus.LOADING;
+      const output = job.output as { media?: { url?: string }; text?: string } | null;
+      const resultUpdates: Partial<NodeData> = { status: nextStatus, errorMessage: job.error?.message };
+      if (job.status === 'succeeded' && output?.media?.url) resultUpdates.resultUrl = output.media.url;
+      if (job.status === 'succeeded' && output?.text && node.kind === 'gpt-prompt-optimizer') resultUpdates.prompt = output.text;
+      if (node.status !== nextStatus || resultUpdates.resultUrl || resultUpdates.prompt) updateNode(nodeId, resultUpdates);
+    }
+  }, [velaJobs]);
+
   // Keep a ref to handleGenerate so setTimeout callbacks can access the latest version
   const handleGenerateRef = React.useRef(handleGenerate);
   React.useEffect(() => {
@@ -297,8 +414,8 @@ export default function App() {
     setNodes([]);
     setGroups([]); // Reset groups for new canvas
     setSelectedNodeIds([]);
-    setCanvasTitle('Untitled Canvas');
-    setEditingTitleValue('Untitled Canvas');
+    setCanvasTitle('未命名工作区');
+    setEditingTitleValue('未命名工作区');
     resetWorkflowId(); // Important: ensures new workflow gets a new ID
     setIsDirty(false);
   };
@@ -629,6 +746,7 @@ export default function App() {
     handleNodeContextMenu,
     handleContextMenuCreateAsset,
     handleContextMenuSelect,
+    handleContextMenuSelectKind,
     handleToolbarAdd
   } = useContextMenuHandlers({
     nodes,
@@ -636,7 +754,8 @@ export default function App() {
     contextMenu,
     setContextMenu,
     handleOpenCreateAsset,
-    handleSelectTypeFromMenu
+    handleSelectTypeFromMenu,
+    handleSelectKindFromMenu
   });
 
   // Wrapper functions that pass closeWorkflowPanel to panel handlers
@@ -829,6 +948,15 @@ export default function App() {
     }
   }, [historyState]);
 
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    if (new URLSearchParams(window.location.search).get('velaFixture') !== '200') return;
+    const timer = window.setTimeout(() => {
+      setNodes((current) => current.length > 0 ? current : createVelaPerformanceFixture());
+    }, 100);
+    return () => window.clearTimeout(timer);
+  }, [setNodes]);
+
   // Simple wrapper for updateNode (sync code removed - TEXT node prompts are combined at generation time)
   const updateNodeWithSync = React.useCallback((id: string, updates: Partial<NodeData>) => {
     updateNode(id, updates);
@@ -920,33 +1048,26 @@ export default function App() {
   // handleContextMenuCreateAsset, handleContextMenuSelect, handleToolbarAdd
 
 
+  const activeTaskCount = velaJobs.filter(job => ['submitting', 'running', 'reconnecting', 'downloading'].includes(job.status)).length;
+
   return (
-    <div className={`w-screen h-screen ${canvasTheme === 'dark' ? 'bg-[#050505] text-white' : 'bg-neutral-50 text-neutral-900'} overflow-hidden select-none font-sans transition-colors duration-300`}>
+    <div className={`vela-app w-screen h-screen ${canvasTheme === 'dark' ? 'text-white' : 'text-neutral-900'} overflow-hidden select-none font-sans`}>
       {!storyboardGenerator.isModalOpen && !isTikTokModalOpen && (
-        <Toolbar
+        <VelaNodeRail
           onAddClick={handleToolbarAdd}
-          onWorkflowsClick={handleWorkflowsClick}
-          onHistoryClick={handleHistoryClick}
+          onProjectsClick={handleWorkflowsClick}
           onAssetsClick={handleAssetsClick}
-          onTikTokClick={openTikTokModal}
-          onStoryboardClick={storyboardGenerator.openModal}
-          onToolsOpen={() => {
-            closeWorkflowPanel();
-            closeHistoryPanel();
-            closeAssetLibrary();
-          }}
-          canvasTheme={canvasTheme}
+          onTasksClick={() => setIsTaskCenterOpen(current => !current)}
+          onComputeClick={() => setIsComputePanelOpen(true)}
+          onArrangeClick={handleAutoArrange}
         />
       )}
 
-      {/* Workflow Panel */}
-      <WorkflowPanel
+      <VelaProjectPanel
         isOpen={isWorkflowPanelOpen}
         onClose={closeWorkflowPanel}
-        onLoadWorkflow={handleLoadWithTracking}
-        currentWorkflowId={workflowId || undefined}
-        panelY={workflowPanelY}
-        canvasTheme={canvasTheme}
+        onLoad={handleLoadWithTracking}
+        currentProjectId={workflowId || undefined}
       />
 
       {/* History Panel */}
@@ -1015,17 +1136,15 @@ export default function App() {
       />
 
       {/* Agent Chat */}
-      {!storyboardGenerator.isModalOpen && !isTikTokModalOpen && (
+      {!VELA_P1_UI && !storyboardGenerator.isModalOpen && !isTikTokModalOpen && (
         <>
           <ChatBubble onClick={toggleChat} isOpen={isChatOpen} />
           <ChatPanel isOpen={isChatOpen} onClose={closeChat} isDraggingNode={isDraggingNodeToChat} canvasTheme={canvasTheme} />
         </>
       )}
 
-      {/* Top Bar */}
-      {/* Top Bar */}
       {!storyboardGenerator.isModalOpen && !isTikTokModalOpen && (
-        <TopBar
+        <VelaTopBar
           canvasTitle={canvasTitle}
           isEditingTitle={isEditingTitle}
           editingTitleValue={editingTitleValue}
@@ -1036,10 +1155,11 @@ export default function App() {
           onSave={handleSaveWithTracking}
           onNew={handleNewCanvas}
           hasUnsavedChanges={hasUnsavedChanges}
-          isChatOpen={isChatOpen}
-          canvasTheme={canvasTheme}
-          onToggleTheme={() => setCanvasTheme(prev => prev === 'dark' ? 'light' : 'dark')}
           lastAutoSaveTime={lastAutoSaveTime}
+          activeTaskCount={activeTaskCount}
+          onlineComputeCount={velaProfiles.length}
+          onOpenTasks={() => setIsTaskCenterOpen(current => !current)}
+          onOpenCompute={() => setIsComputePanelOpen(true)}
         />
       )}
 
@@ -1055,6 +1175,13 @@ export default function App() {
         onDoubleClick={handleDoubleClick}
         onContextMenu={handleGlobalContextMenu}
       >
+        {nodes.length === 0 && (
+          <div className="vela-canvas-empty" role="status">
+            <span className="vela-empty-kicker">VELA AI CANVAS</span>
+            <strong>从一个想法开始</strong>
+            <span>点击底部的“＋”添加节点，或把图片直接拖到画布。</span>
+          </div>
+        )}
         <div
           style={{
             transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.zoom})`,
@@ -1070,9 +1197,9 @@ export default function App() {
             style={{
               backgroundImage: canvasTheme === 'dark'
                 ? 'radial-gradient(#666 1px, transparent 1px)'
-                : 'radial-gradient(#ccc 1px, transparent 1px)',
-              backgroundSize: '20px 20px',
-              opacity: canvasTheme === 'dark' ? 0.5 : 0.8
+                : 'radial-gradient(#dededb 0.8px, transparent 0.8px)',
+              backgroundSize: '22px 22px',
+              opacity: canvasTheme === 'dark' ? 0.5 : 0.48
             }}
           />
 
@@ -1096,6 +1223,8 @@ export default function App() {
               <CanvasNode
                 key={node.id}
                 data={node}
+                profileName={velaProfiles.find((profile) => profile.id === node.profileId)?.name}
+                profiles={velaProfiles}
                 inputUrl={(() => {
                   // Get first parent's result for display (multiple inputs handled in generation)
                   if (!node.parentIds || node.parentIds.length === 0) return undefined;
@@ -1125,7 +1254,7 @@ export default function App() {
                     }));
                 })()}
                 onUpdate={updateNodeWithSync}
-                onGenerate={handleGenerate}
+                onGenerate={handleVelaGenerate}
                 onAddNext={handleAddNext}
                 selected={selectedNodeIds.includes(node.id)}
                 showControls={selectedNodeIds.length === 1 && selectedNodeIds.includes(node.id)}
@@ -1258,11 +1387,29 @@ export default function App() {
         />
       )}
 
+      <VelaMiniMap nodes={nodes} />
+      <VelaTaskCenter
+        isOpen={isTaskCenterOpen}
+        jobs={velaJobs}
+        error={velaJobsError}
+        onToggle={() => setIsTaskCenterOpen(current => !current)}
+        onRetry={retryVelaJob}
+        onCancel={cancelVelaJob}
+      />
+      <VelaComputePanel
+        isOpen={isComputePanelOpen}
+        profiles={velaProfiles}
+        profilesError={velaProfilesError}
+        onProfilesChanged={refreshVelaProfiles}
+        onClose={() => setIsComputePanelOpen(false)}
+      />
+
       {/* Context Menu */}
       <ContextMenu
         state={contextMenu}
         onClose={() => setContextMenu(prev => ({ ...prev, isOpen: false }))}
         onSelectType={handleContextMenuSelect}
+        onSelectNodeKind={handleContextMenuSelectKind}
         onUpload={handleContextUpload}
         onUndo={undo}
         onRedo={redo}
@@ -1276,11 +1423,9 @@ export default function App() {
         canvasTheme={canvasTheme}
       />
 
-      {/* Zoom Slider */}
-      {/* Zoom Slider */}
       {!storyboardGenerator.isModalOpen && !isTikTokModalOpen && (
-        <div className={`fixed bottom-6 left-16 rounded-full px-4 py-2 flex items-center gap-3 z-50 transition-colors duration-300 ${canvasTheme === 'dark' ? 'bg-neutral-900 border border-neutral-700' : 'bg-white/90 backdrop-blur-sm border border-neutral-200'}`} >
-          <span className={`text-xs ${canvasTheme === 'dark' ? 'text-neutral-400' : 'text-neutral-500'}`}>Zoom</span>
+        <div className="vela-zoom-control" >
+          <span>缩放</span>
           <input
             type="range"
             min="0.1"
@@ -1288,9 +1433,9 @@ export default function App() {
             step="0.1"
             value={viewport.zoom}
             onChange={handleSliderZoom}
-            className="w-32"
+            className="vela-zoom-slider"
           />
-          <span className={`text-xs w-10 ${canvasTheme === 'dark' ? 'text-neutral-300' : 'text-neutral-600'}`}>{Math.round(viewport.zoom * 100)}%</span>
+          <span className="vela-zoom-value">{Math.round(viewport.zoom * 100)}%</span>
         </div>
       )}
 

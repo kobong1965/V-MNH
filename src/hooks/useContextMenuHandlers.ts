@@ -7,6 +7,7 @@
 
 import React, { useCallback } from 'react';
 import { NodeData, NodeType, ContextMenuState, Viewport } from '../types';
+import type { VelaNodeKind } from '../vela/nodeCatalog';
 
 interface UseContextMenuHandlersOptions {
     nodes: NodeData[];
@@ -20,6 +21,12 @@ interface UseContextMenuHandlersOptions {
         viewport: Viewport,
         closeMenu: () => void
     ) => void;
+    handleSelectKindFromMenu: (
+        kind: VelaNodeKind,
+        contextMenu: ContextMenuState,
+        viewport: Viewport,
+        closeMenu: () => void
+    ) => void;
 }
 
 export const useContextMenuHandlers = ({
@@ -28,7 +35,8 @@ export const useContextMenuHandlers = ({
     contextMenu,
     setContextMenu,
     handleOpenCreateAsset,
-    handleSelectTypeFromMenu
+    handleSelectTypeFromMenu,
+    handleSelectKindFromMenu
 }: UseContextMenuHandlersOptions) => {
     // ============================================================================
     // DOUBLE-CLICK & RIGHT-CLICK
@@ -110,13 +118,23 @@ export const useContextMenuHandlers = ({
         );
     }, [handleSelectTypeFromMenu, contextMenu, viewport, setContextMenu]);
 
+    const handleContextMenuSelectKind = useCallback((kind: VelaNodeKind) => {
+        handleSelectKindFromMenu(
+            kind,
+            contextMenu,
+            viewport,
+            () => setContextMenu(prev => ({ ...prev, isOpen: false }))
+        );
+    }, [handleSelectKindFromMenu, contextMenu, viewport, setContextMenu]);
+
     const handleToolbarAdd = useCallback((e: React.MouseEvent) => {
         const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
         setContextMenu({
             isOpen: true,
-            x: rect.right + 10,
-            y: rect.top,
-            type: 'global'
+            x: Math.max(18, rect.left - 8),
+            y: Math.max(76, rect.top - 540),
+            type: 'add-nodes',
+            sourceNodeId: '__toolbar_add__'
         });
     }, [setContextMenu]);
 
@@ -131,6 +149,7 @@ export const useContextMenuHandlers = ({
         handleNodeContextMenu,
         handleContextMenuCreateAsset,
         handleContextMenuSelect,
+        handleContextMenuSelectKind,
         handleToolbarAdd
     };
 };

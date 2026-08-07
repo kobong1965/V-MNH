@@ -7,6 +7,7 @@ import cors from 'cors';
 import { GoogleGenAI } from '@google/genai';
 import fs from 'fs';
 import path from 'path';
+import os from 'node:os';
 import { fileURLToPath } from 'url';
 import crypto from 'crypto';
 import { spawn } from 'child_process';
@@ -17,20 +18,33 @@ import tiktokPostRoutes from './routes/tiktok-post.js';
 import { processTikTokVideo, isValidTikTokUrl } from './tools/tiktok.js';
 import localModelsRoutes from './routes/local-models.js';
 import storyboardRoutes from './routes/storyboard.js';
+import velaGenerationRoutes from './routes/vela-generation.js';
+import velaDataRoutes from './routes/vela-data.js';
+import { VelaRuntime } from './vela/runtime.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const PORT = 3001;
+const PORT = Number.parseInt(process.env.PORT || '3001', 10);
+const HOST = process.env.VELA_LAN_ENABLED === 'true' ? '0.0.0.0' : '127.0.0.1';
 
 // Ensure library directories exist
-const LIBRARY_DIR = path.join(__dirname, '..', 'library');
+const LIBRARY_DIR = path.resolve(process.env.VELA_LIBRARY_DIR || path.join(__dirname, '..', 'library'));
 const WORKFLOWS_DIR = path.join(LIBRARY_DIR, 'workflows');
 const IMAGES_DIR = path.join(LIBRARY_DIR, 'images');
 const VIDEOS_DIR = path.join(LIBRARY_DIR, 'videos');
 const CHATS_DIR = path.join(LIBRARY_DIR, 'chats');
 const LIBRARY_ASSETS_DIR = path.join(LIBRARY_DIR, 'assets');
+const VELA_DATA_DIR = path.resolve(
+    process.env.VELA_DATA_DIR
+    || (process.platform === 'win32' && process.env.LOCALAPPDATA
+        ? path.join(process.env.LOCALAPPDATA, 'Vela')
+        : path.join(os.homedir(), '.vela'))
+);
+const VELA_PROJECTS_DIR = path.resolve(
+    process.env.VELA_PROJECTS_DIR || path.join(os.homedir(), 'Documents', 'Vela Projects')
+);
 
 [LIBRARY_DIR, WORKFLOWS_DIR, IMAGES_DIR, VIDEOS_DIR, CHATS_DIR, LIBRARY_ASSETS_DIR].forEach(dir => {
     if (!fs.existsSync(dir)) {
@@ -41,6 +55,10 @@ const LIBRARY_ASSETS_DIR = path.join(LIBRARY_DIR, 'assets');
 // Enable CORS for all routes (must come before static file serving)
 app.use(cors());
 app.use(express.json({ limit: '100mb' }));
+
+app.get('/api/vela/health', (_req, res) => {
+    res.json({ ok: true, service: 'vela-control', version: 1 });
+});
 
 // Serve static assets from library with CORS headers for cross-origin image access
 app.use('/library', (req, res, next) => {
@@ -112,6 +130,16 @@ app.locals.FAL_API_KEY = FAL_API_KEY;
 app.locals.IMAGES_DIR = IMAGES_DIR;
 app.locals.VIDEOS_DIR = VIDEOS_DIR;
 app.locals.LIBRARY_DIR = LIBRARY_DIR;
+app.locals.velaRuntime = new VelaRuntime({
+    dataDirectory: VELA_DATA_DIR,
+    projectsDirectory: VELA_PROJECTS_DIR
+});
+
+// Vela P0: development-only fake provider used to prove the canvas can run
+// independently from third-party model APIs. Real provider routing replaces it
+// in P2-P4.
+app.use('/api', velaGenerationRoutes);
+app.use('/api', velaDataRoutes);
 
 // ============================================================================
 // WORKFLOW SANITIZATION HELPERS
@@ -1218,11 +1246,26 @@ if (process.env.NODE_ENV === 'production') {
     app.use(express.static(distPath));
 
     // Handle SPA routing: serve index.html for any unknown routes
-    app.get('*', (req, res) => {
+    app.get(/.*/, (req, res) => {
         res.sendFile(path.join(distPath, 'index.html'));
     });
 }
 
-app.listen(PORT, () => {
-    console.log(`Backend server running on http://localhost:${PORT}`);
+const httpServer = app.listen(PORT, HOST, () => {
+    console.log(`Backend server running on http://${HOST}:${PORT}`);
 });
+
+let shuttingDown = false;
+const shutdown = () => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    httpServer.close(() => {
+        try { app.locals.velaRuntime?.close(); } catch (error) { console.error('Vela runtime close failed:', error); }
+        process.exit(0);
+    });
+    setTimeout(() => process.exit(1), 5000).unref();
+};
+
+process.on('SIGTERM', shutdown);
+process.on('SIGINT', shutdown);
+process.on('disconnect', shutdown);

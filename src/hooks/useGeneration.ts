@@ -6,7 +6,7 @@
  */
 
 import { NodeData, NodeType, NodeStatus } from '../types';
-import { generateImage, generateVideo } from '../services/generationService';
+import { generateImage, generateVideo, isFakeProviderEnabled } from '../services/generationService';
 import { generateLocalImage } from '../services/localModelService';
 import { extractVideoLastFrame } from '../utils/videoHelpers';
 
@@ -326,6 +326,16 @@ export const useGeneration = ({ nodes, updateNode }: UseGenerationProps) => {
                     generateAudio: node.generateAudio, // For Kling 2.6 and Veo 3.1 native audio
                     nodeId: id
                 });
+
+                if (node.kind === 'h3-video' && isFakeProviderEnabled()) {
+                    updateNode(id, {
+                        status: NodeStatus.SUCCESS,
+                        resultUrl: `${rawResultUrl}?t=${Date.now()}`,
+                        resultAspectRatio: node.aspectRatio === '9:16' ? '9/16' : '16/9',
+                        errorMessage: undefined
+                    });
+                    return;
+                }
 
                 // Add cache-busting parameter to force browser to fetch new video
                 // (Backend uses nodeId as filename, so URL is the same for regenerated videos)

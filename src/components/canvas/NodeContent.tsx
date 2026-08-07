@@ -6,7 +6,7 @@
  */
 
 import React, { useRef, useState, useEffect } from 'react';
-import { Loader2, Maximize2, ImageIcon as ImageIcon, Film, Upload, Pencil, Video, GripVertical, Download, Expand, Shrink, HardDrive } from 'lucide-react';
+import { Loader2, Maximize2, ImageIcon as ImageIcon, Film, Upload, Pencil, Video, GripVertical, Download, Expand, Shrink, HardDrive, FileText, Music2, WandSparkles } from 'lucide-react';
 import { NodeData, NodeStatus, NodeType } from '../../types';
 
 interface NodeContentProps {
@@ -109,7 +109,7 @@ export const NodeContent: React.FC<NodeContentProps> = ({
     };
 
     return (
-        <div className={`transition-all duration-200 ${!selected ? 'p-0 rounded-2xl overflow-hidden' : 'p-1'}`}>
+        <div className={`transition-all duration-200 ${data.kind ? 'p-0 rounded-2xl overflow-visible' : !selected ? 'p-0 rounded-2xl overflow-hidden' : 'p-1'}`}>
             {/* Hidden File Input - Always rendered for upload functionality (image types only) */}
             {isImageType && onUpload && (
                 <input
@@ -127,10 +127,10 @@ export const NodeContent: React.FC<NodeContentProps> = ({
                     className={`relative w-full bg-black group/image ${!selected ? '' : 'rounded-xl overflow-hidden'}`}
                     style={getAspectRatioStyle()}
                 >
-                    {isVideoType ? (
+                    {isVideoType && !(data.kind === 'h3-video' && data.resultUrl.includes('vela-fake-h3-')) ? (
                         <video src={data.resultUrl} controls loop className="w-full h-full object-cover" />
                     ) : (
-                        <img src={data.resultUrl} alt="Generated" className="w-full h-full object-cover pointer-events-none" />
+                        <img src={data.resultUrl} alt={data.kind === 'h3-video' ? 'H3 假视频预览' : '生成结果'} className="w-full h-full object-cover pointer-events-none" />
                     )}
 
                     {/* Regenerating Overlay - Shows when loading with existing content */}
@@ -138,6 +138,58 @@ export const NodeContent: React.FC<NodeContentProps> = ({
                         <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex flex-col items-center justify-center z-20">
                             <Loader2 size={40} className="animate-spin text-blue-400" />
                             <span className="mt-3 text-sm text-white font-medium">Regenerating...</span>
+                        </div>
+                    )}
+                </div>
+            ) : data.kind ? (
+                <div className={`vela-node-content ${selected ? 'is-selected' : ''}`}>
+                    {(data.kind === 'prompt' || data.kind === 'gpt-prompt-optimizer') ? (
+                        <div className="vela-prompt-content">
+                            {localPrompt ? (
+                                <textarea
+                                    value={localPrompt}
+                                    onChange={(event) => handleTextChange(event.target.value)}
+                                    onPointerDown={(event) => event.stopPropagation()}
+                                    onWheel={(event) => event.stopPropagation()}
+                                    onBlur={() => {
+                                        if (updateTimeoutRef.current) clearTimeout(updateTimeoutRef.current);
+                                        if (localPrompt !== data.prompt) onUpdate?.(data.id, { prompt: localPrompt });
+                                    }}
+                                    placeholder={data.kind === 'prompt' ? '写下你想生成的画面、动作和镜头…' : '连接提示词后，在这里查看或修改优化结果…'}
+                                    aria-label={data.kind === 'prompt' ? '提示词内容' : '优化后的提示词'}
+                                />
+                            ) : (
+                                <>
+                                    <FileText className="vela-node-hero-icon" size={54} strokeWidth={1.5} aria-hidden="true" />
+                                    <div className="vela-node-suggestions">
+                                        <span>尝试：</span>
+                                        <button type="button" onClick={() => onWriteContent?.(data.id)}><FileText size={16} />自己编写内容</button>
+                                        <button type="button" onClick={() => onTextToVideo?.(data.id)}><Video size={16} />文生视频</button>
+                                        <button type="button" onClick={() => onTextToImage?.(data.id)}><ImageIcon size={16} />图片反推提示词</button>
+                                        <button type="button"><Music2 size={16} />文字生音乐</button>
+                                    </div>
+                                </>
+                            )}
+                        </div>
+                    ) : data.kind === 'image-input' ? (
+                        <button
+                            type="button"
+                            className="vela-node-content__upload"
+                            onPointerDown={(event) => event.stopPropagation()}
+                            onClick={() => fileInputRef.current?.click()}
+                        >
+                            <Upload size={22} aria-hidden="true" />
+                            <strong>选择参考图片</strong>
+                            <span>支持 JPG、PNG、WebP</span>
+                        </button>
+                    ) : (
+                        <div className="vela-node-content__placeholder">
+                            {data.kind === 'h3-video' ? <Film className="vela-node-hero-icon" size={56} strokeWidth={1.5} aria-hidden="true" /> : <ImageIcon className="vela-node-hero-icon" size={56} strokeWidth={1.5} aria-hidden="true" />}
+                            <div className="vela-node-suggestions">
+                                <span>尝试：</span>
+                                <button type="button"><WandSparkles size={16} />{data.kind === 'h3-video' ? '图生视频' : '图生图'}</button>
+                                <button type="button"><Maximize2 size={16} />{data.kind === 'h3-video' ? '首尾帧视频' : '图片高清'}</button>
+                            </div>
                         </div>
                     )}
                 </div>

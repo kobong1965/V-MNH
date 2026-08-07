@@ -90,6 +90,8 @@ export const useAssetHandlers = ({
             const newNode: NodeData = {
                 id: Date.now().toString(),
                 type: isVideo ? NodeType.VIDEO : NodeType.IMAGE,
+                kind: isVideo ? 'video-result' : 'image-result',
+                title: isVideo ? '视频结果' : '图片结果',
                 x: centerX,
                 y: centerY,
                 prompt: prompt,
@@ -99,7 +101,8 @@ export const useAssetHandlers = ({
                 model: isVideo ? 'veo-3.1' : 'imagen-3.0-generate-002',
                 videoModel: isVideo ? 'veo-3.1' : undefined,
                 aspectRatio: aspectRatio || '16:9',
-                resolution: isVideo ? 'Auto' : '1024x1024'
+                resolution: isVideo ? 'Auto' : '1024x1024',
+                outputCount: 1,
             };
 
             setNodes(prev => [...prev, newNode]);
@@ -270,6 +273,8 @@ export const useAssetHandlers = ({
                     const newNode: NodeData = {
                         id: crypto.randomUUID(),
                         type: isVideo ? NodeType.VIDEO : NodeType.IMAGE,
+                        kind: isVideo ? 'video-result' : 'image-input',
+                        title: isVideo ? '视频素材' : '图片输入',
                         x: canvasX,
                         y: canvasY,
                         prompt: file.name,
@@ -279,6 +284,7 @@ export const useAssetHandlers = ({
                         model: 'Upload',
                         aspectRatio,
                         resolution: 'Auto',
+                        outputCount: 1,
                     };
 
                     setNodes(prev => [...prev, newNode]);

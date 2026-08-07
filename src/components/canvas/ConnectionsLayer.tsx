@@ -19,6 +19,9 @@ import { calculateConnectionPath } from '../../utils/connectionHelpers';
  * @param parentNode - Optional parent node (used for Editor nodes to determine width when they have input content)
  */
 const getNodeWidth = (node: NodeData, parentNode?: NodeData): number => {
+    if (node.kind) {
+        return ['prompt', 'gpt-prompt-optimizer'].includes(node.kind) ? 370 : 656;
+    }
     // Image Editor with input from parent: width depends on aspect ratio
     if (node.type === NodeType.IMAGE_EDITOR) {
         const hasInput = parentNode && parentNode.status === NodeStatus.SUCCESS && parentNode.resultUrl;
@@ -71,6 +74,17 @@ const getNodeWidth = (node: NodeData, parentNode?: NodeData): number => {
 const getNodeHeight = (node: NodeData, parentNode?: NodeData): number => {
     const baseWidth = getNodeWidth(node, parentNode);
     const hasContent = node.status === NodeStatus.SUCCESS && node.resultUrl;
+
+    if (node.kind) {
+        if (hasContent && node.resultAspectRatio) {
+            const parts = node.resultAspectRatio.split('/');
+            if (parts.length === 2) {
+                const ratio = Number(parts[0]) / Number(parts[1]);
+                if (Number.isFinite(ratio) && ratio > 0) return baseWidth / ratio;
+            }
+        }
+        return 370;
+    }
 
     // Handle Image Editor nodes
     if (node.type === NodeType.IMAGE_EDITOR) {
@@ -208,9 +222,9 @@ export const ConnectionsLayer: React.FC<ConnectionsLayerProps> = ({
                     <path
                         d={path}
                         stroke={isSelected
-                            ? (canvasTheme === 'dark' ? '#fff' : '#2563eb')
-                            : (canvasTheme === 'dark' ? '#444' : '#d1d5db')}
-                        strokeWidth="2"
+                            ? (canvasTheme === 'dark' ? '#fff' : '#171717')
+                            : (canvasTheme === 'dark' ? '#444' : '#d6d6d2')}
+                        strokeWidth={isSelected ? 1.8 : 1.4}
                         fill="none"
                         className={`transition-colors ${!isSelected ? (canvasTheme === 'dark' ? 'group-hover:stroke-neutral-300' : 'group-hover:stroke-neutral-500') : ''}`}
                     />
@@ -240,7 +254,7 @@ export const ConnectionsLayer: React.FC<ConnectionsLayerProps> = ({
             tempLine = (
                 <path
                     d={path}
-                    stroke={canvasTheme === 'dark' ? '#fff' : '#2563eb'}
+                    stroke={canvasTheme === 'dark' ? '#fff' : '#171717'}
                     strokeWidth="2"
                     strokeDasharray="5,5"
                     fill="none"

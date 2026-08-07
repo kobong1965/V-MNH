@@ -22,8 +22,9 @@ import { HumanMessage, AIMessage } from "@langchain/core/messages";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const CHATS_DIR = path.join(__dirname, '..', '..', 'library', 'chats');
-const IMAGES_DIR = path.join(__dirname, '..', '..', 'library', 'images');
+const LIBRARY_DIR = path.resolve(process.env.VELA_LIBRARY_DIR || path.join(__dirname, '..', '..', 'library'));
+const CHATS_DIR = path.join(LIBRARY_DIR, 'chats');
+const IMAGES_DIR = path.join(LIBRARY_DIR, 'images');
 
 // Ensure chats directory exists
 if (!fs.existsSync(CHATS_DIR)) {

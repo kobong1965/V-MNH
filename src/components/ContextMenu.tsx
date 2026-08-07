@@ -4,9 +4,6 @@ import {
   Image as ImageIcon,
   Video,
   Film,
-  Music,
-  PenTool,
-  Layout,
   Upload,
   Trash2,
   Plus,
@@ -17,14 +14,16 @@ import {
   Files,
   Layers,
   ChevronRight,
-  HardDrive
+  WandSparkles
 } from 'lucide-react';
 import { ContextMenuState, NodeType } from '../types';
+import { VELA_NODE_CATALOG, type VelaNodeKind } from '../vela/nodeCatalog';
 
 interface ContextMenuProps {
   state: ContextMenuState;
   onClose: () => void;
   onSelectType: (type: NodeType | 'DELETE') => void;
+  onSelectNodeKind: (kind: VelaNodeKind) => void;
   onUpload: (file: File) => void;
   onUndo?: () => void;
   onRedo?: () => void;
@@ -42,6 +41,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
   state,
   onClose,
   onSelectType,
+  onSelectNodeKind,
   onUpload,
   onUndo,
   onRedo,
@@ -131,7 +131,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
         <div className="p-1.5 flex flex-col gap-0.5">
           <MenuItem
             icon={<ImageIcon size={16} />}
-            label="Create Asset"
+            label="保存到素材库"
             onClick={() => {
               if (onCreateAsset) {
                 onCreateAsset();
@@ -145,8 +145,8 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
 
           <MenuItem
             icon={<Copy size={16} />}
-            label="Copy"
-            shortcut="CtrlC"
+            label="复制"
+            shortcut="Ctrl+C"
             onClick={() => {
               if (onCopy) {
                 onCopy();
@@ -157,15 +157,15 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
           />
           <MenuItem
             icon={<Clipboard size={16} />}
-            label="Paste"
-            shortcut="CtrlV"
+            label="粘贴"
+            shortcut="Ctrl+V"
             onClick={handlePaste}
             disabled={true} // Disabled in screenshot
             canvasTheme={canvasTheme}
           />
           <MenuItem
             icon={<Files size={16} />}
-            label="Duplicate"
+            label="创建副本"
             onClick={() => {
               if (onDuplicate) {
                 onDuplicate();
@@ -178,8 +178,8 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
 
           <MenuItem
             icon={<Trash2 size={16} />} // Screenshot has text "Delete", icon might be different
-            label="Delete"
-            shortcut="⌫,del"
+            label="删除"
+            shortcut="Delete"
             onClick={() => onSelectType('DELETE')}
             canvasTheme={canvasTheme}
           />
@@ -210,13 +210,13 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
         <div className="p-1.5 flex flex-col gap-0.5">
           <MenuItem
             icon={<Upload size={16} />}
-            label="Upload"
+            label="导入图片或视频"
             onClick={handleUploadClick}
             canvasTheme={canvasTheme}
           />
           <MenuItem
             icon={<Layers size={16} />}
-            label="Add Assets"
+            label="从素材库添加"
             onClick={() => {
               if (onAddAssets) {
                 onAddAssets();
@@ -229,7 +229,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
 
           <MenuItem
             icon={<Plus size={16} />}
-            label="Add Nodes"
+            label="添加节点"
             rightSlot={<ChevronRight size={14} className={canvasTheme === 'dark' ? 'text-neutral-500' : 'text-neutral-400'} />}
             onClick={() => setView('add-nodes')}
             active={false}
@@ -240,16 +240,16 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
 
           <MenuItem
             icon={<Undo2 size={16} />}
-            label="Undo"
-            shortcut="CtrlZ"
+            label="撤销"
+            shortcut="Ctrl+Z"
             onClick={handleUndo}
             disabled={!canUndo}
             canvasTheme={canvasTheme}
           />
           <MenuItem
             icon={<Redo2 size={16} />}
-            label="Redo"
-            shortcut="ShiftCtrlZ"
+            label="重做"
+            shortcut="Ctrl+Shift+Z"
             onClick={handleRedo}
             disabled={!canRedo}
             canvasTheme={canvasTheme}
@@ -258,8 +258,8 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
 
           <MenuItem
             icon={<Clipboard size={16} />}
-            label="Paste"
-            shortcut="CtrlV"
+            label="粘贴"
+            shortcut="Ctrl+V"
             onClick={handlePaste}
             canvasTheme={canvasTheme}
           />
@@ -269,7 +269,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
   }
 
   // 3. Add Nodes Menu (Global Submenu OR Connector Default)
-  const title = isConnector ? "Generate from this node" : "Add Nodes";
+  const title = isConnector ? "从此节点继续" : "添加节点";
 
   return (
     <div
@@ -280,75 +280,47 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
         top: state.y,
         zIndex: 1000
       }}
-      className={`w-64 border rounded-xl shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-100 ${canvasTheme === 'dark' ? 'bg-[#1e1e1e] border-neutral-800' : 'bg-white border-neutral-200'
+      className={`vela-add-menu w-56 border rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-100 ${canvasTheme === 'dark' ? 'bg-[#1e1e1e] border-neutral-800' : 'bg-white border-neutral-200'
         }`}
     >
-      <div className={`px-4 py-3 text-sm font-medium border-b ${canvasTheme === 'dark' ? 'text-neutral-400 border-neutral-800' : 'text-neutral-500 border-neutral-100'
+      <input
+        type="file"
+        ref={fileInputRef}
+        className="hidden"
+        accept="image/*,video/*"
+        onChange={handleFileChange}
+      />
+      <div className={`px-4 pt-4 pb-2 text-sm font-medium ${canvasTheme === 'dark' ? 'text-neutral-400' : 'text-neutral-500'
         }`}>
         {title}
       </div>
 
-      <div className="p-2 flex flex-col gap-1 max-h-[400px] overflow-y-auto">
-        <MenuItem
-          icon={<Type size={18} />}
-          label={isConnector ? "Text Generation" : "Text"}
-          desc={isConnector ? "Script, Ad copy, Brand text" : undefined}
-          onClick={() => onSelectType(NodeType.TEXT)}
-          canvasTheme={canvasTheme}
-        />
-        <MenuItem
-          icon={<ImageIcon size={18} />}
-          label={isConnector ? "Image Generation" : "Image"}
-          desc={isConnector ? undefined : "Promotional image, poster, cover"}
-          active={false}
-          onClick={() => onSelectType(NodeType.IMAGE)}
-          canvasTheme={canvasTheme}
-        />
-        <MenuItem
-          icon={<Video size={18} />}
-          label={isConnector ? "Video Generation" : "Video"}
-          onClick={() => onSelectType(NodeType.VIDEO)}
-          canvasTheme={canvasTheme}
-        />
-
-        {!isConnector && (
+      <div className="px-2 pb-2 flex flex-col gap-0.5 max-h-[500px] overflow-y-auto">
+        {VELA_NODE_CATALOG.map((definition) => (
           <MenuItem
-            icon={<PenTool size={18} />}
-            label="Image Editor"
-            onClick={() => onSelectType(NodeType.IMAGE_EDITOR)}
+            key={definition.kind}
+            icon={getVelaNodeIcon(definition.kind)}
+            label={definition.label}
+            desc={definition.description}
+            onClick={() => onSelectNodeKind(definition.kind)}
             canvasTheme={canvasTheme}
           />
-        )}
-
-        {!isConnector && (
-          <MenuItem
-            icon={<Film size={18} />}
-            label="Video Editor"
-            onClick={() => onSelectType(NodeType.VIDEO_EDITOR)}
-            canvasTheme={canvasTheme}
-          />
-        )}
-
-        {/* --- Local Model Section --- */}
-        <div className={`my-2 border-t mx-2 ${canvasTheme === 'dark' ? 'border-neutral-800' : 'border-neutral-100'}`} />
-        <div className={`px-2 py-1 text-xs font-medium ${canvasTheme === 'dark' ? 'text-neutral-500' : 'text-neutral-400'}`}>
-          Local Models (Open Source)
-        </div>
-
+        ))}
+        <div className={`my-1.5 border-t mx-2 ${canvasTheme === 'dark' ? 'border-neutral-800' : 'border-neutral-100'}`} />
+        <div className={`px-2 pb-1 text-[11px] ${canvasTheme === 'dark' ? 'text-neutral-500' : 'text-neutral-400'}`}>添加资源</div>
         <MenuItem
-          icon={<HardDrive size={18} />}
-          label="Local Image Model"
-          desc="Use downloaded open-source models"
-          badge="NEW"
-          onClick={() => onSelectType(NodeType.LOCAL_IMAGE_MODEL)}
+          icon={<Upload size={16} />}
+          label="上传"
+          onClick={handleUploadClick}
           canvasTheme={canvasTheme}
         />
         <MenuItem
-          icon={<HardDrive size={18} />}
-          label="Local Video Model"
-          desc="AnimateDiff, SVD, and more"
-          badge="NEW"
-          onClick={() => onSelectType(NodeType.LOCAL_VIDEO_MODEL)}
+          icon={<Layers size={16} />}
+          label="从生成历史选择"
+          onClick={() => {
+            if (onAddAssets) onAddAssets();
+            onClose();
+          }}
           canvasTheme={canvasTheme}
         />
       </div>
@@ -415,4 +387,13 @@ const MenuItem: React.FC<MenuItemProps> = ({ icon, label, desc, badge, shortcut,
       </div>
     </button>
   );
+};
+
+const getVelaNodeIcon = (kind: VelaNodeKind) => {
+  if (kind === 'prompt') return <Type size={18} />;
+  if (kind === 'image-input') return <Upload size={18} />;
+  if (kind === 'gpt-prompt-optimizer') return <WandSparkles size={18} />;
+  if (kind === 'h3-video' || kind === 'video-result') return <Video size={18} />;
+  if (kind === 'image-result') return <Film size={18} />;
+  return <ImageIcon size={18} />;
 };

@@ -11,6 +11,8 @@ node_modules
 dist
 dist-ssr
 *.local
+release/
+output/
 
 # Editor directories and files
 .vscode/*
@@ -25,10 +27,20 @@ dist-ssr
 
 #env
 .env
+.env.*
+!.env.example
+*.key
 
 
 # data
 library/
+data/
+secrets/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+*.vela
+Vela Projects/
 
 # docs
 docs/cloud_migration_plan.md

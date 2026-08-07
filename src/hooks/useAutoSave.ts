@@ -5,27 +5,27 @@
  * if there are unsaved changes and no active generations.
  */
 
-import { useEffect, useRef } from 'react';
-import { NodeData, NodeStatus } from '../types';
+import { useEffect, useRef, useState } from 'react';
+import { NodeData } from '../types';
 
 interface UseAutoSaveOptions {
     isDirty: boolean;
     nodes: NodeData[];
     onSave: () => Promise<void>;
-    interval?: number; // In milliseconds, default 60s
+    interval?: number; // Debounce duration in milliseconds, default 2s
 }
 
 export const useAutoSave = ({
     isDirty,
     nodes,
     onSave,
-    interval = 60000
+    interval = 2000
 }: UseAutoSaveOptions) => {
-    const lastSaveTimeRef = useRef<number>(Date.now());
+    const [lastSaveTime, setLastSaveTime] = useState<number>(Date.now());
     const isSavingRef = useRef<boolean>(false);
 
     useEffect(() => {
-        const checkAndSave = async () => {
+        const saveAfterQuietPeriod = async () => {
             // Only save if dirty and we have nodes
             if (!isDirty || nodes.length === 0) return;
 
@@ -34,9 +34,9 @@ export const useAutoSave = ({
 
             try {
                 isSavingRef.current = true;
-                console.log('[Auto-Save] Triggering periodic save...');
+                console.log('[Auto-Save] Saving after 2 second debounce...');
                 await onSave();
-                lastSaveTimeRef.current = Date.now();
+                setLastSaveTime(Date.now());
             } catch (error) {
                 console.error('[Auto-Save] Failed to auto-save:', error);
             } finally {
@@ -44,12 +44,12 @@ export const useAutoSave = ({
             }
         };
 
-        const timer = setInterval(checkAndSave, interval);
+        const timer = window.setTimeout(() => void saveAfterQuietPeriod(), interval);
 
-        return () => clearInterval(timer);
+        return () => window.clearTimeout(timer);
     }, [isDirty, nodes, onSave, interval]);
 
     return {
-        lastSaveTime: lastSaveTimeRef.current
+        lastSaveTime
     };
 };

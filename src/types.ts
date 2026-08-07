@@ -1,4 +1,6 @@
 
+import type { VelaNodeKind } from './vela/nodeCatalog';
+
 export enum NodeType {
   TEXT = 'Text',
   IMAGE = 'Image',
@@ -23,6 +25,7 @@ export enum NodeStatus {
 export interface NodeData {
   id: string;
   type: NodeType;
+  kind?: VelaNodeKind; // Vela semantic node kind; legacy type remains for canvas rendering during migration
   title?: string; // Custom title for the node (defaults to type if not set)
   x: number;
   y: number;
@@ -33,6 +36,9 @@ export interface NodeData {
   parentIds?: string[]; // For connecting lines (supports multiple inputs)
   groupId?: string; // ID of the group this node belongs to
   errorMessage?: string;
+  profileId?: string; // Account/compute profile reference; never stores a real key
+  outputCount?: number; // Number of generated child jobs requested by this node
+  jobGroupId?: string; // Durable task group reference (implemented in P2)
 
   // Text node specific
   textMode?: 'menu' | 'editing'; // For Text nodes: current mode
