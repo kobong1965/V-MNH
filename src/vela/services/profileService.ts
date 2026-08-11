@@ -6,6 +6,7 @@ interface VelaProfileBase {
   timeoutMs: number;
   maxConcurrency: number;
   secretConfigured: boolean;
+  credentialStatus?: 'ready' | 'missing' | 'unreadable';
   createdAt: string;
   updatedAt: string;
 }
@@ -13,7 +14,16 @@ interface VelaProfileBase {
 export interface GptVelaProfile extends VelaProfileBase {
   type: 'gpt';
   authType: 'bearer';
-  models: { prompt: string; image: string };
+  provider: string;
+  models: { prompt: string; image: string; video: string };
+  endpoints: {
+    models: string;
+    chat: string;
+    imageGeneration: string;
+    imageEdit: string;
+    videoGeneration: string;
+    videoStatus: string;
+  };
 }
 
 export type ComfyAuthType = 'none' | 'bearer' | 'basic' | 'custom';
@@ -32,6 +42,36 @@ export interface ComfyVelaProfile extends VelaProfileBase {
 }
 
 export type VelaProfile = GptVelaProfile | ComfyVelaProfile;
+
+export const DEFAULT_GPT_ENDPOINTS: GptVelaProfile['endpoints'] = {
+  models: '/models',
+  chat: '/chat/completions',
+  imageGeneration: '/images/generations',
+  imageEdit: '/images/edits',
+  videoGeneration: '/videos/generations',
+  videoStatus: '/videos/{id}'
+};
+
+export const normalizeGptVelaProfile = (profile: GptVelaProfile): GptVelaProfile => ({
+  ...profile,
+  authType: profile.authType || 'bearer',
+  provider: profile.provider || 'OpenAI Compatible',
+  models: {
+    prompt: '',
+    image: '',
+    video: '',
+    ...(profile.models || {})
+  },
+  endpoints: {
+    ...DEFAULT_GPT_ENDPOINTS,
+    ...(profile.endpoints || {})
+  },
+  timeoutMs: Number.isFinite(profile.timeoutMs) ? profile.timeoutMs : 60_000,
+  maxConcurrency: Number.isFinite(profile.maxConcurrency) ? profile.maxConcurrency : 2
+});
+
+const normalizeVelaProfile = (profile: VelaProfile): VelaProfile =>
+  profile.type === 'gpt' ? normalizeGptVelaProfile(profile) : profile;
 
 export interface GptConnectionResult {
   ok: true;
@@ -73,20 +113,49 @@ export interface ComfyConnectionResult {
 
 export type ProfileConnectionResult = GptConnectionResult | ComfyConnectionResult;
 
+export interface VelaProfileErrorDetails {
+  missingModels?: string[];
+  availableModels?: string[];
+  networkCode?: string;
+  endpointHost?: string;
+}
+
+export class VelaProfileRequestError extends Error {
+  code?: string;
+  details?: VelaProfileErrorDetails;
+
+  constructor(message: string, data?: { code?: string; details?: VelaProfileErrorDetails }) {
+    super(message);
+    this.name = 'VelaProfileRequestError';
+    this.code = data?.code;
+    this.details = data?.details;
+  }
+}
+
 const parseResponse = async <T>(response: Response): Promise<T> => {
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.error || `账户请求失败：${response.status}`);
+  if (!response.ok) {
+    throw new VelaProfileRequestError(data.error || `账户请求失败：${response.status}`, {
+      code: data.code,
+      details: data.details
+    });
+  }
   return data as T;
 };
 
-export const listVelaProfiles = async (type?: 'gpt' | 'comfy'): Promise<VelaProfile[]> =>
-  parseResponse<VelaProfile[]>(await fetch(`/api/vela/profiles${type ? `?type=${type}` : ''}`));
+export const listVelaProfiles = async (type?: 'gpt' | 'comfy'): Promise<VelaProfile[]> => {
+  const profiles = await parseResponse<VelaProfile[]>(await fetch(`/api/vela/profiles${type ? `?type=${type}` : ''}`));
+  if (!Array.isArray(profiles)) throw new Error('账户列表返回格式不正确');
+  return profiles.map(normalizeVelaProfile);
+};
 
 export const createVelaProfile = async (input: {
   name: string;
+  provider?: string;
   baseUrl: string;
   apiKey: string;
-  models: { prompt: string; image: string };
+  models: { prompt: string; image: string; video?: string };
+  endpoints?: Partial<GptVelaProfile['endpoints']>;
   timeoutMs?: number;
   maxConcurrency?: number;
 }): Promise<GptVelaProfile> => parseResponse<GptVelaProfile>(await fetch('/api/vela/profiles', {

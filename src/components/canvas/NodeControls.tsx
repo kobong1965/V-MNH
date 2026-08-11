@@ -549,9 +549,7 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
     // Inverse scaling for the prompt bar to keep it readable when zooming out
     // When zooming in (zoom > 0.8), we let it zoom 1:1 with the canvas (localScale = 1)
     // When zooming out (zoom < 0.8), we keep it at least at 0.8 effective scale
-    const minEffectiveScale = 0.8;
-    const effectiveScale = Math.max(zoom, minEffectiveScale);
-    const localScale = effectiveScale / zoom;
+    const localScale = 1 / zoom;
 
     // Theme helper
     const isDark = canvasTheme === 'dark';

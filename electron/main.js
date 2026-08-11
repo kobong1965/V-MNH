@@ -1,9 +1,10 @@
-import { app, BrowserWindow, dialog, Menu, nativeImage, shell, Tray } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, safeStorage, shell, Tray } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { findAvailablePort, startControlService, stopControlService, waitForHealth } from './serverRuntime.js';
+import { VelaUpdater } from './updater.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
@@ -14,6 +15,7 @@ let controlService = null;
 let serviceBaseUrl = null;
 let isQuitting = false;
 let stoppingForQuit = false;
+let updateController = null;
 
 const appRoot = () => app.getAppPath();
 const iconPath = () => path.join(appRoot(), 'build', 'icon.png');
@@ -119,6 +121,13 @@ const boot = async () => {
   await Promise.race([waitForHealth(serviceBaseUrl), exitedEarly]);
   createTray();
   await createWindow();
+  updateController = new VelaUpdater({
+    app,
+    ipcMain,
+    safeStorage,
+    getWindow: () => mainWindow,
+    log: (line) => fs.appendFileSync(logPath, `[updater] ${line}\n`)
+  });
 };
 
 if (!gotSingleInstanceLock) {

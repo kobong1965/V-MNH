@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ChevronDown, Cloud, LayoutGrid, ListChecks, Plus, Save, Sparkles } from 'lucide-react';
+import { ChevronDown, Images, LayoutGrid, ListChecks, Plus, Save, Sparkles, Workflow } from 'lucide-react';
 
 interface VelaTopBarProps {
   canvasTitle: string;
@@ -11,12 +11,16 @@ interface VelaTopBarProps {
   setEditingTitleValue: (value: string) => void;
   onSave: () => void | Promise<void>;
   onNew: () => void;
+  onHome: () => void | Promise<void>;
   onOpenTasks: () => void;
-  onOpenCompute: () => void;
+  onOpenAssets: () => void;
   hasUnsavedChanges: boolean;
   lastAutoSaveTime?: number;
   activeTaskCount: number;
-  onlineComputeCount: number;
+  assetCount: number;
+  onOpenWorkflows: () => void;
+  isWorkflowPanelOpen: boolean;
+  isAssetTrayOpen: boolean;
 }
 
 export function VelaTopBar({
@@ -29,12 +33,16 @@ export function VelaTopBar({
   setEditingTitleValue,
   onSave,
   onNew,
+  onHome,
   onOpenTasks,
-  onOpenCompute,
+  onOpenAssets,
   hasUnsavedChanges,
   lastAutoSaveTime,
   activeTaskCount,
-  onlineComputeCount
+  assetCount,
+  onOpenWorkflows,
+  isWorkflowPanelOpen,
+  isAssetTrayOpen
 }: VelaTopBarProps) {
   const [isSaving, setIsSaving] = useState(false);
 
@@ -62,8 +70,9 @@ export function VelaTopBar({
 
   return (
     <header className="vela-topbar" aria-label="项目工具栏">
-      <div className="vela-workspace-pill">
-        <button className="vela-brand-button vela-focusable" type="button" aria-label="Vela 工作区">
+      <div className="vela-topbar-left">
+        <div className="vela-workspace-pill">
+        <button className="vela-brand-button vela-focusable" type="button" onClick={() => void onHome()} aria-label="返回首页" title="返回首页">
           <span className="vela-brand-mark" aria-hidden="true">V</span>
           <ChevronDown size={13} aria-hidden="true" />
         </button>
@@ -106,16 +115,27 @@ export function VelaTopBar({
           <span>画布 1</span>
           <ChevronDown size={13} aria-hidden="true" />
         </button>
+        </div>
+        <button
+          className="vela-workflow-trigger vela-focusable"
+          type="button"
+          data-active={isWorkflowPanelOpen || undefined}
+          aria-expanded={isWorkflowPanelOpen}
+          onClick={onOpenWorkflows}
+        >
+          <Workflow size={15} aria-hidden="true" />
+          <span>工作流</span>
+        </button>
       </div>
 
       <nav className="vela-topbar-actions" aria-label="项目操作">
         <button className="vela-top-action vela-icon-only" type="button" onClick={onNew} aria-label="新建项目" title="新建项目">
           <Plus size={17} aria-hidden="true" />
         </button>
-        <button className="vela-top-action" type="button" onClick={onOpenCompute}>
-          <Cloud size={16} aria-hidden="true" />
-          <span>算力</span>
-          <span className="vela-status-number" data-online={onlineComputeCount > 0 || undefined}>{onlineComputeCount}</span>
+        <button className="vela-top-action" data-active={isAssetTrayOpen || undefined} type="button" onClick={onOpenAssets} aria-expanded={isAssetTrayOpen}>
+          <Images size={16} aria-hidden="true" />
+          <span>素材盘</span>
+          <span className="vela-status-number" data-online={assetCount > 0 || undefined}>{assetCount}</span>
         </button>
         <button className="vela-top-action" type="button" onClick={onOpenTasks}>
           <ListChecks size={16} aria-hidden="true" />

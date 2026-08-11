@@ -25,6 +25,7 @@ interface VelaComfySectionProps {
   profiles: ComfyVelaProfile[];
   onProfilesChanged: () => void | Promise<unknown>;
   onMessage: (message: string | null) => void;
+  showHeading?: boolean;
 }
 
 interface ComfyFormState {
@@ -67,7 +68,7 @@ const stateLabels: Record<ComfyConnectionResult['state'], string> = {
 
 const formatVram = (bytes: number) => bytes > 0 ? `${(bytes / 1024 ** 3).toFixed(1)} GB` : '未知';
 
-export function VelaComfySection({ profiles, onProfilesChanged, onMessage }: VelaComfySectionProps) {
+export function VelaComfySection({ profiles, onProfilesChanged, onMessage, showHeading = true }: VelaComfySectionProps) {
   const [form, setForm] = useState(INITIAL_FORM);
   const [isAdding, setIsAdding] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -127,13 +128,13 @@ export function VelaComfySection({ profiles, onProfilesChanged, onMessage }: Vel
   };
 
   return (
-    <section className="vela-connection-section vela-comfy-section" aria-labelledby="comfy-section-title">
-      <div className="vela-section-title" id="comfy-section-title">
+    <section className="vela-connection-section vela-comfy-section" {...(showHeading ? { 'aria-labelledby': 'comfy-section-title' } : { 'aria-label': '云端 ComfyUI 连接' })}>
+      {showHeading && <div className="vela-section-title" id="comfy-section-title">
         <Cloud size={15} aria-hidden="true" /> 云端 ComfyUI
         <button className="vela-button vela-compact-button" type="button" onClick={() => setIsAdding((current) => !current)}>
           <Plus size={13} aria-hidden="true" /> {isAdding ? '收起' : '添加算力'}
         </button>
-      </div>
+      </div>}
 
       {profiles.length === 0 && !isAdding && (
         <div className="vela-comfy-empty" role="status">

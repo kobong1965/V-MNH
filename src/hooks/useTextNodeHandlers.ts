@@ -42,14 +42,20 @@ export const useTextNodeHandlers = ({
         const videoNode: NodeData = {
             id: videoNodeId,
             type: NodeType.VIDEO,
+            kind: 'gpt-video',
+            title: 'API 视频',
             x: textNode.x + NODE_WIDTH + GAP,
             y: textNode.y,
             prompt: textNode.prompt || '',
             status: NodeStatus.IDLE,
             model: 'Banana Pro',
-            aspectRatio: 'Auto',
-            resolution: 'Auto',
-            parentIds: [nodeId]
+            aspectRatio: '16:9',
+            resolution: '720p',
+            parentIds: [nodeId],
+            outputCount: 1,
+            videoModel: 'seedance-2.5-720p',
+            videoDuration: 5,
+            videoGenerationMode: 'text-to-video'
         };
 
         // Update text node to editing mode with linked video
@@ -60,7 +66,7 @@ export const useTextNodeHandlers = ({
 
         // Add video node
         setNodes(prev => [...prev, videoNode]);
-        setSelectedNodeIds([nodeId]);
+        setSelectedNodeIds([videoNodeId]);
     };
 
     /**

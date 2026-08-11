@@ -10,6 +10,14 @@ import {
 const DEFAULT_GPT_TIMEOUT_MS = 60_000;
 const DEFAULT_COMFY_TIMEOUT_MS = 15_000;
 const COMFY_AUTH_TYPES = new Set(['none', 'bearer', 'basic', 'custom']);
+const DEFAULT_GPT_ENDPOINTS = Object.freeze({
+  models: '/models',
+  chat: '/chat/completions',
+  imageGeneration: '/images/generations',
+  imageEdit: '/images/edits',
+  videoGeneration: '/videos/generations',
+  videoStatus: '/videos/{id}'
+});
 
 export const normalizeOpenAiBaseUrl = (value) => {
   const url = new URL(String(value || '').trim());
@@ -24,16 +32,31 @@ export const normalizeOpenAiBaseUrl = (value) => {
 const clampInteger = (value, fallback, min, max) => Math.min(max, Math.max(min, Number(value) || fallback));
 const cleanText = (value, max = 500) => String(value || '').trim().slice(0, max);
 
+const normalizeEndpointPath = (value, fallback) => {
+  const route = cleanText(value || fallback, 240);
+  if (!route.startsWith('/') || route.startsWith('//') || /[\r\n]/.test(route)) {
+    throw new Error('API 接口路径必须是以单个 / 开头的相对路径');
+  }
+  return route.replace(/\/{2,}/g, '/');
+};
+
 const sanitizeGptConfig = (input = {}) => {
   const models = input.models && typeof input.models === 'object' ? input.models : {};
+  const endpoints = input.endpoints && typeof input.endpoints === 'object' ? input.endpoints : {};
   return {
     baseUrl: normalizeOpenAiBaseUrl(input.baseUrl),
     authType: 'bearer',
+    provider: cleanText(input.provider || 'OpenAI Compatible', 80),
     models: {
       prompt: typeof models.prompt === 'string' ? models.prompt.trim() : '',
-      image: typeof models.image === 'string' ? models.image.trim() : ''
+      image: typeof models.image === 'string' ? models.image.trim() : '',
+      video: typeof models.video === 'string' ? models.video.trim() : ''
     },
-    timeoutMs: clampInteger(input.timeoutMs, DEFAULT_GPT_TIMEOUT_MS, 1_000, 300_000),
+    endpoints: Object.fromEntries(Object.entries(DEFAULT_GPT_ENDPOINTS).map(([key, fallback]) => [
+      key,
+      normalizeEndpointPath(endpoints[key], fallback)
+    ])),
+    timeoutMs: clampInteger(input.timeoutMs, DEFAULT_GPT_TIMEOUT_MS, 1_000, 3_600_000),
     maxConcurrency: clampInteger(input.maxConcurrency, 2, 1, 10)
   };
 };
@@ -109,15 +132,29 @@ const comfySecretFromDraft = (draft = {}) => {
 const hasComfySecretPatch = (patch = {}) => ['token', 'username', 'password', 'customHeaders', 'clearSecret']
   .some((key) => Object.prototype.hasOwnProperty.call(patch, key));
 
-const toPublicProfile = (row) => validatePublicProfile({
-  id: row.id,
-  type: row.type,
-  name: row.name,
-  ...JSON.parse(row.public_json),
-  secretConfigured: Boolean(row.encrypted_secret),
-  createdAt: row.created_at,
-  updatedAt: row.updated_at
-});
+const readCredential = (row, secretProtector) => {
+  if (!row.encrypted_secret) return { status: 'missing', secret: null };
+  try {
+    return { status: 'ready', secret: secretProtector.decrypt(row.encrypted_secret) };
+  } catch {
+    return { status: 'unreadable', secret: null };
+  }
+};
+
+const toPublicProfile = (row, secretProtector) => {
+  const publicConfig = sanitizePublicConfig(row.type, JSON.parse(row.public_json));
+  const credential = readCredential(row, secretProtector);
+  return validatePublicProfile({
+    id: row.id,
+    type: row.type,
+    name: row.name,
+    ...publicConfig,
+    secretConfigured: Boolean(row.encrypted_secret),
+    credentialStatus: credential.status,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  });
+};
 
 export class ProfileRepository {
   constructor(database, secretProtector) {
@@ -129,20 +166,21 @@ export class ProfileRepository {
     const rows = type
       ? this.database.connection.prepare('SELECT * FROM profiles WHERE type = ? ORDER BY name').all(type)
       : this.database.connection.prepare('SELECT * FROM profiles ORDER BY type, name').all();
-    return rows.map(toPublicProfile);
+    return rows.map((row) => toPublicProfile(row, this.secretProtector));
   }
 
   get(id) {
     const row = this.database.connection.prepare('SELECT * FROM profiles WHERE id = ?').get(id);
-    return row ? toPublicProfile(row) : null;
+    return row ? toPublicProfile(row, this.secretProtector) : null;
   }
 
   getWithSecret(id) {
     const row = this.database.connection.prepare('SELECT * FROM profiles WHERE id = ?').get(id);
     if (!row) return null;
+    const credential = readCredential(row, this.secretProtector);
     return {
-      ...toPublicProfile(row),
-      secret: row.encrypted_secret ? this.secretProtector.decrypt(row.encrypted_secret) : null
+      ...toPublicProfile(row, this.secretProtector),
+      secret: credential.secret
     };
   }
 
@@ -181,7 +219,10 @@ export class ProfileRepository {
     const publicConfig = sanitizePublicConfig(row.type, {
       ...current,
       ...patch,
-      ...(row.type === 'gpt' ? { models: { ...current.models, ...(patch.models || {}) } } : {})
+      ...(row.type === 'gpt' ? {
+        models: { ...current.models, ...(patch.models || {}) },
+        endpoints: { ...current.endpoints, ...(patch.endpoints || {}) }
+      } : {})
     });
     let encrypted = row.encrypted_secret;
     if (row.type === 'gpt') {

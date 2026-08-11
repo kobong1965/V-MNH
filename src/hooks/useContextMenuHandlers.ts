@@ -69,19 +69,31 @@ export const useContextMenuHandlers = ({
     // NODE OPERATIONS
     // ============================================================================
 
-    const handleAddNext = useCallback((nodeId: string, _direction: 'left' | 'right') => {
+    const handleAddNext = useCallback((nodeId: string, direction: 'left' | 'right', point?: { x: number; y: number }, nodeIds?: string[]) => {
         const sourceNode = nodes.find(n => n.id === nodeId);
         if (!sourceNode) return;
 
+        const sourceWidth = sourceNode.kind && ['prompt', 'gpt-prompt-optimizer'].includes(sourceNode.kind) ? 370 : 656;
+        const anchor = point || {
+            x: (sourceNode.x + (direction === 'right' ? sourceWidth : 0)) * viewport.zoom + viewport.x,
+            y: (sourceNode.y + 185) * viewport.zoom + viewport.y
+        };
+        const menuX = Math.max(12, Math.min(window.innerWidth - 250, anchor.x));
+        const menuY = Math.max(72, Math.min(window.innerHeight - 560, anchor.y));
+
         setContextMenu({
             isOpen: true,
-            x: window.innerWidth / 2,
-            y: window.innerHeight / 2,
+            x: menuX,
+            y: menuY,
             type: 'node-connector',
             sourceNodeId: nodeId,
-            connectorSide: _direction
+            sourceNodeIds: nodeIds,
+            sourceNodeKind: sourceNode.kind,
+            connectorSide: direction,
+            dropX: point?.x,
+            dropY: point?.y
         });
-    }, [nodes, setContextMenu]);
+    }, [nodes, setContextMenu, viewport]);
 
     const handleNodeContextMenu = useCallback((e: React.MouseEvent, id: string) => {
         e.preventDefault();

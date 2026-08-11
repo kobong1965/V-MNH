@@ -42,10 +42,11 @@ interface UsePointerHandlersOptions {
     // Connection dragging
     updateConnectionDrag: (e: React.PointerEvent, nodes: NodeData[], viewport: Viewport) => boolean;
     completeConnectionDrag: (
-        handleAddNext: (nodeId: string, direction: 'left' | 'right') => void,
+        handleAddNext: (nodeId: string, direction: 'left' | 'right', point?: { x: number; y: number }) => void,
         setNodes: React.Dispatch<React.SetStateAction<NodeData[]>>,
         nodes: NodeData[],
-        onConnectionMade?: (parentId: string, childId: string) => void
+        onConnectionMade?: (parentId: string, childId: string) => void,
+        dropPoint?: { x: number; y: number }
     ) => boolean;
 
     // Panel close functions
@@ -55,7 +56,7 @@ interface UsePointerHandlersOptions {
 
     // Other
     releasePointerCapture: (e: React.PointerEvent) => void;
-    handleAddNext: (nodeId: string, direction: 'left' | 'right') => void;
+    handleAddNext: (nodeId: string, direction: 'left' | 'right', point?: { x: number; y: number }) => void;
     updateNode: (id: string, updates: Partial<NodeData>) => void;
 }
 
@@ -118,8 +119,8 @@ export const usePointerHandlers = ({
                 closeHistoryPanel();
                 closeAssetLibrary();
             }
-            // Middle-click (button 1) or other: Start panning
-            else {
+            // Middle-click (button 1): Start panning. Other buttons are not drag gestures.
+            else if (e.button === 1) {
                 startPanning(e);
                 setSelectedConnection(null);
                 setContextMenu(prev => ({ ...prev, isOpen: false }));
@@ -173,7 +174,7 @@ export const usePointerHandlers = ({
         }
 
         // 2. Handle Connection Drop
-        if (completeConnectionDrag(handleAddNext, setNodes, nodes, handleConnectionMade)) {
+        if (completeConnectionDrag(handleAddNext, setNodes, nodes, handleConnectionMade, { x: e.clientX, y: e.clientY })) {
             releasePointerCapture(e);
             return;
         }

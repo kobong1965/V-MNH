@@ -31,6 +31,18 @@ export const waitForHealth = async (baseUrl, {
   throw new Error(`Vela control service did not become ready: ${lastError?.message || 'unknown error'}`);
 };
 
+export const buildControlServiceArguments = ({
+  serverEntry,
+  dataDirectory,
+  projectsDirectory,
+  libraryDirectory
+}) => [
+  serverEntry,
+  `--vela-data-dir=${encodeURIComponent(dataDirectory)}`,
+  `--vela-projects-dir=${encodeURIComponent(projectsDirectory)}`,
+  `--vela-library-dir=${encodeURIComponent(libraryDirectory)}`
+];
+
 export const startControlService = ({
   electronExecutable,
   serverEntry,
@@ -40,7 +52,12 @@ export const startControlService = ({
   libraryDirectory,
   onOutput = () => {}
 }) => {
-  const child = spawn(electronExecutable, [serverEntry], {
+  const child = spawn(electronExecutable, buildControlServiceArguments({
+    serverEntry,
+    dataDirectory,
+    projectsDirectory,
+    libraryDirectory
+  }), {
     env: {
       ...process.env,
       ELECTRON_RUN_AS_NODE: '1',

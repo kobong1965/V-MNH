@@ -36,6 +36,9 @@ export const useNodeDragging = () => {
         id: string,
         onSelect?: (id: string) => void
     ) => {
+        // Node/material dragging is a primary-button interaction only.
+        // The middle button is reserved globally for canvas panning.
+        if (e.button !== 0) return;
         e.stopPropagation();
         dragNodeRef.current = { id };
         setIsDragging(true);
@@ -94,7 +97,9 @@ export const useNodeDragging = () => {
      */
     const startPanning = (e: React.PointerEvent) => {
         isPanning.current = true;
-        if (e.target instanceof HTMLElement) {
+        if (e.currentTarget instanceof HTMLElement) {
+            e.currentTarget.setPointerCapture(e.pointerId);
+        } else if (e.target instanceof HTMLElement) {
             e.target.setPointerCapture(e.pointerId);
         }
     };
@@ -121,17 +126,22 @@ export const useNodeDragging = () => {
     /**
      * Ends canvas panning
      */
-    const endPanning = () => {
+    const endPanning = (): boolean => {
+        const wasPanning = isPanning.current;
         isPanning.current = false;
+        return wasPanning;
     };
 
     /**
      * Releases pointer capture
      */
     const releasePointerCapture = (e: React.PointerEvent) => {
-        if (e.target instanceof HTMLElement && e.target.hasPointerCapture(e.pointerId)) {
+        const captureTarget = e.currentTarget instanceof HTMLElement
+            ? e.currentTarget
+            : e.target instanceof HTMLElement ? e.target : null;
+        if (captureTarget?.hasPointerCapture(e.pointerId)) {
             try {
-                e.target.releasePointerCapture(e.pointerId);
+                captureTarget.releasePointerCapture(e.pointerId);
             } catch (err) {
                 // Ignore errors
             }

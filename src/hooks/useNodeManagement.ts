@@ -8,6 +8,7 @@
 import { useState } from 'react';
 import { NodeData, NodeType, NodeStatus, Viewport } from '../types';
 import {
+    canConnectNodeKinds,
     getDefaultNodeTitle,
     getNodeDefinition,
     type VelaNodeKind
@@ -78,12 +79,14 @@ export const useNodeManagement = () => {
             prompt: '',
             status: NodeStatus.IDLE,
             model: 'Banana Pro',
-            aspectRatio: kind === 'h3-video' ? '9:16' : kind === 'gpt-image' ? '1:1' : 'Auto',
-            resolution: kind === 'h3-video' ? '1080p' : kind === 'gpt-image' ? '2K' : 'Auto',
+            aspectRatio: kind === 'gpt-video' ? '16:9' : kind === 'h3-video' ? '9:16' : kind === 'gpt-image' ? '1:1' : 'Auto',
+            resolution: kind === 'gpt-video' ? '720p' : kind === 'h3-video' ? '1080p' : kind === 'gpt-image' ? '2K' : 'Auto',
             parentIds: parentId ? [parentId] : [],
             outputCount: 1,
             imageModel: kind === 'gpt-image' ? 'gpt-image-1.5' : undefined,
-            videoModel: kind === 'h3-video' ? 'h3-comfy' : undefined
+            videoModel: kind === 'gpt-video' ? 'seedance-2.5-720p' : kind === 'h3-video' ? 'h3-comfy' : undefined,
+            videoDuration: kind === 'gpt-video' ? 5 : undefined,
+            videoGenerationMode: kind === 'gpt-video' ? 'text-to-video' : undefined
         };
 
         setNodes(prev => [...prev, newNode]);
@@ -150,30 +153,54 @@ export const useNodeManagement = () => {
             const sourceNode = nodes.find(n => n.id === contextMenu.sourceNodeId);
             if (sourceNode) {
                 const direction = contextMenu.connectorSide || 'right';
+                const requestedSourceIds: string[] = contextMenu.sourceNodeIds?.length
+                    ? contextMenu.sourceNodeIds
+                    : [contextMenu.sourceNodeId];
+                const sourceNodes = requestedSourceIds
+                    .map((id) => nodes.find((node) => node.id === id))
+                    .filter((node): node is NodeData => Boolean(node));
+                if (kind) {
+                    const compatible = direction === 'right'
+                        ? sourceNodes.some((candidate) => !candidate.kind || canConnectNodeKinds(candidate.kind, kind))
+                        : !sourceNode.kind || canConnectNodeKinds(kind, sourceNode.kind);
+                    if (!compatible) {
+                        onCloseMenu();
+                        return;
+                    }
+                }
                 const newNodeId = crypto.randomUUID();
-                const GAP = 100;
-                const NODE_WIDTH = 340;
+                const GAP = 90;
+                const sourceWidth = sourceNode.kind && ['prompt', 'gpt-prompt-optimizer'].includes(sourceNode.kind) ? 370 : 656;
+                const targetWidth = kind && ['prompt', 'gpt-prompt-optimizer'].includes(kind) ? 370 : 656;
+                const hasDropPoint = Number.isFinite(contextMenu.dropX) && Number.isFinite(contextMenu.dropY);
+                const droppedX = hasDropPoint ? (contextMenu.dropX - viewport.x) / viewport.zoom - targetWidth / 2 : null;
+                const droppedY = hasDropPoint ? (contextMenu.dropY - viewport.y) / viewport.zoom - 185 : null;
 
                 let newNode: NodeData;
 
                 if (direction === 'right') {
+                    const compatibleParentIds = sourceNodes
+                        .filter((candidate) => !candidate.kind || !kind || canConnectNodeKinds(candidate.kind, kind))
+                        .map((candidate) => candidate.id);
                     // Append: Source -> New
                     newNode = {
                         id: newNodeId,
                         type,
                         kind,
                         title: kind ? getDefaultNodeTitle(kind) : undefined,
-                        x: sourceNode.x + NODE_WIDTH + GAP,
-                        y: sourceNode.y,
+                        x: droppedX ?? sourceNode.x + sourceWidth + GAP,
+                        y: droppedY ?? sourceNode.y,
                         prompt: '',
                         status: NodeStatus.IDLE,
                         model: 'Banana Pro',
-                        aspectRatio: kind === 'h3-video' ? '9:16' : kind === 'gpt-image' ? '1:1' : 'Auto',
-                        resolution: kind === 'h3-video' ? '1080p' : kind === 'gpt-image' ? '2K' : 'Auto',
-                        parentIds: contextMenu.sourceNodeId ? [contextMenu.sourceNodeId] : [],
+                        aspectRatio: kind === 'gpt-video' ? '16:9' : kind === 'h3-video' ? '9:16' : kind === 'gpt-image' ? '1:1' : 'Auto',
+                        resolution: kind === 'gpt-video' ? '720p' : kind === 'h3-video' ? '1080p' : kind === 'gpt-image' ? '2K' : 'Auto',
+                        parentIds: [...new Set(compatibleParentIds)],
                         outputCount: 1,
                         imageModel: kind === 'gpt-image' ? 'gpt-image-1.5' : undefined,
-                        videoModel: kind === 'h3-video' ? 'h3-comfy' : undefined
+                        videoModel: kind === 'gpt-video' ? 'seedance-2.5-720p' : kind === 'h3-video' ? 'h3-comfy' : undefined,
+                        videoDuration: kind === 'gpt-video' ? 5 : undefined,
+                        videoGenerationMode: kind === 'gpt-video' ? 'text-to-video' : undefined
                     };
                 } else {
                     // Prepend: New -> Source
@@ -182,17 +209,19 @@ export const useNodeManagement = () => {
                         type,
                         kind,
                         title: kind ? getDefaultNodeTitle(kind) : undefined,
-                        x: sourceNode.x - NODE_WIDTH - GAP,
-                        y: sourceNode.y,
+                        x: droppedX ?? sourceNode.x - targetWidth - GAP,
+                        y: droppedY ?? sourceNode.y,
                         prompt: '',
                         status: NodeStatus.IDLE,
                         model: 'Banana Pro',
-                        aspectRatio: kind === 'h3-video' ? '9:16' : kind === 'gpt-image' ? '1:1' : 'Auto',
-                        resolution: kind === 'h3-video' ? '1080p' : kind === 'gpt-image' ? '2K' : 'Auto',
+                        aspectRatio: kind === 'gpt-video' ? '16:9' : kind === 'h3-video' ? '9:16' : kind === 'gpt-image' ? '1:1' : 'Auto',
+                        resolution: kind === 'gpt-video' ? '720p' : kind === 'h3-video' ? '1080p' : kind === 'gpt-image' ? '2K' : 'Auto',
                         parentIds: [],
                         outputCount: 1,
                         imageModel: kind === 'gpt-image' ? 'gpt-image-1.5' : undefined,
-                        videoModel: kind === 'h3-video' ? 'h3-comfy' : undefined
+                        videoModel: kind === 'gpt-video' ? 'seedance-2.5-720p' : kind === 'h3-video' ? 'h3-comfy' : undefined,
+                        videoDuration: kind === 'gpt-video' ? 5 : undefined,
+                        videoGenerationMode: kind === 'gpt-video' ? 'text-to-video' : undefined
                     };
                     // Update source to add new node as parent
                     const existingParentIds = sourceNode.parentIds || [];

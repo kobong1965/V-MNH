@@ -8,6 +8,7 @@
 import React from 'react';
 import { NodeData, NodeStatus, NodeType, Viewport } from '../../types';
 import { calculateConnectionPath } from '../../utils/connectionHelpers';
+import { getCanvasNodeHeight, getCanvasNodeWidth } from '../../utils/nodeGeometry';
 
 // ============================================================================
 // HELPER FUNCTIONS
@@ -20,7 +21,7 @@ import { calculateConnectionPath } from '../../utils/connectionHelpers';
  */
 const getNodeWidth = (node: NodeData, parentNode?: NodeData): number => {
     if (node.kind) {
-        return ['prompt', 'gpt-prompt-optimizer'].includes(node.kind) ? 370 : 656;
+        return getCanvasNodeWidth(node, parentNode);
     }
     // Image Editor with input from parent: width depends on aspect ratio
     if (node.type === NodeType.IMAGE_EDITOR) {
@@ -76,6 +77,9 @@ const getNodeHeight = (node: NodeData, parentNode?: NodeData): number => {
     const hasContent = node.status === NodeStatus.SUCCESS && node.resultUrl;
 
     if (node.kind) {
+        if (node.resultCollectionExpanded && (node.resultUrls?.length || 0) > 1) {
+            return getCanvasNodeHeight(node, parentNode);
+        }
         if (hasContent && node.resultAspectRatio) {
             const parts = node.resultAspectRatio.split('/');
             if (parts.length === 2) {
@@ -176,7 +180,12 @@ interface ConnectionsLayerProps {
     viewport: Viewport;
     // Connection dragging state
     isDraggingConnection: boolean;
-    connectionStart: { nodeId: string; handle: 'left' | 'right' } | null;
+    connectionStart: {
+        nodeId: string;
+        nodeIds?: string[];
+        handle: 'left' | 'right';
+        origin?: { x: number; y: number };
+    } | null;
     tempConnectionEnd: { x: number; y: number } | null;
     // Selection
     selectedConnection: Connection | null;
@@ -218,15 +227,24 @@ export const ConnectionsLayer: React.FC<ConnectionsLayerProps> = ({
                     onClick={(e) => onEdgeClick(e, parent.id, node.id)}
                     className="cursor-pointer group pointer-events-auto"
                 >
-                    <path d={path} stroke="transparent" strokeWidth="20" fill="none" />
+                    <path
+                        d={path}
+                        stroke="transparent"
+                        strokeWidth="20"
+                        fill="none"
+                        vectorEffect="non-scaling-stroke"
+                    />
                     <path
                         d={path}
                         stroke={isSelected
-                            ? (canvasTheme === 'dark' ? '#fff' : '#171717')
-                            : (canvasTheme === 'dark' ? '#444' : '#d6d6d2')}
-                        strokeWidth={isSelected ? 1.8 : 1.4}
+                            ? (canvasTheme === 'dark' ? '#f4f4f5' : '#2f3338')
+                            : (canvasTheme === 'dark' ? '#8b9098' : '#5f6368')}
+                        strokeWidth={isSelected ? 3 : 2.4}
                         fill="none"
-                        className={`transition-colors ${!isSelected ? (canvasTheme === 'dark' ? 'group-hover:stroke-neutral-300' : 'group-hover:stroke-neutral-500') : ''}`}
+                        vectorEffect="non-scaling-stroke"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        className={`transition-colors ${!isSelected ? (canvasTheme === 'dark' ? 'group-hover:stroke-neutral-200' : 'group-hover:stroke-neutral-800') : ''}`}
                     />
                 </g>
             );
@@ -237,9 +255,10 @@ export const ConnectionsLayer: React.FC<ConnectionsLayerProps> = ({
     let tempLine = null;
     if (isDraggingConnection && connectionStart && tempConnectionEnd) {
         const startNode = nodes.find(n => n.id === connectionStart.nodeId);
-        if (startNode) {
-            const startX = connectionStart.handle === 'right' ? startNode.x + getNodeWidth(startNode) : startNode.x;
-            const startY = startNode.y + getNodeHeight(startNode) / 2;
+        if (startNode || connectionStart.origin) {
+            const startX = connectionStart.origin?.x
+                ?? (connectionStart.handle === 'right' ? startNode!.x + getNodeWidth(startNode!) : startNode!.x);
+            const startY = connectionStart.origin?.y ?? (startNode!.y + getNodeHeight(startNode!) / 2);
             const endX = (tempConnectionEnd.x - viewport.x) / viewport.zoom;
             const endY = (tempConnectionEnd.y - viewport.y) / viewport.zoom;
 
@@ -254,11 +273,13 @@ export const ConnectionsLayer: React.FC<ConnectionsLayerProps> = ({
             tempLine = (
                 <path
                     d={path}
-                    stroke={canvasTheme === 'dark' ? '#fff' : '#171717'}
-                    strokeWidth="2"
+                    stroke={canvasTheme === 'dark' ? '#d4d4d8' : '#4b5057'}
+                    strokeWidth="2.6"
                     strokeDasharray="5,5"
                     fill="none"
-                    className="pointer-events-none opacity-50"
+                    vectorEffect="non-scaling-stroke"
+                    strokeLinecap="round"
+                    className="pointer-events-none opacity-80"
                 />
             );
         }

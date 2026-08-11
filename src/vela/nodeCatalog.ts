@@ -3,6 +3,7 @@ export type VelaNodeKind =
   | 'image-input'
   | 'gpt-prompt-optimizer'
   | 'gpt-image'
+  | 'gpt-video'
   | 'h3-video'
   | 'image-result'
   | 'video-result';
@@ -63,6 +64,15 @@ export const VELA_NODE_CATALOG: readonly VelaNodeDefinition[] = [
     legacyType: 'Image',
     inputs: ['text', 'image', 'image-list'],
     outputs: ['image-list']
+  },
+  {
+    kind: 'gpt-video',
+    label: 'API 视频',
+    description: '通过视频中转账户生成文生视频或图生视频',
+    category: 'video',
+    legacyType: 'Video',
+    inputs: ['text', 'image', 'image-list'],
+    outputs: ['video-list']
   },
   {
     kind: 'h3-video',

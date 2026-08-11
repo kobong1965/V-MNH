@@ -146,6 +146,23 @@ export class JobRepository {
     return job;
   }
 
+  updateProgress(jobId, progress) {
+    const current = this.getJob(jobId);
+    if (!current) throw new Error(`Job not found: ${jobId}`);
+    const normalized = Math.max(0, Math.min(1, Number(progress) || 0));
+    const now = new Date().toISOString();
+    this.database.transaction(() => {
+      this.db.prepare('UPDATE jobs SET progress = ?, updated_at = ? WHERE id = ?')
+        .run(normalized, now, jobId);
+      this.db.prepare('UPDATE job_groups SET updated_at = ? WHERE id = ?').run(now, current.groupId);
+      this.db.prepare('INSERT INTO job_events(job_id, event_type, data_json, created_at) VALUES (?, ?, ?, ?)')
+        .run(jobId, 'progress-updated', JSON.stringify({ progress: normalized }), now);
+    });
+    const job = this.getJob(jobId);
+    this.onEvent?.({ id: crypto.randomUUID(), type: 'job.updated', job, createdAt: now });
+    return job;
+  }
+
   retry(jobId) {
     const current = this.getJob(jobId);
     if (!current) throw new Error(`Job not found: ${jobId}`);

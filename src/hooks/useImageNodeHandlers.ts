@@ -77,14 +77,20 @@ export const useImageNodeHandlers = ({
         const newVideoNode: NodeData = {
             id: newNodeId,
             type: NodeType.VIDEO,
+            kind: 'gpt-video',
+            title: 'API 视频',
             x: imageNode.x + NODE_WIDTH + GAP,
             y: imageNode.y,
             prompt: '',
             status: NodeStatus.IDLE,
             model: 'Banana Pro',
-            aspectRatio: 'Auto',
-            resolution: 'Auto',
-            parentIds: [nodeId] // Connect to the source image node
+            aspectRatio: '16:9',
+            resolution: '720p',
+            parentIds: [nodeId], // Connect to the source image node
+            outputCount: 1,
+            videoModel: 'seedance-2.5-720p',
+            videoDuration: 5,
+            videoGenerationMode: 'image-to-video'
         };
 
         // Add new video node

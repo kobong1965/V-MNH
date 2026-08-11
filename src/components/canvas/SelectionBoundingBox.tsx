@@ -7,6 +7,8 @@
 
 import React, { useState } from 'react';
 import { NodeData, NodeGroup, NodeType } from '../../types';
+import { Boxes, Download, Plus, Ungroup } from 'lucide-react';
+import { getCanvasNodeBounds } from '../../utils/nodeGeometry';
 
 interface SelectionBoundingBoxProps {
     selectedNodes: NodeData[];
@@ -15,10 +17,12 @@ interface SelectionBoundingBoxProps {
     onGroup: () => void;
     onUngroup: () => void;
     onBoundingBoxPointerDown: (e: React.PointerEvent) => void;
-    onRenameGroup?: (groupId: string, newLabel: string) => void;
-    onSortNodes?: (direction: 'horizontal' | 'vertical' | 'grid') => void;
-    onCreateVideo?: () => void;
-    onEditStoryboard?: (groupId: string) => void;
+    showToolbar?: boolean;
+    onBatchConnectorPointerDown?: (
+        event: React.PointerEvent,
+        nodeIds: string[],
+        origin: { x: number; y: number }
+    ) => void;
 }
 
 // ============================================================================
@@ -144,18 +148,14 @@ export const SelectionBoundingBox: React.FC<SelectionBoundingBoxProps> = ({
     onGroup,
     onUngroup,
     onBoundingBoxPointerDown,
-    onRenameGroup,
-    onSortNodes,
-    onCreateVideo,
-    onEditStoryboard
+    showToolbar = true,
+    onBatchConnectorPointerDown
 }) => {
     // ============================================================================
     // STATE
     // ============================================================================
 
-    const [isEditingLabel, setIsEditingLabel] = useState(false);
-    const [editedLabel, setEditedLabel] = useState('');
-    const [showSortDropdown, setShowSortDropdown] = useState(false);
+    const [downloadStatus, setDownloadStatus] = useState<'idle' | 'downloading' | 'done'>('idle');
     // ============================================================================
     // CALCULATIONS
     // ============================================================================
@@ -171,20 +171,66 @@ export const SelectionBoundingBox: React.FC<SelectionBoundingBoxProps> = ({
 
     const minX = Math.min(...selectedNodes.map(n => n.x)) - PADDING_X;
     const minY = Math.min(...selectedNodes.map(n => n.y)) - PADDING_TOP;
-    const maxX = Math.max(...selectedNodes.map(n => n.x + getNodeWidth(n, selectedNodes))) + PADDING_X;
-    const maxY = Math.max(...selectedNodes.map(n => n.y + getNodeHeight(n, selectedNodes))) + PADDING_BOTTOM;
+    const maxX = Math.max(...selectedNodes.map(n => getCanvasNodeBounds(n, selectedNodes).right)) + PADDING_X;
+    const maxY = Math.max(...selectedNodes.map(n => getCanvasNodeBounds(n, selectedNodes).bottom)) + PADDING_BOTTOM;
 
     const width = maxX - minX;
     const height = maxY - minY;
 
     const isGrouped = !!group;
-    const showGroupButton = selectedNodes.length > 1 && !isGrouped;
 
     // Calculate scale factor for UI elements - clamp to prevent elements from getting too large
     // At zoom 1.0: scale = 1.0 (normal size)
     // At zoom 0.5: scale = 1.5 (max clamped, instead of 2.0)
     // At zoom 2.0: scale = 0.5 (smaller)
-    const uiScale = Math.min(1 / viewport.zoom, 1.5);
+    const uiScale = 1 / viewport.zoom;
+
+    const downloadableImages = selectedNodes.filter((node) =>
+        node.type === NodeType.IMAGE && Boolean(node.resultUrl)
+    );
+
+    const downloadSelectedImages = async () => {
+        if (downloadStatus === 'downloading' || downloadableImages.length === 0) return;
+        setDownloadStatus('downloading');
+
+        for (let index = 0; index < downloadableImages.length; index += 1) {
+            const node = downloadableImages[index];
+            const sourceUrl = node.resultUrl!;
+            const cleanUrl = sourceUrl.split('?')[0];
+            let objectUrl: string | null = null;
+            try {
+                const response = await fetch(cleanUrl, { cache: 'no-store' });
+                if (!response.ok) throw new Error(`Download failed: ${response.status}`);
+                const blob = await response.blob();
+                objectUrl = URL.createObjectURL(blob);
+                const extension = blob.type.includes('jpeg')
+                    ? 'jpg'
+                    : blob.type.includes('webp')
+                        ? 'webp'
+                        : 'png';
+                const link = document.createElement('a');
+                link.href = objectUrl;
+                link.download = `V-MNH_框选图片_${String(index + 1).padStart(2, '0')}_${node.id.slice(0, 8)}.${extension}`;
+                document.body.appendChild(link);
+                link.click();
+                link.remove();
+            } catch {
+                const link = document.createElement('a');
+                link.href = cleanUrl;
+                link.download = `V-MNH_框选图片_${String(index + 1).padStart(2, '0')}.png`;
+                link.target = '_blank';
+                link.rel = 'noreferrer';
+                document.body.appendChild(link);
+                link.click();
+                link.remove();
+            } finally {
+                if (objectUrl) window.setTimeout(() => URL.revokeObjectURL(objectUrl!), 1000);
+            }
+        }
+
+        setDownloadStatus('done');
+        window.setTimeout(() => setDownloadStatus('idle'), 1800);
+    };
 
     // ============================================================================
     // RENDER
@@ -198,9 +244,9 @@ export const SelectionBoundingBox: React.FC<SelectionBoundingBoxProps> = ({
                 top: minY,
                 width,
                 height,
-                border: isGrouped ? '2px solid #6366f1' : '2px dashed #6366f1',
+                border: isGrouped ? '2px solid #4b5563' : '2px dashed #6b7280',
                 borderRadius: '12px',
-                backgroundColor: isGrouped ? 'rgba(55, 55, 55, 0.5)' : 'transparent',
+                backgroundColor: isGrouped ? 'rgba(55, 65, 81, 0.34)' : 'transparent',
                 zIndex: 5
             }}
             onPointerDown={(e) => {
@@ -210,6 +256,23 @@ export const SelectionBoundingBox: React.FC<SelectionBoundingBoxProps> = ({
                 }
             }}
         >
+            {onBatchConnectorPointerDown && (
+                <button
+                    type="button"
+                    className="vela-selection-connector"
+                    aria-label={`将选中的 ${selectedNodes.length} 个节点批量连接到目标节点`}
+                    title="拖动以批量连接"
+                    style={{ transform: `translate(50%, -50%) scale(${uiScale})` }}
+                    onPointerDown={(event) => onBatchConnectorPointerDown(
+                        event,
+                        selectedNodes.map((node) => node.id),
+                        { x: maxX, y: minY + height / 2 }
+                    )}
+                >
+                    <Plus size={14} aria-hidden="true" />
+                </button>
+            )}
+
             {/* Resize Handles */}
             {[
                 { pos: 'top-left', cursor: 'nw-resize', top: -4, left: -4 },
@@ -223,7 +286,7 @@ export const SelectionBoundingBox: React.FC<SelectionBoundingBoxProps> = ({
             ].map(handle => (
                 <div
                     key={handle.pos}
-                    className="absolute w-2 h-2 bg-white border border-indigo-500 rounded-sm pointer-events-auto"
+                    className="absolute w-2 h-2 bg-white border border-neutral-500 rounded-sm pointer-events-auto"
                     style={{
                         top: handle.top,
                         left: handle.left,
@@ -235,85 +298,8 @@ export const SelectionBoundingBox: React.FC<SelectionBoundingBoxProps> = ({
                 />
             ))}
 
-            {/* Group Label (when grouped) - Positioned on left side */}
-            {isGrouped && group && (
-                isEditingLabel ? (
-                    <input
-                        type="text"
-                        value={editedLabel}
-                        onChange={(e) => setEditedLabel(e.target.value)}
-                        onBlur={() => {
-                            if (editedLabel.trim() && onRenameGroup) {
-                                onRenameGroup(group.id, editedLabel.trim());
-                            }
-                            setIsEditingLabel(false);
-                        }}
-                        onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                                if (editedLabel.trim() && onRenameGroup) {
-                                    onRenameGroup(group.id, editedLabel.trim());
-                                }
-                                setIsEditingLabel(false);
-                            } else if (e.key === 'Escape') {
-                                setIsEditingLabel(false);
-                            }
-                        }}
-                        autoFocus
-                        className="absolute text-sm font-medium text-white bg-indigo-600 px-3 py-1 rounded pointer-events-auto outline-none whitespace-nowrap"
-                        style={{
-                            top: 8,
-                            right: 'calc(100% + 8px)',
-                            transform: `scale(${uiScale})`,
-                            transformOrigin: 'top right'
-                        }}
-                    />
-                ) : (
-                    <div
-                        className="absolute text-sm font-medium text-white bg-indigo-600 px-3 py-1 rounded pointer-events-auto cursor-text whitespace-nowrap"
-                        style={{
-                            top: 8,
-                            right: 'calc(100% + 8px)',
-                            transform: `scale(${uiScale})`,
-                            transformOrigin: 'top right'
-                        }}
-                        onDoubleClick={() => {
-                            setEditedLabel(group.label);
-                            setIsEditingLabel(true);
-                        }}
-                    >
-                        {group.label}
-                    </div>
-                )
-            )}
-
-            {/* Group Button (when multiple nodes selected but not grouped) */}
-            {showGroupButton && (
-                <div
-                    className="absolute flex gap-2 pointer-events-auto"
-                    style={{
-                        top: -10,
-                        right: 0,
-                        transform: `scale(${uiScale}) translateY(-100%)`,
-                        transformOrigin: 'bottom right'
-                    }}
-                >
-                    <button
-                        onClick={onGroup}
-                        className="bg-neutral-900 border border-neutral-700 hover:bg-neutral-800 text-white text-sm px-4 py-2.5 rounded flex items-center gap-2 transition-colors"
-                    >
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <rect x="3" y="3" width="7" height="7" />
-                            <rect x="14" y="3" width="7" height="7" />
-                            <rect x="14" y="14" width="7" height="7" />
-                            <rect x="3" y="14" width="7" height="7" />
-                        </svg>
-                        Group
-                    </button>
-                </div>
-            )}
-
-            {/* Group Toolbar (when grouped) */}
-            {isGrouped && (
+            {/* Multi-selection actions. Hidden for groups that are not currently selected. */}
+            {showToolbar && (
                 <div
                     className="absolute flex gap-2 pointer-events-auto"
                     style={{
@@ -322,116 +308,30 @@ export const SelectionBoundingBox: React.FC<SelectionBoundingBoxProps> = ({
                         transform: `translateX(-50%) scale(${uiScale}) translateY(-100%)`,
                         transformOrigin: 'bottom center'
                     }}
+                    role="toolbar"
+                    aria-label="框选节点操作"
                 >
-                    {/* Sort Button with Dropdown */}
-                    <div className="relative">
-                        <button
-                            onClick={() => setShowSortDropdown(!showSortDropdown)}
-                            className="bg-neutral-900 border border-neutral-700 hover:bg-neutral-800 text-white text-sm px-4 py-2.5 rounded flex items-center gap-2 transition-colors"
-                        >
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                <line x1="4" y1="6" x2="20" y2="6" />
-                                <line x1="4" y1="12" x2="16" y2="12" />
-                                <line x1="4" y1="18" x2="12" y2="18" />
-                            </svg>
-                            Sort
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                <polyline points="6 9 12 15 18 9" />
-                            </svg>
-                        </button>
-                        {/* Dropdown Menu - Appears above */}
-                        {showSortDropdown && (
-                            <div className="absolute bottom-full mb-1 left-0 w-36 bg-neutral-900 border border-neutral-700 rounded-lg shadow-xl overflow-hidden z-50">
-                                <button
-                                    onClick={() => {
-                                        onSortNodes?.('horizontal');
-                                        setShowSortDropdown(false);
-                                    }}
-                                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-white hover:bg-neutral-700 transition-colors"
-                                >
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                        <line x1="4" y1="12" x2="20" y2="12" />
-                                        <polyline points="14 6 20 12 14 18" />
-                                    </svg>
-                                    Horizontal
-                                </button>
-                                <button
-                                    onClick={() => {
-                                        onSortNodes?.('vertical');
-                                        setShowSortDropdown(false);
-                                    }}
-                                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-white hover:bg-neutral-700 transition-colors"
-                                >
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                        <line x1="12" y1="4" x2="12" y2="20" />
-                                        <polyline points="6 14 12 20 18 14" />
-                                    </svg>
-                                    Vertical
-                                </button>
-                                <button
-                                    onClick={() => {
-                                        onSortNodes?.('grid');
-                                        setShowSortDropdown(false);
-                                    }}
-                                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-white hover:bg-neutral-700 transition-colors"
-                                >
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                        <rect x="3" y="3" width="7" height="7" />
-                                        <rect x="14" y="3" width="7" height="7" />
-                                        <rect x="3" y="14" width="7" height="7" />
-                                        <rect x="14" y="14" width="7" height="7" />
-                                    </svg>
-                                    Grid (3 cols)
-                                </button>
-                            </div>
-                        )}
-                    </div>
-
-                    {/* Ungroup Button */}
                     <button
-                        onClick={onUngroup}
-                        className="bg-neutral-900 border border-neutral-700 hover:bg-neutral-800 text-white text-sm px-4 py-2.5 rounded flex items-center gap-2 transition-colors"
+                        type="button"
+                        onClick={isGrouped ? onUngroup : onGroup}
+                        className="bg-white border border-neutral-300 hover:bg-neutral-50 text-neutral-900 text-sm px-4 py-2.5 rounded-lg flex items-center gap-2 transition-colors shadow-sm whitespace-nowrap"
                     >
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <rect x="3" y="3" width="7" height="7" />
-                            <rect x="14" y="3" width="7" height="7" />
-                            <rect x="14" y="14" width="7" height="7" />
-                            <rect x="3" y="14" width="7" height="7" />
-                            <line x1="3" y1="3" x2="21" y2="21" />
-                        </svg>
-                        Ungroup
+                        {isGrouped ? <Ungroup size={16} aria-hidden="true" /> : <Boxes size={16} aria-hidden="true" />}
+                        {isGrouped ? '取消打组' : '打组'}
                     </button>
-
-                    {/* Edit Storyboard Button (only for storyboards) */}
-                    {group.storyContext && (
-                        <button
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                if (onEditStoryboard) onEditStoryboard(group.id);
-                            }}
-                            className="bg-neutral-800 hover:bg-neutral-700 border border-neutral-600 text-white text-sm px-4 py-2.5 rounded flex items-center gap-2 transition-colors mr-2"
-                        >
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                            </svg>
-                            Edit Storyboard
-                        </button>
-                    )}
-
-                    {/* Create Video Button */}
                     <button
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            if (onCreateVideo) onCreateVideo();
-                        }}
-                        className="bg-purple-600 hover:bg-purple-500 text-white text-sm px-4 py-2.5 rounded flex items-center gap-2 transition-colors shadow-lg shadow-purple-600/20"
+                        type="button"
+                        onClick={() => void downloadSelectedImages()}
+                        disabled={downloadableImages.length === 0 || downloadStatus === 'downloading'}
+                        className="bg-white border border-neutral-300 hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-45 text-neutral-900 text-sm px-4 py-2.5 rounded-lg flex items-center gap-2 transition-colors shadow-sm whitespace-nowrap"
+                        aria-label={`下载框选中的 ${downloadableImages.length} 张图片`}
                     >
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M15 10l5 5-5 5" />
-                            <path d="M4 4v16" />
-                        </svg>
-                        Create Videos
+                        <Download size={16} aria-hidden="true" />
+                        {downloadStatus === 'downloading'
+                            ? '正在下载…'
+                            : downloadStatus === 'done'
+                                ? '下载完成'
+                                : `下载框选图片（${downloadableImages.length}）`}
                     </button>
                 </div>
             )}

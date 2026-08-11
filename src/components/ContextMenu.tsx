@@ -17,7 +17,7 @@ import {
   WandSparkles
 } from 'lucide-react';
 import { ContextMenuState, NodeType } from '../types';
-import { VELA_NODE_CATALOG, type VelaNodeKind } from '../vela/nodeCatalog';
+import { canConnectNodeKinds, VELA_NODE_CATALOG, type VelaNodeKind } from '../vela/nodeCatalog';
 
 interface ContextMenuProps {
   state: ContextMenuState;
@@ -190,6 +190,11 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
 
   // 2. Connector Drag Drop (Add Next)
   const isConnector = state.type === 'node-connector';
+  const visibleNodeDefinitions = isConnector && state.sourceNodeKind
+    ? VELA_NODE_CATALOG.filter((definition) => state.connectorSide === 'left'
+      ? canConnectNodeKinds(definition.kind, state.sourceNodeKind!)
+      : canConnectNodeKinds(state.sourceNodeKind!, definition.kind))
+    : VELA_NODE_CATALOG;
 
   // If it's the Global Menu (Right Click on Blank), we show the specific options
   if (state.type === 'global' && view === 'main') {
@@ -296,7 +301,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
       </div>
 
       <div className="px-2 pb-2 flex flex-col gap-0.5 max-h-[500px] overflow-y-auto">
-        {VELA_NODE_CATALOG.map((definition) => (
+        {visibleNodeDefinitions.map((definition) => (
           <MenuItem
             key={definition.kind}
             icon={getVelaNodeIcon(definition.kind)}
@@ -306,23 +311,27 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
             canvasTheme={canvasTheme}
           />
         ))}
-        <div className={`my-1.5 border-t mx-2 ${canvasTheme === 'dark' ? 'border-neutral-800' : 'border-neutral-100'}`} />
-        <div className={`px-2 pb-1 text-[11px] ${canvasTheme === 'dark' ? 'text-neutral-500' : 'text-neutral-400'}`}>添加资源</div>
-        <MenuItem
-          icon={<Upload size={16} />}
-          label="上传"
-          onClick={handleUploadClick}
-          canvasTheme={canvasTheme}
-        />
-        <MenuItem
-          icon={<Layers size={16} />}
-          label="从生成历史选择"
-          onClick={() => {
-            if (onAddAssets) onAddAssets();
-            onClose();
-          }}
-          canvasTheme={canvasTheme}
-        />
+        {!isConnector && (
+          <>
+            <div className={`my-1.5 border-t mx-2 ${canvasTheme === 'dark' ? 'border-neutral-800' : 'border-neutral-100'}`} />
+            <div className={`px-2 pb-1 text-[11px] ${canvasTheme === 'dark' ? 'text-neutral-500' : 'text-neutral-400'}`}>添加资源</div>
+            <MenuItem
+              icon={<Upload size={16} />}
+              label="上传"
+              onClick={handleUploadClick}
+              canvasTheme={canvasTheme}
+            />
+            <MenuItem
+              icon={<Layers size={16} />}
+              label="从生成历史选择"
+              onClick={() => {
+                if (onAddAssets) onAddAssets();
+                onClose();
+              }}
+              canvasTheme={canvasTheme}
+            />
+          </>
+        )}
       </div>
     </div>
   );
@@ -393,7 +402,7 @@ const getVelaNodeIcon = (kind: VelaNodeKind) => {
   if (kind === 'prompt') return <Type size={18} />;
   if (kind === 'image-input') return <Upload size={18} />;
   if (kind === 'gpt-prompt-optimizer') return <WandSparkles size={18} />;
-  if (kind === 'h3-video' || kind === 'video-result') return <Video size={18} />;
+  if (kind === 'gpt-video' || kind === 'h3-video' || kind === 'video-result') return <Video size={18} />;
   if (kind === 'image-result') return <Film size={18} />;
   return <ImageIcon size={18} />;
 };

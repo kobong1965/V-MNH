@@ -71,7 +71,7 @@ export const useGenerationRecovery = ({
 
     // Track loading node IDs for stable dependency
     const loadingNodeIds = nodes
-        .filter(n => n.status === NodeStatus.LOADING)
+        .filter(n => n.status === NodeStatus.LOADING && n.uploadSource !== 'canvas-drop')
         .map(n => n.id)
         .join(',');
 

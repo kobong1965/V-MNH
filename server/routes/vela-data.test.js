@@ -7,6 +7,7 @@ import test from 'node:test';
 import express from 'express';
 
 import velaDataRoutes from './vela-data.js';
+import { ProviderError } from '../providers/openAiCompatibleProvider.js';
 import { VelaRuntime } from '../vela/runtime.js';
 
 const createServer = async (runtimeOptions = {}) => {
@@ -50,6 +51,11 @@ test('project API saves, loads and exports a versioned project', async () => {
     assert.equal(created.response.status, 201);
     const loaded = await requestJson(`${fixture.baseUrl}/projects/${created.data.id}`);
     assert.equal(loaded.data.name, 'API 项目');
+    const renamed = await requestJson(`${fixture.baseUrl}/projects/${created.data.id}`, {
+      method: 'PATCH', body: JSON.stringify({ name: '已重命名项目' })
+    });
+    assert.equal(renamed.response.status, 200);
+    assert.equal(renamed.data.name, '已重命名项目');
     const exported = await requestJson(`${fixture.baseUrl}/projects/${created.data.id}/export`, {
       method: 'POST', body: JSON.stringify({ includeMedia: false })
     });
@@ -61,6 +67,89 @@ test('project API saves, loads and exports a versioned project', async () => {
     });
     assert.equal(packageResponse.headers.get('content-type'), 'application/vnd.vela.project');
     assert.ok((await packageResponse.arrayBuffer()).byteLength > 0);
+    const deleted = await fetch(`${fixture.baseUrl}/projects/${created.data.id}`, { method: 'DELETE' });
+    assert.equal(deleted.status, 204);
+    const missing = await fetch(`${fixture.baseUrl}/projects/${created.data.id}`);
+    assert.equal(missing.status, 404);
+  } finally {
+    await fixture.close();
+  }
+});
+
+test('workflow API saves a sanitized template and keeps it reusable across projects', async () => {
+  const fixture = await createServer();
+  try {
+    const created = await requestJson(`${fixture.baseUrl}/workflows`, {
+      method: 'POST',
+      body: JSON.stringify({
+        name: '商品图工作流',
+        nodes: [
+          { id: 'source', type: 'Image', kind: 'image-input', x: 0, y: 0, status: 'success', resultUrl: '/old-result.png' },
+          { id: 'target', type: 'Image', kind: 'gpt-image', x: 500, y: 0, status: 'error', parentIds: ['source'], prompt: '生成商品图' }
+        ],
+        groups: []
+      })
+    });
+    assert.equal(created.response.status, 201);
+    assert.equal(created.data.nodes[0].resultUrl, undefined);
+    assert.equal(created.data.nodes[0].status, 'idle');
+    const listed = await requestJson(`${fixture.baseUrl}/workflows`);
+    assert.equal(listed.data[0].nodeCount, 2);
+    const loaded = await requestJson(`${fixture.baseUrl}/workflows/${created.data.id}`);
+    assert.deepEqual(loaded.data.nodes[1].parentIds, ['source']);
+    const deleted = await fetch(`${fixture.baseUrl}/workflows/${created.data.id}`, { method: 'DELETE' });
+    assert.equal(deleted.status, 204);
+  } finally {
+    await fixture.close();
+  }
+});
+
+test('project media API persists canvas uploads inside the current project', async () => {
+  const fixture = await createServer();
+  try {
+    const project = await requestJson(`${fixture.baseUrl}/projects`, {
+      method: 'POST',
+      body: JSON.stringify({ name: '媒体项目', nodes: [], groups: [], viewport: { x: 0, y: 0, zoom: 1 } })
+    });
+    const raw = Buffer.from('tiny-project-image');
+    const uploaded = await requestJson(`${fixture.baseUrl}/projects/${project.data.id}/media`, {
+      method: 'POST',
+      body: JSON.stringify({
+        data: `data:image/png;base64,${raw.toString('base64')}`,
+        fileName: '桌面图片.png'
+      })
+    });
+    assert.equal(uploaded.response.status, 201);
+    assert.equal(uploaded.data.projectId, project.data.id);
+    assert.equal(uploaded.data.kind, 'image');
+    assert.match(uploaded.data.url, new RegExp(`^/api/vela/projects/${project.data.id}/media/.+/file$`));
+
+    const downloaded = await fetch(new URL(uploaded.data.url, fixture.baseUrl));
+    assert.equal(downloaded.status, 200);
+    assert.equal(downloaded.headers.get('content-type'), 'image/png');
+    assert.deepEqual(Buffer.from(await downloaded.arrayBuffer()), raw);
+
+    const listed = await requestJson(`${fixture.baseUrl}/projects/${project.data.id}/media`);
+    assert.equal(listed.data.length, 1);
+    assert.equal(listed.data[0].source.fileName, '桌面图片.png');
+  } finally {
+    await fixture.close();
+  }
+});
+
+test('project media API rejects unsupported data URLs as user input errors', async () => {
+  const fixture = await createServer();
+  try {
+    const project = await requestJson(`${fixture.baseUrl}/projects`, {
+      method: 'POST',
+      body: JSON.stringify({ name: '媒体校验', nodes: [], groups: [], viewport: { x: 0, y: 0, zoom: 1 } })
+    });
+    const uploaded = await requestJson(`${fixture.baseUrl}/projects/${project.data.id}/media`, {
+      method: 'POST',
+      body: JSON.stringify({ data: 'data:audio/mpeg;base64,AAAA', fileName: 'bad.mp3' })
+    });
+    assert.equal(uploaded.response.status, 400);
+    assert.match(uploaded.data.error, /不支持/);
   } finally {
     await fixture.close();
   }
@@ -132,6 +221,40 @@ test('profile API never returns the key and exposes a connection test result', a
     const tested = await requestJson(`${fixture.baseUrl}/profiles/${created.data.id}/test`, { method: 'POST' });
     assert.equal(tested.response.status, 200);
     assert.deepEqual(tested.data.models, ['prompt-model', 'image-model']);
+  } finally {
+    await fixture.close();
+  }
+});
+
+test('profile connection errors expose safe diagnostics and available models', async () => {
+  const fixture = await createServer({
+    gptProvider: {
+      testConnection: async () => {
+        throw new ProviderError('模型不存在：missing-image', {
+          code: 'MODEL_NOT_FOUND',
+          status: 404,
+          details: {
+            missingModels: ['missing-image'],
+            availableModels: ['text-model', 'working-image-model']
+          }
+        });
+      }
+    }
+  });
+  try {
+    const created = await requestJson(`${fixture.baseUrl}/profiles`, {
+      method: 'POST',
+      body: JSON.stringify({
+        type: 'gpt', name: 'Relay', baseUrl: 'https://relay.test/v1', apiKey: 'sk-route-secret',
+        models: { prompt: 'text-model', image: 'missing-image' }
+      })
+    });
+    const tested = await requestJson(`${fixture.baseUrl}/profiles/${created.data.id}/test`, { method: 'POST' });
+    assert.equal(tested.response.status, 422);
+    assert.equal(tested.data.code, 'MODEL_NOT_FOUND');
+    assert.deepEqual(tested.data.details.missingModels, ['missing-image']);
+    assert.deepEqual(tested.data.details.availableModels, ['text-model', 'working-image-model']);
+    assert.doesNotMatch(JSON.stringify(tested.data), /sk-route-secret/);
   } finally {
     await fixture.close();
   }

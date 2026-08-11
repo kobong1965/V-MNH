@@ -1,0 +1,37 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import test from 'node:test';
+
+import { WorkflowTemplateStore } from './workflowTemplateStore.js';
+
+test('workflow templates persist reusable structure and remove runtime results', () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'vela-workflows-'));
+  try {
+    const store = new WorkflowTemplateStore({ dataDirectory: directory });
+    const saved = store.save({
+      name: '商品图批量生成',
+      nodes: [{
+        id: 'source', type: 'Image', kind: 'image-input', x: 10, y: 20,
+        prompt: '', status: 'success', resultUrl: 'data:image/png;base64,secret',
+        lastFrame: '/generated/frame.png', generationProgress: 100
+      }, {
+        id: 'target', type: 'Image', kind: 'gpt-image', x: 500, y: 20,
+        prompt: '生成商品图', status: 'error', errorMessage: 'old error', parentIds: ['source'],
+        model: 'gpt-image-2', aspectRatio: '1:1', resolution: '2K'
+      }],
+      groups: []
+    });
+    assert.equal(saved.nodes[0].status, 'idle');
+    assert.equal(saved.nodes[0].resultUrl, undefined);
+    assert.equal(saved.nodes[1].errorMessage, undefined);
+    assert.deepEqual(saved.nodes[1].parentIds, ['source']);
+    assert.equal(store.list()[0].nodeCount, 2);
+    assert.equal(store.get(saved.id).name, '商品图批量生成');
+    assert.equal(store.delete(saved.id), true);
+    assert.equal(store.get(saved.id), null);
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});

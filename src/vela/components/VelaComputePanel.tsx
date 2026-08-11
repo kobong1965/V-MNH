@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
-import { CheckCircle2, Cloud, KeyRound, LoaderCircle, Plus, Trash2, X } from 'lucide-react';
+import { useEffect, useId, useRef, useState } from 'react';
+import { CheckCircle2, Cloud, KeyRound, LoaderCircle, Plus, Trash2, TriangleAlert, X } from 'lucide-react';
 
 import {
   createVelaProfile,
@@ -12,11 +12,12 @@ import {
 import { VelaComfySection } from './VelaComfySection';
 
 interface VelaComputePanelProps {
-  isOpen: boolean;
+  isOpen?: boolean;
+  embedded?: boolean;
   profiles: VelaProfile[];
   profilesError?: string | null;
   onProfilesChanged: () => void | Promise<unknown>;
-  onClose: () => void;
+  onClose?: () => void;
 }
 
 const INITIAL_FORM = {
@@ -28,13 +29,16 @@ const INITIAL_FORM = {
 };
 
 export function VelaComputePanel({
-  isOpen,
+  isOpen = false,
+  embedded = false,
   profiles,
   profilesError,
   onProfilesChanged,
   onClose
 }: VelaComputePanelProps) {
   const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const titleId = useId();
+  const gptSectionTitleId = useId();
   const [form, setForm] = useState(INITIAL_FORM);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -42,8 +46,8 @@ export function VelaComputePanel({
   const gptProfiles = profiles.filter((profile): profile is GptVelaProfile => profile.type === 'gpt');
   const comfyProfiles = profiles.filter((profile) => profile.type === 'comfy');
 
-  useEffect(() => { if (isOpen) closeButtonRef.current?.focus(); }, [isOpen]);
-  if (!isOpen) return null;
+  useEffect(() => { if (isOpen && !embedded) closeButtonRef.current?.focus(); }, [embedded, isOpen]);
+  if (!isOpen && !embedded) return null;
 
   const saveAccount = async () => {
     try {
@@ -95,25 +99,36 @@ export function VelaComputePanel({
   };
 
   return (
-    <aside className="vela-compute-panel vela-panel" role="dialog" aria-modal="false" aria-labelledby="compute-title">
+    <aside
+      className={`vela-compute-panel vela-panel${embedded ? ' vela-compute-panel--embedded' : ''}`}
+      role={embedded ? 'region' : 'dialog'}
+      {...(!embedded ? { 'aria-modal': false } : {})}
+      aria-labelledby={titleId}
+    >
       <div className="vela-panel-heading">
         <Cloud size={17} aria-hidden="true" />
-        <h2 id="compute-title">账户与算力连接</h2>
-        <button ref={closeButtonRef} className="vela-button vela-icon-button vela-panel-close" onClick={onClose} aria-label="关闭算力面板">
-          <X size={16} aria-hidden="true" />
-        </button>
+        <h2 id={titleId}>账户与算力连接</h2>
+        {!embedded && (
+          <button ref={closeButtonRef} className="vela-button vela-icon-button vela-panel-close" onClick={onClose} aria-label="关闭算力面板">
+            <X size={16} aria-hidden="true" />
+          </button>
+        )}
       </div>
 
       <div className="vela-compute-scroll">
-        <section className="vela-connection-section" aria-labelledby="gpt-section-title">
-          <div className="vela-section-title" id="gpt-section-title"><KeyRound size={15} aria-hidden="true" /> GPT 中转账户</div>
+        <section className="vela-connection-section" aria-labelledby={gptSectionTitleId}>
+          <div className="vela-section-title" id={gptSectionTitleId}><KeyRound size={15} aria-hidden="true" /> GPT 中转账户</div>
           {gptProfiles.map((profile) => {
             const options = modelOptions[profile.id] || [];
             return (
               <article className="vela-profile-card" key={profile.id}>
                 <div className="vela-profile-card__header">
                   <div><strong>{profile.name}</strong><span>{profile.baseUrl}</span></div>
-                  <span className="vela-secret-state"><CheckCircle2 size={13} aria-hidden="true" /> Key 已配置</span>
+                  <span className="vela-secret-state" data-status={profile.credentialStatus || (profile.secretConfigured ? 'ready' : 'missing')}>
+                    {profile.credentialStatus === 'unreadable'
+                      ? <><TriangleAlert size={13} aria-hidden="true" /> Key 需重新输入</>
+                      : <><CheckCircle2 size={13} aria-hidden="true" /> Key 已配置</>}
+                  </span>
                 </div>
                 <label className="vela-field-stack">
                   <span className="vela-field-label">提示词模型</span>

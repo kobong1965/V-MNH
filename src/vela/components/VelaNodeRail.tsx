@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import {
   AlignHorizontalSpaceAround,
   CircleHelp,
-  Cloud,
   FolderOpen,
   GitBranch,
   Images,
@@ -18,7 +17,6 @@ interface VelaNodeRailProps {
   onProjectsClick: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onAssetsClick: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onTasksClick: () => void;
-  onComputeClick: () => void;
   onArrangeClick: () => void;
 }
 
@@ -27,7 +25,6 @@ export function VelaNodeRail({
   onProjectsClick,
   onAssetsClick,
   onTasksClick,
-  onComputeClick,
   onArrangeClick
 }: VelaNodeRailProps) {
   const [showShortcuts, setShowShortcuts] = useState(false);
@@ -46,7 +43,6 @@ export function VelaNodeRail({
         <RailButton label="连线" icon={<GitBranch size={18} />} />
         <RailButton label="素材" icon={<Images size={18} />} onClick={onAssetsClick} />
         <RailButton label="整理画布" icon={<AlignHorizontalSpaceAround size={18} />} onClick={onArrangeClick} />
-        <RailButton label="算力" icon={<Cloud size={18} />} onClick={onComputeClick} />
         <RailButton label="任务" icon={<ListChecks size={18} />} onClick={onTasksClick} />
         <RailButton label="快捷键" icon={<Keyboard size={18} />} onClick={() => setShowShortcuts(true)} />
         <RailButton label="帮助" icon={<CircleHelp size={18} />} />

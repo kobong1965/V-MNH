@@ -6,8 +6,14 @@
 
 import React, { useCallback, useRef, useEffect } from 'react';
 import { NodeData, ContextMenuState } from '../types';
+import {
+    createNodeClipboardSnapshot,
+    instantiateNodeClipboard,
+    type NodeClipboardSnapshot
+} from '../utils/nodeClipboard';
 
 interface UseKeyboardShortcutsOptions {
+    enabled?: boolean;
     nodes: NodeData[];
     selectedNodeIds: string[];
     selectedConnection: { parentId: string; childId: string } | null;
@@ -23,6 +29,7 @@ interface UseKeyboardShortcutsOptions {
 }
 
 export const useKeyboardShortcuts = ({
+    enabled = true,
     nodes,
     selectedNodeIds,
     selectedConnection,
@@ -36,7 +43,8 @@ export const useKeyboardShortcuts = ({
     undo,
     redo
 }: UseKeyboardShortcutsOptions) => {
-    const clipboardRef = useRef<NodeData[]>([]);
+    const clipboardRef = useRef<NodeClipboardSnapshot>({ nodes: [] });
+    const pasteCountRef = useRef(0);
 
     // ============================================================================
     // COPY / PASTE / DUPLICATE
@@ -44,23 +52,16 @@ export const useKeyboardShortcuts = ({
 
     const handleCopy = useCallback(() => {
         if (selectedNodeIds.length > 0) {
-            const selectedNodes = nodes.filter(n => selectedNodeIds.includes(n.id));
-            clipboardRef.current = JSON.parse(JSON.stringify(selectedNodes));
-            console.log(`Copied ${selectedNodes.length} node(s)`);
+            clipboardRef.current = createNodeClipboardSnapshot(nodes, selectedNodeIds);
+            pasteCountRef.current = 0;
+            console.log(`Copied ${clipboardRef.current.nodes.length} node(s) with internal connections`);
         }
     }, [nodes, selectedNodeIds]);
 
     const handlePaste = useCallback(() => {
-        if (clipboardRef.current.length > 0) {
-            const pasteOffset = 50;
-            const newNodes: NodeData[] = clipboardRef.current.map(node => ({
-                ...node,
-                id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
-                x: node.x + pasteOffset,
-                y: node.y + pasteOffset,
-                parentIds: undefined,
-                groupId: undefined
-            }));
+        if (clipboardRef.current.nodes.length > 0) {
+            pasteCountRef.current += 1;
+            const newNodes = instantiateNodeClipboard(clipboardRef.current, 50 * pasteCountRef.current);
 
             setNodes(prev => [...prev, ...newNodes]);
             setSelectedNodeIds(newNodes.map(n => n.id));
@@ -70,18 +71,8 @@ export const useKeyboardShortcuts = ({
 
     const handleDuplicate = useCallback(() => {
         if (selectedNodeIds.length > 0) {
-            const selectedNodes = nodes.filter(n => selectedNodeIds.includes(n.id));
-            const nodesToDuplicate = JSON.parse(JSON.stringify(selectedNodes));
-
-            const offset = 20;
-            const newNodes: NodeData[] = nodesToDuplicate.map((node: NodeData) => ({
-                ...node,
-                id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
-                x: node.x + offset,
-                y: node.y + offset,
-                parentIds: undefined,
-                groupId: undefined
-            }));
+            const snapshot = createNodeClipboardSnapshot(nodes, selectedNodeIds);
+            const newNodes = instantiateNodeClipboard(snapshot, 20);
 
             setNodes(prev => [...prev, ...newNodes]);
             setSelectedNodeIds(newNodes.map(n => n.id));
@@ -93,33 +84,46 @@ export const useKeyboardShortcuts = ({
     // ============================================================================
 
     useEffect(() => {
+        if (!enabled) return;
         const handleKeyDown = (e: KeyboardEvent) => {
-            const activeTag = document.activeElement?.tagName.toLowerCase();
-            if (activeTag === 'input' || activeTag === 'textarea') return;
+            const target = e.target instanceof HTMLElement ? e.target : document.activeElement;
+            if (target instanceof HTMLElement && target.closest('input, textarea, select, [contenteditable="true"]')) return;
+
+            const accelerator = e.ctrlKey || e.metaKey;
+            const key = e.key.toLowerCase();
 
             // Undo: Ctrl+Z (without Shift)
-            if (e.ctrlKey && e.key === 'z' && !e.shiftKey) {
+            if (accelerator && key === 'z' && !e.shiftKey) {
                 e.preventDefault();
                 undo();
                 return;
             }
 
             // Redo: Ctrl+Y or Ctrl+Shift+Z
-            if ((e.ctrlKey && e.key === 'y') || (e.ctrlKey && e.shiftKey && e.key === 'z')) {
+            if ((accelerator && key === 'y') || (accelerator && e.shiftKey && key === 'z')) {
                 e.preventDefault();
                 redo();
                 return;
             }
 
             // Copy: Ctrl+C
-            if (e.ctrlKey && e.key === 'c') {
+            if (accelerator && key === 'c') {
+                e.preventDefault();
                 handleCopy();
                 return;
             }
 
             // Paste: Ctrl+V
-            if (e.ctrlKey && e.key === 'v') {
+            if (accelerator && key === 'v') {
+                e.preventDefault();
                 handlePaste();
+                return;
+            }
+
+            // Duplicate: Ctrl+D
+            if (accelerator && key === 'd') {
+                e.preventDefault();
+                handleDuplicate();
                 return;
             }
 
@@ -140,6 +144,7 @@ export const useKeyboardShortcuts = ({
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [
+        enabled,
         selectedNodeIds,
         selectedConnection,
         deleteNodes,
@@ -150,6 +155,7 @@ export const useKeyboardShortcuts = ({
         redo,
         handlePaste,
         handleCopy,
+        handleDuplicate,
         setNodes,
         setContextMenu
     ]);

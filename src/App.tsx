@@ -26,6 +26,7 @@ import { useImageEditor } from './hooks/useImageEditor';
 import { useVideoEditor } from './hooks/useVideoEditor';
 import { usePanelState } from './hooks/usePanelState';
 import { useAssetHandlers } from './hooks/useAssetHandlers';
+import { useCanvasFileUpload } from './hooks/useCanvasFileUpload';
 import { useTextNodeHandlers } from './hooks/useTextNodeHandlers';
 import { useImageNodeHandlers } from './hooks/useImageNodeHandlers';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
@@ -49,17 +50,29 @@ import { useTikTokImport } from './hooks/useTikTokImport';
 import { useStoryboardGenerator } from './hooks/useStoryboardGenerator';
 import { StoryboardGeneratorModal } from './components/modals/StoryboardGeneratorModal';
 import { StoryboardVideoModal } from './components/modals/StoryboardVideoModal';
-import { VelaComputePanel } from './vela/components/VelaComputePanel';
 import { VelaNodeRail } from './vela/components/VelaNodeRail';
+import { VelaAssetTray, type VelaGeneratedAsset } from './vela/components/VelaAssetTray';
 import { VelaTaskCenter } from './vela/components/VelaTaskCenter';
 import { VelaTopBar } from './vela/components/VelaTopBar';
+import { VelaWorkflowPanel } from './vela/components/VelaWorkflowPanel';
 import { VelaMiniMap } from './vela/components/VelaMiniMap';
 import { createVelaPerformanceFixture } from './vela/performanceFixture';
 import { VelaProjectPanel } from './vela/components/VelaProjectPanel';
+import { VelaHome } from './vela/components/VelaHome';
 import { useVelaJobs } from './vela/hooks/useVelaJobs';
 import { useVelaProfiles } from './vela/hooks/useVelaProfiles';
-import { createVelaJobGroup } from './vela/services/jobService';
+import { createVelaJobGroup, getVelaJobErrorMessage } from './vela/services/jobService';
+import { saveVelaProject, saveVelaProjectMedia } from './vela/services/projectService';
+import {
+  loadVelaPreferences,
+  resolveAppearance,
+  saveVelaPreferences,
+  type AppearanceMode,
+  type CanvasColorMode
+} from './vela/services/settingsService';
 import { isFakeProviderEnabled } from './services/generationService';
+import { composeGenerationPrompt } from './vela/generationOptions';
+import { instantiateWorkflowTemplate, type VelaWorkflowTemplate } from './vela/services/workflowTemplateService';
 
 // ============================================================================
 // MAIN COMPONENT
@@ -84,6 +97,15 @@ const urlToBase64 = async (url: string): Promise<string> => {
   }
 };
 
+const getProjectMediaPath = (url: string, projectId: string): string | null => {
+  try {
+    const pathname = new URL(url, window.location.origin).pathname;
+    return pathname.startsWith(`/api/vela/projects/${projectId}/media/`) ? pathname : null;
+  } catch {
+    return null;
+  }
+};
+
 const VELA_P1_UI = true;
 
 export default function App() {
@@ -92,6 +114,7 @@ export default function App() {
   // ============================================================================
 
   const [hasApiKey] = useState(true); // Backend handles API key
+  const [appView, setAppView] = useState<'home' | 'canvas' | 'api' | 'settings'>('home');
   const [contextMenu, setContextMenu] = useState<ContextMenuState>({
     isOpen: false,
     x: 0,
@@ -99,10 +122,34 @@ export default function App() {
     type: 'global'
   });
 
-  const [canvasTheme, setCanvasTheme] = useState<'dark' | 'light'>('light');
+  const [preferences, setPreferences] = useState(loadVelaPreferences);
+  const [systemPrefersDark, setSystemPrefersDark] = useState(() => window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false);
+  const canvasTheme = preferences.canvas;
+  const resolvedAppearance = resolveAppearance(preferences.appearance, systemPrefersDark);
+  const [isCanvasFileDragActive, setIsCanvasFileDragActive] = useState(false);
+  const canvasFileDragDepthRef = useRef(0);
+  const [canvasUploadFeedback, setCanvasUploadFeedback] = useState<string | null>(null);
   const [isTaskCenterOpen, setIsTaskCenterOpen] = useState(false);
-  const [isComputePanelOpen, setIsComputePanelOpen] = useState(false);
+  const [isAssetTrayOpen, setIsAssetTrayOpen] = useState(false);
+  const [isWorkflowTemplatePanelOpen, setIsWorkflowTemplatePanelOpen] = useState(false);
   const { profiles: velaProfiles, error: velaProfilesError, refresh: refreshVelaProfiles } = useVelaProfiles();
+
+  useEffect(() => {
+    const media = window.matchMedia?.('(prefers-color-scheme: dark)');
+    if (!media) return;
+    const update = () => setSystemPrefersDark(media.matches);
+    media.addEventListener('change', update);
+    return () => media.removeEventListener('change', update);
+  }, []);
+
+  useEffect(() => {
+    saveVelaPreferences(preferences);
+    document.documentElement.dataset.velaTheme = resolvedAppearance;
+    document.documentElement.style.colorScheme = resolvedAppearance;
+  }, [preferences, resolvedAppearance]);
+
+  const handleAppearanceChange = (appearance: AppearanceMode) => setPreferences((current) => ({ ...current, appearance }));
+  const handleCanvasThemeChange = (canvas: CanvasColorMode) => setPreferences((current) => ({ ...current, canvas }));
 
   // Panel state management (history, chat, asset library, expand)
   const {
@@ -200,9 +247,11 @@ export default function App() {
     connectionStart,
     tempConnectionEnd,
     hoveredNodeId: connectionHoveredNodeId,
+    connectionTargetState,
     selectedConnection,
     setSelectedConnection,
     handleConnectorPointerDown,
+    handleSelectionConnectorPointerDown,
     updateConnectionDrag,
     completeConnectionDrag,
     handleEdgeClick,
@@ -268,6 +317,7 @@ export default function App() {
     setNodes,
     setGroups,
     setSelectedNodeIds,
+    setViewport,
     setCanvasTitle,
     setEditingTitleValue,
     onPanelOpen: () => {
@@ -324,8 +374,10 @@ export default function App() {
   // Load workflow and update tracking
   const handleLoadWithTracking = async (id: string) => {
     ignoreNextChange.current = true;
-    await handleLoadWorkflow(id);
+    const loaded = await handleLoadWorkflow(id);
+    if (!loaded) throw new Error('无法打开该项目');
     setIsDirty(false);
+    setAppView('canvas');
   };
 
   const { handleGenerate } = useGeneration({
@@ -335,33 +387,117 @@ export default function App() {
 
   const handleVelaGenerate = React.useCallback(async (id: string) => {
     const node = nodes.find((candidate) => candidate.id === id);
-    if (!node?.kind || !['gpt-prompt-optimizer', 'gpt-image', 'h3-video'].includes(node.kind)) {
+    if (!node?.kind || !['gpt-prompt-optimizer', 'gpt-image', 'gpt-video', 'h3-video'].includes(node.kind)) {
       await handleGenerate(id);
       return;
     }
     try {
-      const projectId = workflowId || await handleSaveWorkflow() || 'local-draft';
+      const projectId = workflowId || await handleSaveWorkflow();
+      if (!projectId) throw new Error('无法保存当前项目，请保存后重试');
       const isGptNode = node.kind.startsWith('gpt-');
-      if (isGptNode && !node.profileId && !isFakeProviderEnabled()) {
-        throw new Error('请先添加 GPT 账户，并在节点属性中选择账户');
+      const fakeGptEnabled = node.kind !== 'gpt-video' && isFakeProviderEnabled();
+      if (isGptNode && !node.profileId && !fakeGptEnabled) {
+        throw new Error(node.kind === 'gpt-video' ? '请先在 API 页面添加视频账户，并在节点中选择账户' : '请先添加 GPT 账户，并在节点属性中选择账户');
       }
-      const useFake = !isGptNode || isFakeProviderEnabled();
-      updateNode(id, { status: NodeStatus.LOADING });
+      const useFake = !isGptNode || fakeGptEnabled;
+      updateNode(id, {
+        status: NodeStatus.LOADING,
+        generationProgress: 0,
+        errorMessage: undefined
+      });
+      const videoGenerationMode = node.kind === 'gpt-video'
+        ? node.videoGenerationMode || ((node.parentIds || []).length > 0 ? 'image-to-video' : 'text-to-video')
+        : undefined;
+      const referenceNodes = (videoGenerationMode === 'text-to-video' ? [] : node.parentIds || [])
+        .map((parentId) => nodes.find((candidate) => candidate.id === parentId))
+        .filter((parent): parent is NodeData => Boolean(parent?.resultUrl));
+      if (node.kind === 'gpt-video' && videoGenerationMode === 'image-to-video' && referenceNodes.length === 0) {
+        throw new Error('图生视频需要先连接至少一张可用的参考图片');
+      }
+      const referenceUrls = await Promise.all(referenceNodes.map(async (parent, index) => {
+        const sourceUrl = parent.resultUrl!;
+        const currentProjectPath = getProjectMediaPath(sourceUrl, projectId);
+        if (currentProjectPath) return currentProjectPath;
+        if (!isGptNode) return sourceUrl;
+
+        const data = await urlToBase64(sourceUrl);
+        if (!data.startsWith('data:image/')) {
+          throw new Error(`参考图“${parent.title || index + 1}”无法读取，请重新拖入画布`);
+        }
+        const media = await saveVelaProjectMedia(projectId, {
+          data,
+          fileName: parent.title || `参考图-${index + 1}.png`
+        });
+        updateNode(parent.id, { resultUrl: media.url, uploadSource: 'canvas-drop' });
+        return media.url;
+      }));
+      const generationPrompt = composeGenerationPrompt(node.prompt || '未填写描述', node.stylePreset, {
+        aspectRatio: node.aspectRatio,
+        resolution: node.resolution
+      });
+      const requestedPayload = {
+        prompt: generationPrompt,
+        nodeKind: node.kind,
+        referenceUrls,
+        aspectRatio: node.aspectRatio || '16:9',
+        resolution: node.resolution || 'Auto',
+        stylePreset: node.stylePreset,
+        imageBatchMode: node.imageBatchMode,
+        duration: node.kind === 'gpt-video' ? Math.max(4, Math.min(180, Math.round(node.videoDuration || 5))) : undefined,
+        videoGenerationMode
+      };
+
+      // A remote video task may briefly report an unrecognized state even though it is
+      // still running. Reuse its saved task id instead of creating another paid task.
+      const resumableVideoErrorCodes = new Set([
+        'BAD_RESPONSE',
+        'VIDEO_POLL_TIMEOUT',
+        'NETWORK_ERROR',
+        'TIMEOUT',
+        'RESULT_DOWNLOAD_FAILED',
+        'PROVIDER_UNAVAILABLE'
+      ]);
+      const resumableVideoJob = node.kind === 'gpt-video'
+        ? [...velaJobs]
+          .sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt))
+          .find((job) => {
+            if (
+              job.nodeId !== node.id
+              || job.profileId !== node.profileId
+              || job.status !== 'failed'
+              || !job.promptId
+              || !resumableVideoErrorCodes.has(job.error?.code || '')
+            ) return false;
+            const payload = job.payload as {
+              prompt?: unknown;
+              nodeKind?: unknown;
+              referenceUrls?: unknown;
+              aspectRatio?: unknown;
+              resolution?: unknown;
+              duration?: unknown;
+              videoGenerationMode?: unknown;
+            };
+            return payload.prompt === requestedPayload.prompt
+              && payload.nodeKind === requestedPayload.nodeKind
+              && payload.aspectRatio === requestedPayload.aspectRatio
+              && payload.resolution === requestedPayload.resolution
+              && payload.duration === requestedPayload.duration
+              && payload.videoGenerationMode === requestedPayload.videoGenerationMode
+              && JSON.stringify(payload.referenceUrls || []) === JSON.stringify(requestedPayload.referenceUrls);
+          })
+        : undefined;
+      if (resumableVideoJob) {
+        updateNode(id, { jobGroupId: resumableVideoJob.groupId });
+        await retryVelaJob(resumableVideoJob.id);
+        return;
+      }
       const created = await createVelaJobGroup({
         projectId,
         nodeId: node.id,
         profileId: useFake ? 'fake-local' : node.profileId!,
         providerType: useFake ? 'fake' : 'gpt',
-        payload: {
-          prompt: node.prompt || '未填写描述',
-          nodeKind: node.kind,
-          referenceUrls: (node.parentIds || [])
-            .map((parentId) => nodes.find((candidate) => candidate.id === parentId)?.resultUrl)
-            .filter((url): url is string => Boolean(url)),
-          aspectRatio: node.aspectRatio || '16:9',
-          resolution: node.resolution || 'Auto'
-        },
-        count: node.kind === 'gpt-prompt-optimizer' ? 1 : node.outputCount || 1,
+        payload: requestedPayload,
+        count: node.kind === 'gpt-prompt-optimizer' ? 1 : Math.max(1, Math.min(['gpt-video', 'h3-video'].includes(node.kind) ? 4 : 10, node.outputCount || 1)),
         seedMode: 'increment',
         seed: Date.now() % 2147483647
       });
@@ -371,36 +507,88 @@ export default function App() {
     } catch (error) {
       updateNode(id, {
         status: NodeStatus.ERROR,
+        generationProgress: undefined,
         errorMessage: error instanceof Error ? error.message : '任务创建失败'
       });
     }
-  }, [nodes, workflowId, handleSaveWorkflow, updateNode, refreshVelaJobs, handleGenerate]);
+  }, [nodes, workflowId, handleSaveWorkflow, updateNode, refreshVelaJobs, retryVelaJob, velaJobs, handleGenerate]);
 
   React.useEffect(() => {
-    const latestByNode = new Map<string, typeof velaJobs[number]>();
-    for (const job of velaJobs) {
-      const jobNode = nodes.find((candidate) => candidate.id === job.nodeId);
-      if (jobNode?.kind?.startsWith('gpt-') && jobNode.profileId && job.profileId !== jobNode.profileId) {
-        continue;
-      }
-      const current = latestByNode.get(job.nodeId);
-      if (!current || job.updatedAt > current.updatedAt) latestByNode.set(job.nodeId, job);
-    }
-    for (const [nodeId, job] of latestByNode) {
-      const node = nodes.find((candidate) => candidate.id === nodeId);
-      if (!node) continue;
-      const nextStatus = job.status === 'succeeded'
-        ? NodeStatus.SUCCESS
-        : job.status === 'failed' || job.status === 'cancelled'
-          ? NodeStatus.ERROR
-          : NodeStatus.LOADING;
-      const output = job.output as { media?: { url?: string }; text?: string } | null;
-      const resultUpdates: Partial<NodeData> = { status: nextStatus, errorMessage: job.error?.message };
-      if (job.status === 'succeeded' && output?.media?.url) resultUpdates.resultUrl = output.media.url;
-      if (job.status === 'succeeded' && output?.text && node.kind === 'gpt-prompt-optimizer') resultUpdates.prompt = output.text;
-      if (node.status !== nextStatus || resultUpdates.resultUrl || resultUpdates.prompt) updateNode(nodeId, resultUpdates);
-    }
-  }, [velaJobs]);
+    setNodes((currentNodes) => {
+      let changed = false;
+      const nextNodes = currentNodes.map((node) => {
+        const nodeJobs = velaJobs.filter((job) => (
+          job.nodeId === node.id
+          && (!node.kind?.startsWith('gpt-') || !node.profileId || job.profileId === node.profileId)
+        ));
+        if (nodeJobs.length === 0) return node;
+
+        const requestedGroupJobs = node.jobGroupId
+          ? nodeJobs.filter((job) => job.groupId === node.jobGroupId)
+          : [];
+        const latestJob = [...nodeJobs].sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))[0];
+        const groupJobs = requestedGroupJobs.length > 0
+          ? requestedGroupJobs
+          : nodeJobs.filter((job) => job.groupId === latestJob.groupId);
+        const orderedJobs = [...groupJobs].sort((left, right) => {
+          const leftIndex = Number(left.payload.batchIndex ?? 0);
+          const rightIndex = Number(right.payload.batchIndex ?? 0);
+          return leftIndex - rightIndex || left.createdAt.localeCompare(right.createdAt);
+        });
+        const job = [...groupJobs].sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))[0];
+        if (!job) return node;
+        const activeStatuses = new Set(['queued', 'submitting', 'running', 'reconnecting', 'downloading']);
+        const hasActiveJobs = groupJobs.some((candidate) => activeStatuses.has(candidate.status));
+        const succeededJobs = orderedJobs.filter((candidate) => candidate.status === 'succeeded');
+        const nextStatus = hasActiveJobs
+          ? NodeStatus.LOADING
+          : succeededJobs.length > 0
+            ? NodeStatus.SUCCESS
+            : NodeStatus.ERROR;
+        const output = job.output as { media?: { url?: string }; text?: string } | null;
+        const progressValues = groupJobs
+          .map((candidate) => candidate.progress)
+          .filter((value): value is number => typeof value === 'number');
+        const generationProgress = progressValues.length === 0
+          ? undefined
+          : Math.max(0, Math.min(100, Math.round((progressValues.reduce((sum, value) => sum + value, 0) / groupJobs.length) * 100)));
+        const errorMessage = job.status === 'failed'
+          ? getVelaJobErrorMessage(job.error)
+          : job.status === 'cancelled'
+            ? '任务已取消。'
+            : undefined;
+        const resultUrls = succeededJobs
+          .map((candidate) => (candidate.output as { media?: { url?: string } } | null)?.media?.url)
+          .filter((url): url is string => Boolean(url));
+        const uniqueResultUrls = [...new Set(resultUrls)];
+        const resultUrl = uniqueResultUrls[0] || node.resultUrl;
+        const prompt = job.status === 'succeeded' && output?.text && node.kind === 'gpt-prompt-optimizer'
+          ? output.text
+          : node.prompt;
+
+        if (
+          node.status === nextStatus
+          && node.generationProgress === generationProgress
+          && node.errorMessage === errorMessage
+          && node.resultUrl === resultUrl
+          && JSON.stringify(node.resultUrls || []) === JSON.stringify(uniqueResultUrls)
+          && node.prompt === prompt
+        ) return node;
+
+        changed = true;
+        return {
+          ...node,
+          status: nextStatus,
+          generationProgress,
+          errorMessage,
+          resultUrl,
+          resultUrls: uniqueResultUrls,
+          prompt
+        };
+      });
+      return changed ? nextNodes : currentNodes;
+    });
+  }, [velaJobs, setNodes]);
 
   // Keep a ref to handleGenerate so setTimeout callbacks can access the latest version
   const handleGenerateRef = React.useRef(handleGenerate);
@@ -408,15 +596,50 @@ export default function App() {
     handleGenerateRef.current = handleGenerate;
   }, [handleGenerate]);
 
-  // Create new canvas
-  const handleNewCanvas = () => {
+  // Create a persisted project first, then enter its independent blank canvas.
+  const handleNewCanvas = async () => {
+    if (isDirty && workflowId) await handleSaveWithTracking();
+    const project = await saveVelaProject({
+      name: '未命名项目',
+      nodes: [],
+      groups: [],
+      viewport: { x: 0, y: 0, zoom: 1 }
+    });
+    await handleLoadWithTracking(project.id);
+  };
+
+  const handleReturnHome = async () => {
+    if (isDirty && workflowId) await handleSaveWithTracking();
+    closeWorkflowPanel();
+    closeHistoryPanel();
+    closeAssetLibrary();
+    setIsTaskCenterOpen(false);
+    setIsAssetTrayOpen(false);
+    setIsWorkflowTemplatePanelOpen(false);
+    setAppView('home');
+  };
+
+  const handleUseWorkflowTemplate = React.useCallback((template: VelaWorkflowTemplate) => {
+    const instance = instantiateWorkflowTemplate(template, viewport, {
+      width: window.innerWidth,
+      height: window.innerHeight
+    });
+    setNodes((current) => [...current, ...instance.nodes]);
+    setGroups((current) => [...current, ...instance.groups]);
+    setSelectedNodeIds(instance.nodes.map((node) => node.id));
+    setIsDirty(true);
+  }, [viewport, setNodes, setGroups, setSelectedNodeIds]);
+
+  const handleProjectDeleted = (projectId: string) => {
+    if (workflowId !== projectId) return;
     ignoreNextChange.current = true;
     setNodes([]);
-    setGroups([]); // Reset groups for new canvas
+    setGroups([]);
     setSelectedNodeIds([]);
-    setCanvasTitle('未命名工作区');
-    setEditingTitleValue('未命名工作区');
-    resetWorkflowId(); // Important: ensures new workflow gets a new ID
+    setViewport({ x: 0, y: 0, zoom: 1 });
+    setCanvasTitle('未命名项目');
+    setEditingTitleValue('未命名项目');
+    resetWorkflowId();
     setIsDirty(false);
   };
 
@@ -474,12 +697,21 @@ export default function App() {
     handleContextUpload
   } = useAssetHandlers({ nodes, viewport, contextMenu, setNodes });
 
+  const { uploadFilesAt, retryCanvasUpload } = useCanvasFileUpload({
+    projectId: workflowId,
+    viewport,
+    setNodes,
+    setSelectedNodeIds,
+    onFeedback: setCanvasUploadFeedback
+  });
+
   // Keyboard shortcuts (copy/paste/delete/undo/redo)
   const {
     handleCopy,
     handlePaste,
     handleDuplicate
   } = useKeyboardShortcuts({
+    enabled: appView === 'canvas',
     nodes,
     selectedNodeIds,
     selectedConnection,
@@ -845,6 +1077,7 @@ export default function App() {
       };
 
       setNodes(prev => [...prev, newNode]);
+      setSelectedNodeIds([newNode.id]);
       closeHistoryPanel();
       closeAssetLibrary();
     };
@@ -933,20 +1166,30 @@ export default function App() {
     pushHistory({ nodes, groups });
   }, [nodes, groups, isDragging]);
 
-  // Apply history state when undo/redo is triggered
-  // IMPORTANT: Don't revert nodes if any node is in LOADING status (generation in progress)
+  // Apply the complete canvas snapshot when undo/redo is triggered.
   useEffect(() => {
-    // Skip if any node is currently generating - don't interrupt the loading state
-    const hasLoadingNode = nodes.some(n => n.status === NodeStatus.LOADING);
-    if (hasLoadingNode) {
-      return;
-    }
+    if (historyState.nodes !== nodes || historyState.groups !== groups) {
+      // Never remove or roll back a node that currently represents a paid/running
+      // generation task. Other canvas edits can still be undone while it runs.
+      const activeNodes = new Map(
+        nodes
+          .filter((node) => node.status === NodeStatus.LOADING)
+          .map((node) => [node.id, node])
+      );
+      const restoredNodes = historyState.nodes.map((node) => activeNodes.get(node.id) || node);
+      activeNodes.forEach((node, id) => {
+        if (!restoredNodes.some((candidate) => candidate.id === id)) restoredNodes.push(node);
+      });
 
-    if (historyState.nodes !== nodes) {
       isApplyingHistory.current = true;
-      setNodes(historyState.nodes);
+      setNodes(restoredNodes);
+      setGroups(historyState.groups);
+      setSelectedNodeIds((current) => current.filter((id) => restoredNodes.some((node) => node.id === id)));
+      setSelectedConnection(null);
     }
-  }, [historyState]);
+    // The live node/group state is intentionally read only when the history cursor moves.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [historyState, setGroups, setNodes, setSelectedNodeIds, setSelectedConnection]);
 
   useEffect(() => {
     if (!import.meta.env.DEV) return;
@@ -978,16 +1221,60 @@ export default function App() {
         closeHistoryPanel();
         closeAssetLibrary();
       }
-      // Middle-click (button 1) or other: Start panning
-      else {
-        startPanning(e);
-        setSelectedConnection(null);
-        setContextMenu(prev => ({ ...prev, isOpen: false }));
-      }
     }
   };
 
+  const handleCanvasPointerDownCapture = (e: React.PointerEvent) => {
+    // The wheel button (button 1) is reserved exclusively for canvas panning.
+    // Capture it before nodes, media, controls, groups, or connectors can start a drag.
+    if (e.button !== 1) return;
+    e.preventDefault();
+    e.stopPropagation();
+    endNodeDrag();
+    startPanning(e);
+    setSelectedConnection(null);
+    setContextMenu(prev => ({ ...prev, isOpen: false }));
+  };
+
+  const isFileDrag = (e: React.DragEvent) => Array.from(e.dataTransfer.types)
+    .some((type) => type.toLowerCase() === 'files');
+
+  const handleCanvasDragEnter = (e: React.DragEvent) => {
+    if (!isFileDrag(e)) return;
+    e.preventDefault();
+    canvasFileDragDepthRef.current += 1;
+    if (canvasFileDragDepthRef.current === 1) setIsCanvasFileDragActive(true);
+  };
+
+  const handleCanvasDragOver = (e: React.DragEvent) => {
+    if (!isFileDrag(e)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+  };
+
+  const handleCanvasDragLeave = (e: React.DragEvent) => {
+    if (!isFileDrag(e)) return;
+    canvasFileDragDepthRef.current = Math.max(0, canvasFileDragDepthRef.current - 1);
+    if (canvasFileDragDepthRef.current === 0) setIsCanvasFileDragActive(false);
+  };
+
+  const handleCanvasDrop = (e: React.DragEvent) => {
+    if (!isFileDrag(e)) return;
+    e.preventDefault();
+    canvasFileDragDepthRef.current = 0;
+    setIsCanvasFileDragActive(false);
+    setCanvasUploadFeedback(null);
+    const rect = e.currentTarget.getBoundingClientRect();
+    uploadFilesAt(Array.from(e.dataTransfer.files), {
+      x: e.clientX - rect.left,
+      y: e.clientY - rect.top
+    });
+  };
+
   const handleGlobalPointerMove = (e: React.PointerEvent) => {
+    // Middle-button canvas panning always wins over every material interaction.
+    if (updatePanning(e, setViewport)) return;
+
     // 1. Handle Selection Box Update
     if (updateSelection(e)) return;
 
@@ -997,10 +1284,6 @@ export default function App() {
     // 3. Handle Connection Dragging
     if (updateConnectionDrag(e, nodes, viewport)) return;
 
-    // 4. Handle Canvas Panning (disabled when selection box is active)
-    if (!isSelecting) {
-      updatePanning(e, setViewport);
-    }
   };
 
   /**
@@ -1019,6 +1302,12 @@ export default function App() {
   }, [nodes, updateNode]);
 
   const handleGlobalPointerUp = (e: React.PointerEvent) => {
+    // A middle-button pan must not complete a selection, connection, or node drag.
+    if (endPanning()) {
+      releasePointerCapture(e);
+      return;
+    }
+
     // 1. Handle Selection Box End
     if (isSelecting) {
       const selectedIds = endSelection(nodes, viewport);
@@ -1028,18 +1317,15 @@ export default function App() {
     }
 
     // 2. Handle Connection Drop
-    if (completeConnectionDrag(handleAddNext, setNodes, nodes, handleConnectionMade)) {
+    if (completeConnectionDrag(handleAddNext, setNodes, nodes, handleConnectionMade, { x: e.clientX, y: e.clientY })) {
       releasePointerCapture(e);
       return;
     }
 
-    // 3. Stop Panning
-    endPanning();
-
-    // 4. Stop Node Dragging
+    // 3. Stop Node Dragging
     endNodeDrag();
 
-    // 5. Release capture
+    // 4. Release capture
     releasePointerCapture(e);
   };
 
@@ -1049,16 +1335,81 @@ export default function App() {
 
 
   const activeTaskCount = velaJobs.filter(job => ['submitting', 'running', 'reconnecting', 'downloading'].includes(job.status)).length;
+  const generatedAssets = React.useMemo<VelaGeneratedAsset[]>(() => {
+    const seen = new Set<string>();
+    const assets: VelaGeneratedAsset[] = [];
+    const addAsset = (asset: VelaGeneratedAsset) => {
+      if (seen.has(asset.url)) return;
+      seen.add(asset.url);
+      assets.push(asset);
+    };
+
+    [...velaJobs]
+      .filter((job) => job.status === 'succeeded' && (!workflowId || job.projectId === workflowId))
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+      .forEach((job) => {
+        const output = job.output as { media?: { url?: string; type?: string } } | null;
+        if (!output?.media?.url) return;
+        const node = nodes.find((candidate) => candidate.id === job.nodeId);
+        const isVideo = output.media.type?.startsWith('video')
+          || node?.type === NodeType.VIDEO
+          || node?.kind === 'gpt-video'
+          || node?.kind === 'h3-video'
+          || node?.kind === 'video-result';
+        addAsset({
+          id: job.id,
+          type: isVideo ? 'video' : 'image',
+          url: output.media.url,
+          title: node?.title || (isVideo ? '生成视频' : '生成图片'),
+          prompt: node?.prompt,
+          model: node?.videoModel || node?.imageModel || node?.model
+        });
+      });
+
+    nodes.forEach((node) => {
+      if (node.status !== NodeStatus.SUCCESS || !node.resultUrl) return;
+      if (!node.kind || !['gpt-image', 'gpt-video', 'h3-video', 'image-result', 'video-result'].includes(node.kind)) return;
+      addAsset({
+        id: node.id,
+        type: node.type === NodeType.VIDEO || node.kind === 'gpt-video' || node.kind === 'h3-video' || node.kind === 'video-result' ? 'video' : 'image',
+        url: node.resultUrl,
+        title: node.title || (node.type === NodeType.VIDEO ? '生成视频' : '生成图片'),
+        prompt: node.prompt,
+        model: node.videoModel || node.imageModel || node.model
+      });
+    });
+    return assets;
+  }, [nodes, velaJobs, workflowId]);
+
+  if (appView !== 'canvas') {
+    return (
+      <VelaHome
+        page={appView}
+        theme={resolvedAppearance}
+        currentProjectId={workflowId || undefined}
+        onCreate={handleNewCanvas}
+        onOpen={handleLoadWithTracking}
+        onProjectDeleted={handleProjectDeleted}
+        onNavigate={setAppView}
+        profiles={velaProfiles}
+        profilesError={velaProfilesError}
+        onProfilesChanged={refreshVelaProfiles}
+        appearance={preferences.appearance}
+        canvas={preferences.canvas}
+        onAppearanceChange={handleAppearanceChange}
+        onCanvasChange={handleCanvasThemeChange}
+      />
+    );
+  }
 
   return (
-    <div className={`vela-app w-screen h-screen ${canvasTheme === 'dark' ? 'text-white' : 'text-neutral-900'} overflow-hidden select-none font-sans`}>
+    <div data-theme={canvasTheme} className={`vela-app w-screen h-screen ${canvasTheme === 'dark' ? 'text-white' : 'text-neutral-900'} overflow-hidden select-none font-sans`}>
       {!storyboardGenerator.isModalOpen && !isTikTokModalOpen && (
         <VelaNodeRail
           onAddClick={handleToolbarAdd}
           onProjectsClick={handleWorkflowsClick}
           onAssetsClick={handleAssetsClick}
           onTasksClick={() => setIsTaskCenterOpen(current => !current)}
-          onComputeClick={() => setIsComputePanelOpen(true)}
           onArrangeClick={handleAutoArrange}
         />
       )}
@@ -1154,27 +1505,76 @@ export default function App() {
           setEditingTitleValue={setEditingTitleValue}
           onSave={handleSaveWithTracking}
           onNew={handleNewCanvas}
+          onHome={handleReturnHome}
           hasUnsavedChanges={hasUnsavedChanges}
           lastAutoSaveTime={lastAutoSaveTime}
           activeTaskCount={activeTaskCount}
-          onlineComputeCount={velaProfiles.length}
+          assetCount={generatedAssets.length}
           onOpenTasks={() => setIsTaskCenterOpen(current => !current)}
-          onOpenCompute={() => setIsComputePanelOpen(true)}
+          onOpenAssets={() => {
+            setIsAssetTrayOpen((current) => !current);
+            setIsTaskCenterOpen(false);
+            setIsWorkflowTemplatePanelOpen(false);
+            closeWorkflowPanel();
+          }}
+          onOpenWorkflows={() => {
+            setIsWorkflowTemplatePanelOpen((current) => !current);
+            closeWorkflowPanel();
+            setIsTaskCenterOpen(false);
+            setIsAssetTrayOpen(false);
+          }}
+          isWorkflowPanelOpen={isWorkflowTemplatePanelOpen}
+          isAssetTrayOpen={isAssetTrayOpen}
         />
       )}
+
+      <VelaWorkflowPanel
+        isOpen={isWorkflowTemplatePanelOpen}
+        nodes={nodes}
+        groups={groups}
+        onClose={() => setIsWorkflowTemplatePanelOpen(false)}
+        onUse={handleUseWorkflowTemplate}
+      />
+      <VelaAssetTray
+        isOpen={isAssetTrayOpen}
+        assets={generatedAssets}
+        onClose={() => setIsAssetTrayOpen(false)}
+        onInsert={(asset) => {
+          handleSelectAsset(asset.type === 'video' ? 'videos' : 'images', asset.url, asset.prompt || '素材盘素材', asset.model);
+          setIsAssetTrayOpen(false);
+        }}
+      />
 
       {/* Canvas */}
       <div
         ref={canvasRef}
         id="canvas-background"
         className="absolute inset-0 cursor-grab active:cursor-grabbing"
+        onPointerDownCapture={handleCanvasPointerDownCapture}
         onPointerDown={handlePointerDown}
         onPointerMove={handleGlobalPointerMove}
+        onPointerUpCapture={handleGlobalPointerUp}
         onPointerUp={handleGlobalPointerUp}
         onWheel={handleWheel}
         onDoubleClick={handleDoubleClick}
         onContextMenu={handleGlobalContextMenu}
+        onDragEnter={handleCanvasDragEnter}
+        onDragOver={handleCanvasDragOver}
+        onDragLeave={handleCanvasDragLeave}
+        onDrop={handleCanvasDrop}
       >
+        {isCanvasFileDragActive && (
+          <div className="vela-canvas-drop-zone" role="status" aria-live="polite">
+            <strong>松开以上传到画布</strong>
+            <span>支持图片和视频；将在当前鼠标位置创建素材节点</span>
+          </div>
+        )}
+        {canvasUploadFeedback && (
+          <div className="vela-canvas-feedback" role="status">
+            <span>{canvasUploadFeedback}</span>
+            <button type="button" onClick={() => setCanvasUploadFeedback(null)} aria-label="关闭提示">关闭</button>
+          </div>
+        )}
         {nodes.length === 0 && (
           <div className="vela-canvas-empty" role="status">
             <span className="vela-empty-kicker">VELA AI CANVAS</span>
@@ -1268,18 +1668,27 @@ export default function App() {
                       setSelectedNodeIds(prev => [...prev, node.id]);
                       handleNodePointerDown(e, node.id, undefined);
                     }
+                  } else if (selectedNodeIds.length > 1 && selectedNodeIds.includes(node.id)) {
+                    // Dragging any member of an existing multi-selection moves the
+                    // entire selection and keeps the batch connector/group action visible.
+                    handleNodePointerDown(e, node.id, undefined);
                   } else {
-                    // No shift: always select just this node (to show its controls)
+                    // No shift outside an existing multi-selection: select this node.
                     setSelectedNodeIds([node.id]);
                     handleNodePointerDown(e, node.id, undefined);
                   }
                 }}
-                onContextMenu={handleNodeContextMenu}
+                onContextMenu={(event, id) => {
+                  if (!selectedNodeIds.includes(id)) setSelectedNodeIds([id]);
+                  handleNodeContextMenu(event, id);
+                }}
                 onSelect={(id) => setSelectedNodeIds([id])}
                 onConnectorDown={handleConnectorPointerDown}
                 isHoveredForConnection={connectionHoveredNodeId === node.id}
+                connectionTargetState={connectionHoveredNodeId === node.id ? connectionTargetState : null}
                 onOpenEditor={handleOpenEditor}
                 onUpload={handleUpload}
+                onRetryUpload={retryCanvasUpload}
                 onExpand={handleExpandImage}
                 onDragStart={handleNodeDragStart}
                 onDragEnd={handleNodeDragEnd}
@@ -1319,12 +1728,7 @@ export default function App() {
                   handleNodePointerDown(e, selectedNodeIds[0], undefined);
                 }
               }}
-              onRenameGroup={renameGroup}
-              onSortNodes={(direction) => {
-                const group = getCommonGroup(selectedNodeIds);
-                if (group) sortGroupNodes(group.id, direction, nodes, setNodes);
-              }}
-              onEditStoryboard={handleEditStoryboard}
+              onBatchConnectorPointerDown={handleSelectionConnectorPointerDown}
             />
           )}
 
@@ -1357,14 +1761,8 @@ export default function App() {
                     handleNodePointerDown(e, nodeIds[0], undefined);
                   }
                 }}
-                onRenameGroup={renameGroup}
-                onSortNodes={(direction) => sortGroupNodes(group.id, direction, nodes, setNodes)}
-                onCreateVideo={() => {
-                  // Pass group nodes directly to avoid selection state race conditions
-                  const groupNodeIds = nodes.filter(n => n.groupId === group.id).map(n => n.id);
-                  handleCreateStoryboardVideo(groupNodeIds);
-                }}
-                onEditStoryboard={handleEditStoryboard}
+                showToolbar={false}
+                onBatchConnectorPointerDown={handleSelectionConnectorPointerDown}
               />
             );
           })}
@@ -1391,19 +1789,12 @@ export default function App() {
       <VelaTaskCenter
         isOpen={isTaskCenterOpen}
         jobs={velaJobs}
+        profiles={velaProfiles}
         error={velaJobsError}
         onToggle={() => setIsTaskCenterOpen(current => !current)}
         onRetry={retryVelaJob}
         onCancel={cancelVelaJob}
       />
-      <VelaComputePanel
-        isOpen={isComputePanelOpen}
-        profiles={velaProfiles}
-        profilesError={velaProfilesError}
-        onProfilesChanged={refreshVelaProfiles}
-        onClose={() => setIsComputePanelOpen(false)}
-      />
-
       {/* Context Menu */}
       <ContextMenu
         state={contextMenu}

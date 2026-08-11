@@ -10,7 +10,8 @@ import {
   validateProjectDocument
 } from '../../shared/vela-contracts.js';
 
-const MEDIA_FOLDERS = ['assets', 'outputs/images', 'outputs/videos'];
+const MEDIA_FOLDERS = ['assets', 'inputs/images', 'inputs/videos', 'outputs/images', 'outputs/videos'];
+const MEDIA_INDEX_FILE = 'media-index.json';
 
 const ensureDirectory = (directory) => fs.mkdirSync(directory, { recursive: true });
 const sha256 = (buffer) => crypto.createHash('sha256').update(buffer).digest('hex');
@@ -29,10 +30,33 @@ const assertSafeRelativePath = (relativePath) => {
     throw new Error('Invalid archive path');
   }
   const normalized = relativePath.replaceAll('\\', '/');
-  if (normalized.split('/').includes('..') || !MEDIA_FOLDERS.some((folder) => normalized === folder || normalized.startsWith(`${folder}/`))) {
+  if (
+    normalized.split('/').includes('..')
+    || (normalized !== MEDIA_INDEX_FILE && !MEDIA_FOLDERS.some((folder) => normalized === folder || normalized.startsWith(`${folder}/`)))
+  ) {
     throw new Error('Archive path escapes the project media folders');
   }
   return normalized;
+};
+
+const rewriteProjectMediaReferences = (value, sourceProjectId, targetProjectId) => {
+  if (typeof value === 'string') {
+    if (value === sourceProjectId) return targetProjectId;
+    return value.replaceAll(
+      `/api/vela/projects/${sourceProjectId}/`,
+      `/api/vela/projects/${targetProjectId}/`
+    );
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => rewriteProjectMediaReferences(item, sourceProjectId, targetProjectId));
+  }
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value).map(([key, item]) => [
+      key,
+      rewriteProjectMediaReferences(item, sourceProjectId, targetProjectId)
+    ]));
+  }
+  return value;
 };
 
 export const atomicWriteFile = (targetPath, data, hooks = {}) => {
@@ -73,6 +97,17 @@ const collectFiles = (directory, rootDirectory, results = []) => {
     });
   }
   return results;
+};
+
+const getProjectThumbnail = (project) => {
+  for (const node of [...project.nodes].reverse()) {
+    for (const candidate of [node.resultUrl, node.lastFrame]) {
+      if (typeof candidate !== 'string' || !candidate.trim()) continue;
+      if (candidate.startsWith('data:') || candidate.startsWith('blob:')) continue;
+      return candidate;
+    }
+  }
+  return undefined;
 };
 
 export class ProjectStore {
@@ -207,7 +242,8 @@ export class ProjectStore {
           name: project.name,
           createdAt: project.createdAt,
           updatedAt: project.updatedAt,
-          nodeCount: project.nodes.length
+          nodeCount: project.nodes.length,
+          thumbnailUrl: getProjectThumbnail(project)
         });
       } catch {
         // A broken project without a valid snapshot is excluded from the list.
@@ -216,12 +252,37 @@ export class ProjectStore {
     return projects.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   }
 
+  renameProject(projectId, name) {
+    const project = this.getProject(projectId);
+    if (!project) return null;
+    const nextName = String(name || '').trim();
+    if (!nextName) throw new Error('项目名称不能为空');
+    return this.saveProject({ ...project, name: nextName });
+  }
+
+  deleteProject(projectId) {
+    const directory = this.findProjectDirectory(projectId);
+    if (!directory) return false;
+    const relativeDirectory = path.relative(this.projectsDirectory, directory);
+    if (!relativeDirectory || relativeDirectory.startsWith('..') || path.isAbsolute(relativeDirectory)) {
+      throw new Error('Project path escapes the projects directory');
+    }
+    fs.rmSync(directory, { recursive: true, force: false });
+    return true;
+  }
+
   exportProject(projectId, { includeMedia = false } = {}) {
     const project = this.getProject(projectId);
     const directory = this.findProjectDirectory(projectId);
     if (!project || !directory) return null;
     const media = includeMedia
-      ? MEDIA_FOLDERS.flatMap((folder) => collectFiles(path.join(directory, folder), directory))
+      ? [
+        ...MEDIA_FOLDERS.flatMap((folder) => collectFiles(path.join(directory, folder), directory)),
+        ...(fs.existsSync(path.join(directory, MEDIA_INDEX_FILE)) ? [{
+          fullPath: path.join(directory, MEDIA_INDEX_FILE),
+          relativePath: MEDIA_INDEX_FILE
+        }] : [])
+      ]
         .map(({ fullPath, relativePath }) => {
           const data = fs.readFileSync(fullPath);
           return { relativePath, sha256: sha256(data), dataBase64: data.toString('base64') };
@@ -244,15 +305,34 @@ export class ProjectStore {
       throw new Error('Unsupported Vela export');
     }
     const source = validateProjectDocument(archive.project);
-    const project = this.saveProject({ ...source, id: undefined, name: name || `${source.name}（导入）` });
-    const directory = this.findProjectDirectory(project.id);
+    const importedName = name || `${source.name}（导入）`;
+    const placeholder = this.saveProject({
+      ...source,
+      id: undefined,
+      name: importedName,
+      nodes: [],
+      groups: []
+    });
+    const directory = this.findProjectDirectory(placeholder.id);
     for (const item of archive.media || []) {
       const relativePath = assertSafeRelativePath(item.relativePath);
       const data = Buffer.from(item.dataBase64, 'base64');
       if (sha256(data) !== item.sha256) throw new Error(`Media hash mismatch: ${relativePath}`);
-      atomicWriteFile(path.join(directory, ...relativePath.split('/')), data);
+      const targetPath = path.join(directory, ...relativePath.split('/'));
+      if (relativePath === MEDIA_INDEX_FILE) {
+        const mediaIndex = JSON.parse(data.toString('utf8'));
+        atomicWriteJson(targetPath, rewriteProjectMediaReferences(mediaIndex, source.id, placeholder.id));
+      } else {
+        atomicWriteFile(targetPath, data);
+      }
     }
-    return project;
+    const imported = rewriteProjectMediaReferences(source, source.id, placeholder.id);
+    return this.saveProject({
+      ...imported,
+      id: placeholder.id,
+      name: importedName,
+      createdAt: placeholder.createdAt
+    });
   }
 
   exportProjectPackage(projectId, options) {

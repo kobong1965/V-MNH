@@ -19,10 +19,25 @@
   --vela-space-3: 12px;
   --vela-space-4: 16px;
   --vela-space-5: 20px;
+  --vela-font-body: 15px;
+  --vela-font-control: 14px;
+  --vela-font-helper: 13px;
+  --vela-font-caption: 12px;
+  --vela-font-section-title: 17px;
+  --vela-font-dialog-title: 20px;
+  --vela-line-body: 1.5;
+  --vela-line-compact: 1.4;
+  --vela-control-height: 40px;
   --vela-topbar-height: 56px;
   --vela-rail-width: 64px;
   --vela-inspector-width: 288px;
   font-family: "Noto Sans SC", "Microsoft YaHei UI", system-ui, sans-serif;
+}
+
+html {
+  font-size: 16px;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
 }
 
 
@@ -35,11 +50,101 @@
   background: var(--vela-carbon);
   color: var(--vela-mist);
   font-family: "Noto Sans SC", "Microsoft YaHei UI", system-ui, sans-serif;
+  font-size: var(--vela-font-body);
+  line-height: var(--vela-line-body);
+}
+
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+}
+
+/* Tailwind utility text is used by legacy dialogs and context menus. Keep the
+   same hierarchy as the Vela design tokens instead of allowing 12px controls. */
+.text-xs {
+  font-size: var(--vela-font-helper) !important;
+  line-height: 1.45 !important;
+}
+
+.text-sm {
+  font-size: var(--vela-font-control) !important;
+  line-height: var(--vela-line-body) !important;
+}
+
+.text-base {
+  font-size: 16px !important;
+  line-height: 1.55 !important;
+}
+
+.vela-body table {
+  font-size: var(--vela-font-control);
+  line-height: var(--vela-line-body);
+}
+
+.vela-body th,
+.vela-body td {
+  padding-block: 10px;
 }
 
 .vela-app {
   background-color: var(--vela-carbon);
   color: var(--vela-mist);
+}
+
+.vela-fatal-error {
+  align-items: center;
+  background: var(--vela-carbon);
+  color: var(--vela-mist);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: var(--vela-space-5);
+  position: fixed;
+}
+
+.vela-fatal-error__card {
+  background: var(--vela-slate);
+  border: 1px solid var(--vela-border);
+  border-radius: var(--vela-radius-md);
+  max-width: 480px;
+  padding: 28px;
+  width: 100%;
+}
+
+.vela-fatal-error__card > span,
+.vela-fatal-error__card p {
+  color: var(--vela-muted);
+  font-size: 13px;
+}
+
+.vela-fatal-error__card h1 {
+  font-size: 22px;
+  margin: var(--vela-space-2) 0 var(--vela-space-3);
+}
+
+.vela-fatal-error__card p {
+  line-height: 1.65;
+  margin: 0 0 var(--vela-space-4);
+  overflow-wrap: anywhere;
+}
+
+.vela-fatal-error__card button {
+  background: var(--vela-mist);
+  border: 0;
+  border-radius: var(--vela-radius-sm);
+  color: var(--vela-carbon);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 650;
+  min-height: 38px;
+  padding: 0 var(--vela-space-4);
+}
+
+.vela-fatal-error__card button:focus-visible {
+  outline: 2px solid var(--vela-blue);
+  outline-offset: 2px;
 }
 
 .vela-panel {
@@ -61,9 +166,11 @@
   cursor: pointer;
   display: inline-flex;
   font: inherit;
+  font-size: var(--vela-font-control);
   gap: var(--vela-space-2);
   justify-content: center;
-  min-height: 36px;
+  line-height: var(--vela-line-compact);
+  min-height: var(--vela-control-height);
   padding: 0 var(--vela-space-3);
   transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease;
 }
@@ -92,7 +199,7 @@
 
 .vela-icon-button {
   padding: 0;
-  width: 36px;
+  width: var(--vela-control-height);
 }
 
 .vela-button:focus-visible,
@@ -108,7 +215,9 @@
   border-radius: var(--vela-radius-sm);
   color: var(--vela-mist);
   font: inherit;
-  min-height: 34px;
+  font-size: var(--vela-font-control);
+  line-height: var(--vela-line-compact);
+  min-height: var(--vela-control-height);
   padding: 0 var(--vela-space-2);
 }
 
@@ -206,7 +315,7 @@
 .vela-save-state,
 .vela-field-help {
   color: var(--vela-muted);
-  font-size: 11px;
+  font-size: var(--vela-font-helper);
 }
 
 .vela-topbar-actions {
@@ -219,7 +328,7 @@
   background: var(--vela-carbon-deep);
   border-radius: 999px;
   color: var(--vela-muted);
-  font-size: 10px;
+  font-size: var(--vela-font-caption);
   min-width: 19px;
   padding: 2px 5px;
   text-align: center;
@@ -248,7 +357,7 @@
   display: flex;
   flex-direction: column;
   font: inherit;
-  font-size: 10px;
+  font-size: var(--vela-font-caption);
   gap: 3px;
   min-height: 48px;
   justify-content: center;
@@ -285,11 +394,11 @@
 .vela-panel-heading {
   border-bottom: 1px solid var(--vela-border);
   gap: var(--vela-space-2);
-  min-height: 38px;
+  min-height: 44px;
 }
 
 .vela-panel-heading h2 {
-  font-size: 13px;
+  font-size: var(--vela-font-section-title);
   font-weight: 650;
   margin: 0;
 }
@@ -308,7 +417,7 @@
 
 .vela-inspector-empty p,
 .vela-compute-empty p {
-  font-size: 12px;
+  font-size: var(--vela-font-helper);
   line-height: 1.7;
   margin: 0;
   max-width: 230px;
@@ -335,7 +444,7 @@
 
 .vela-field-label {
   color: var(--vela-muted);
-  font-size: 11px;
+  font-size: var(--vela-font-helper);
   margin: 0 0 var(--vela-space-1);
 }
 
@@ -347,7 +456,7 @@
 
 .vela-state-label,
 .vela-task-state {
-  font-size: 11px;
+  font-size: var(--vela-font-helper);
   font-weight: 650;
 }
 
@@ -383,7 +492,7 @@
   border-radius: var(--vela-radius-sm);
   color: var(--vela-muted);
   display: grid;
-  font-size: 11px;
+  font-size: var(--vela-font-helper);
   gap: var(--vela-space-2);
   padding: var(--vela-space-3);
 }
@@ -404,13 +513,13 @@
   color: var(--vela-mist);
   cursor: pointer;
   gap: var(--vela-space-3);
-  min-height: 40px;
+  min-height: 46px;
   padding: 0 var(--vela-space-3);
   width: 100%;
 }
 
 .vela-task-summary-title {
-  font-size: 12px;
+  font-size: var(--vela-font-control);
   font-weight: 650;
   gap: var(--vela-space-2);
 }
@@ -418,7 +527,7 @@
 .vela-task-counts {
   color: var(--vela-muted);
   flex: 1;
-  font-size: 10px;
+  font-size: var(--vela-font-caption);
   text-align: right;
 }
 
@@ -429,12 +538,12 @@
 }
 
 .vela-task-item {
-  align-items: center;
+  align-items: start;
   border-bottom: 1px solid var(--vela-border);
   display: grid;
   gap: var(--vela-space-3);
   grid-template-columns: 54px minmax(0, 1fr) 40px 36px;
-  min-height: 58px;
+  min-height: 66px;
   padding: var(--vela-space-2) var(--vela-space-3);
   position: relative;
 }
@@ -462,20 +571,35 @@
 }
 
 .vela-task-copy strong {
-  font-size: 12px;
+  font-size: var(--vela-font-control);
 }
 
 .vela-task-copy span,
 .vela-task-output,
 .vela-task-empty {
   color: var(--vela-muted);
-  font-size: 10px;
+  font-size: var(--vela-font-helper);
+}
+
+.vela-task-copy .vela-task-reason {
+  color: var(--vela-danger);
+  line-height: 1.45;
+  margin-top: 3px;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+}
+
+.vela-task-state,
+.vela-task-output,
+.vela-task-item > .vela-icon-button {
+  margin-top: 7px;
 }
 
 .vela-task-error {
   background: color-mix(in srgb, var(--vela-danger) 10%, transparent);
   color: var(--vela-danger);
-  font-size: 11px;
+  font-size: var(--vela-font-helper);
   padding: var(--vela-space-2) var(--vela-space-3);
 }
 
@@ -533,13 +657,13 @@
 }
 
 .vela-project-card strong {
-  font-size: 12px;
+  font-size: var(--vela-font-control);
 }
 
 .vela-project-card span,
 .vela-project-empty {
   color: var(--vela-muted);
-  font-size: 10px;
+  font-size: var(--vela-font-helper);
 }
 
 .vela-project-empty {
@@ -590,7 +714,7 @@
   align-items: center;
   color: var(--vela-mist);
   display: flex;
-  font-size: 12px;
+  font-size: 15px;
   font-weight: 700;
   gap: var(--vela-space-2);
 }
@@ -624,14 +748,14 @@
 }
 
 .vela-profile-card__header strong {
-  font-size: 12px;
+  font-size: var(--vela-font-control);
 }
 
 .vela-profile-card__header span,
 .vela-profile-model,
 .vela-comfy-placeholder p {
   color: var(--vela-muted);
-  font-size: 10px;
+  font-size: var(--vela-font-helper);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -647,9 +771,9 @@
 }
 
 .vela-compact-button {
-  font-size: 10px;
+  font-size: var(--vela-font-helper);
   margin-left: auto;
-  min-height: 28px;
+  min-height: 36px;
   padding: 4px 8px;
 }
 
@@ -660,7 +784,7 @@
   border-radius: var(--vela-radius-md);
   color: var(--vela-muted);
   display: flex;
-  font-size: 11px;
+  font-size: var(--vela-font-helper);
   gap: var(--vela-space-2);
   line-height: 1.6;
   padding: var(--vela-space-3);
@@ -689,7 +813,7 @@
   align-items: center;
   color: var(--vela-muted);
   display: inline-flex;
-  font-size: 10px;
+  font-size: var(--vela-font-caption);
   gap: 4px;
 }
 
@@ -705,12 +829,12 @@
 
 .vela-comfy-diagnostics strong {
   color: var(--vela-mist);
-  font-size: 11px;
+  font-size: var(--vela-font-helper);
 }
 
 .vela-comfy-diagnostics span {
   color: var(--vela-muted);
-  font-size: 10px;
+  font-size: var(--vela-font-caption);
   line-height: 1.45;
 }
 
@@ -758,6 +882,11 @@
   gap: 4px;
 }
 
+.vela-secret-state[data-status="unreadable"],
+.vela-secret-state[data-status="missing"] {
+  color: var(--vela-danger) !important;
+}
+
 .vela-profile-actions {
   gap: var(--vela-space-2);
 }
@@ -782,14 +911,14 @@
   border: 1px solid color-mix(in srgb, var(--vela-blue) 35%, var(--vela-border));
   border-radius: var(--vela-radius-sm);
   color: var(--vela-mist);
-  font-size: 11px;
+  font-size: var(--vela-font-helper);
   line-height: 1.6;
   padding: var(--vela-space-3);
 }
 
 .vela-compute-empty h3 {
   color: var(--vela-mist);
-  font-size: 14px;
+  font-size: var(--vela-font-section-title);
   margin: 0;
 }
 
@@ -825,7 +954,7 @@
 }
 
 .vela-canvas-empty span {
-  font-size: 12px;
+  font-size: var(--vela-font-helper);
 }
 
 @keyframes vela-task-trace {
@@ -893,12 +1022,12 @@
 .vela-node-content__upload strong,
 .vela-node-content__placeholder strong {
   color: var(--vela-mist);
-  font-size: 14px;
+  font-size: 15px;
 }
 
 .vela-node-content__upload span,
 .vela-node-content__placeholder span {
-  font-size: 12px;
+  font-size: var(--vela-font-helper);
 }
 
 .vela-node-controls {
@@ -923,20 +1052,20 @@
 
 .vela-node-controls__eyebrow {
   color: var(--vela-mist);
-  font-size: 12px;
+  font-size: var(--vela-font-control);
   font-weight: 700;
 }
 
 .vela-node-controls__profile,
 .vela-node-controls__hint {
   color: var(--vela-text-muted);
-  font-size: 11px;
+  font-size: var(--vela-font-helper);
 }
 
 .vela-node-controls__field {
   align-items: center;
   display: flex;
-  font-size: 11px;
+  font-size: var(--vela-font-control);
   gap: var(--vela-space-2);
   white-space: nowrap;
 }
@@ -946,7 +1075,7 @@
   border: 1px solid var(--vela-border-strong);
   border-radius: var(--vela-radius-sm);
   color: var(--vela-mist);
-  min-height: 34px;
+  min-height: var(--vela-control-height);
   padding: 0 var(--vela-space-2);
   width: 58px;
 }
@@ -972,7 +1101,7 @@
 
 .vela-minimap__label {
   color: var(--vela-text-muted);
-  font-size: 10px;
+  font-size: var(--vela-font-caption);
   margin-bottom: var(--vela-space-1);
 }
 
@@ -987,6 +1116,7 @@
   stroke-width: 3;
 }
 
+.vela-minimap rect[data-kind='gpt-video'],
 .vela-minimap rect[data-kind='h3-video'] {
   fill: color-mix(in srgb, var(--vela-amber) 42%, var(--vela-slate));
   stroke: var(--vela-amber);

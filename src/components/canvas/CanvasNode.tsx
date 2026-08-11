@@ -6,6 +6,7 @@
  */
 
 import React from 'react';
+import { CheckSquare, Crop, Download, Film, Image as ImageIcon, Square, X } from 'lucide-react';
 import { NodeData, NodeStatus, NodeType } from '../../types';
 import { NodeConnectors } from './NodeConnectors';
 import { NodeContent } from './NodeContent';
@@ -13,6 +14,7 @@ import { NodeControls } from './NodeControls';
 import { ChangeAnglePanel } from './ChangeAnglePanel';
 import { VelaNodeControls } from '../../vela/components/VelaNodeControls';
 import type { VelaProfile } from '../../vela/services/profileService';
+import { getCanvasNodeWidth } from '../../utils/nodeGeometry';
 
 interface CanvasNodeProps {
   data: NodeData;
@@ -22,7 +24,7 @@ interface CanvasNodeProps {
   connectedImageNodes?: { id: string; url: string; type?: NodeType }[]; // For frame-to-frame video mode and motion control
   onUpdate: (id: string, updates: Partial<NodeData>) => void;
   onGenerate: (id: string) => void;
-  onAddNext: (id: string, type: 'left' | 'right') => void;
+  onAddNext: (id: string, type: 'left' | 'right', point?: { x: number; y: number }) => void;
   selected: boolean;
   showControls?: boolean; // Only show controls when single node is selected (not in group selection)
   onSelect: (id: string) => void;
@@ -30,8 +32,10 @@ interface CanvasNodeProps {
   onContextMenu: (e: React.MouseEvent, id: string) => void;
   onConnectorDown: (e: React.PointerEvent, id: string, side: 'left' | 'right') => void;
   isHoveredForConnection?: boolean;
+  connectionTargetState?: 'compatible' | 'incompatible' | null;
   onOpenEditor?: (nodeId: string) => void;
   onUpload?: (nodeId: string, imageDataUrl: string) => void;
+  onRetryUpload?: (nodeId: string) => void;
   onExpand?: (imageUrl: string) => void;
   onDragStart?: (nodeId: string, hasContent: boolean) => void;
   onDragEnd?: () => void;
@@ -70,8 +74,10 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
   onContextMenu,
   onConnectorDown,
   isHoveredForConnection,
+  connectionTargetState,
   onOpenEditor,
   onUpload,
+  onRetryUpload,
   onExpand,
   onDragStart,
   onDragEnd,
@@ -94,6 +100,8 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
 
   const [isEditingTitle, setIsEditingTitle] = React.useState(false);
   const [editedTitle, setEditedTitle] = React.useState(data.title || data.type);
+  const [isSelectingResultDownloads, setIsSelectingResultDownloads] = React.useState(false);
+  const [selectedResultIndexes, setSelectedResultIndexes] = React.useState<number[]>([]);
   const titleInputRef = React.useRef<HTMLInputElement>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
@@ -197,6 +205,91 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
     }
   };
 
+  const isMediaResult = Boolean(data.resultUrl) && (data.type === NodeType.IMAGE || data.type === NodeType.VIDEO);
+  const isVideoResult = data.type === NodeType.VIDEO;
+  const resultUrls = data.resultUrls?.filter(Boolean).length
+    ? data.resultUrls.filter(Boolean)
+    : data.resultUrl
+      ? [data.resultUrl]
+      : [];
+  const hasResultCollection = !isVideoResult && resultUrls.length > 1;
+  const resultCollectionKey = resultUrls.join('\n');
+
+  React.useEffect(() => {
+    setIsSelectingResultDownloads(false);
+    setSelectedResultIndexes([]);
+  }, [data.id, resultCollectionKey]);
+
+  const downloadResultUrl = async (resultUrl: string, resultIndex?: number) => {
+    const extension = isVideoResult ? 'mp4' : 'png';
+    const indexSuffix = typeof resultIndex === 'number' ? `_${resultIndex + 1}` : '';
+    const filename = `${isVideoResult ? 'video' : 'image'}_${data.id}${indexSuffix}.${extension}`;
+    try {
+      if (resultUrl.startsWith('data:')) {
+        const link = document.createElement('a');
+        link.href = resultUrl;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        return;
+      }
+      const response = await fetch(resultUrl, { cache: 'no-store' });
+      if (!response.ok) throw new Error(`Download failed: ${response.status}`);
+      const blobUrl = URL.createObjectURL(await response.blob());
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(blobUrl), 1_000);
+    } catch {
+      const link = document.createElement('a');
+      link.href = resultUrl;
+      link.target = '_blank';
+      link.rel = 'noreferrer';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    }
+  };
+
+  const downloadResult = async () => {
+    if (!data.resultUrl) return;
+    if (hasResultCollection) {
+      setSelectedResultIndexes([]);
+      setIsSelectingResultDownloads(true);
+      if (!data.resultCollectionExpanded) {
+        onUpdate(data.id, { resultCollectionExpanded: true });
+      }
+      return;
+    }
+    await downloadResultUrl(data.resultUrl);
+  };
+
+  const toggleResultDownload = (index: number) => {
+    setSelectedResultIndexes((current) => (
+      current.includes(index)
+        ? current.filter((item) => item !== index)
+        : [...current, index].sort((left, right) => left - right)
+    ));
+  };
+
+  const downloadSelectedResults = async () => {
+    const indexes = [...selectedResultIndexes].sort((left, right) => left - right);
+    for (const index of indexes) {
+      const resultUrl = resultUrls[index];
+      if (!resultUrl) continue;
+      await downloadResultUrl(resultUrl, index);
+      if (indexes.length > 1) {
+        await new Promise((resolve) => window.setTimeout(resolve, 140));
+      }
+    }
+    setIsSelectingResultDownloads(false);
+    setSelectedResultIndexes([]);
+  };
+
   // ============================================================================
   // RENDER
   // ============================================================================
@@ -218,7 +311,7 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
 
         {/* Image Editor Node Card */}
         <div
-          className={`relative rounded-2xl transition-all duration-200 flex flex-col ${inputUrl ? '' : isDark ? 'bg-[#0f0f0f] border border-neutral-700 shadow-2xl' : 'bg-white border border-neutral-200 shadow-lg'} ${selected ? 'ring-1 ring-blue-500/30' : ''}`}
+          className={`vela-node-elevation ${selected ? 'is-selected' : ''} relative rounded-2xl transition-all duration-200 flex flex-col ${inputUrl ? '' : isDark ? 'bg-[#0f0f0f] border border-neutral-700 shadow-2xl' : 'bg-white border border-neutral-200 shadow-lg'} ${selected ? 'ring-1 ring-blue-500/30' : ''}`}
           style={{
             width: inputUrl ? 'auto' : '340px',
             maxWidth: inputUrl ? '500px' : 'none'
@@ -416,7 +509,7 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
 
           {/* Node Card */}
           <div
-            className={`relative rounded-2xl transition-all duration-200 flex flex-col ${isDark ? 'bg-[#0f0f0f] border border-neutral-700 shadow-2xl' : 'bg-white border border-neutral-200 shadow-lg'} ${selected ? 'ring-1 ring-blue-500/30' : ''}`}
+            className={`vela-node-elevation ${selected ? 'is-selected' : ''} relative rounded-2xl transition-all duration-200 flex flex-col ${isDark ? 'bg-[#0f0f0f] border border-neutral-700 shadow-2xl' : 'bg-white border border-neutral-200 shadow-lg'} ${selected ? 'ring-1 ring-blue-500/30' : ''}`}
             style={{
               width: '340px',
             }}
@@ -495,7 +588,7 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
 
         {/* Video Editor Node Card */}
         <div
-          className={`relative rounded-2xl transition-all duration-200 flex flex-col ${videoUrl ? '' : isDark ? 'bg-[#0f0f0f] border border-neutral-700 shadow-2xl' : 'bg-white border border-neutral-200 shadow-lg'} ${selected ? 'ring-1 ring-purple-500/30' : ''}`}
+          className={`vela-node-elevation ${selected ? 'is-selected' : ''} relative rounded-2xl transition-all duration-200 flex flex-col ${videoUrl ? '' : isDark ? 'bg-[#0f0f0f] border border-neutral-700 shadow-2xl' : 'bg-white border border-neutral-200 shadow-lg'} ${selected ? 'ring-1 ring-purple-500/30' : ''}`}
           style={{
             width: videoUrl ? 'auto' : '340px',
             maxWidth: videoUrl ? '500px' : 'none'
@@ -552,7 +645,7 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
 
   return (
     <div
-      className={`absolute group/node touch-none pointer-events-auto ${data.kind ? `vela-canvas-node vela-canvas-node--${data.kind}` : ''}`}
+      className={`absolute group/node touch-none pointer-events-auto ${data.kind ? `vela-canvas-node vela-canvas-node--${data.kind}` : ''} ${connectionTargetState ? `is-connection-target-${connectionTargetState}` : ''}`}
       style={{
         transform: `translate(${data.x}px, ${data.y}px)`,
         transition: 'box-shadow 0.2s',
@@ -568,6 +661,65 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
 
       {/* Relative wrapper for the Image Card to allow absolute positioning of controls below it */}
       <div className={`relative group/nodecard ${data.kind ? 'vela-node-stack' : ''}`}>
+        {selected && showControls && isMediaResult && (
+          <div
+            className={`vela-media-toolbar ${isSelectingResultDownloads ? 'is-result-selection' : ''}`}
+            data-testid="vela-media-toolbar"
+            style={{ transform: `translateX(-50%) translateY(-100%) scale(${1 / zoom})` }}
+            onPointerDown={(event) => event.stopPropagation()}
+            role="toolbar"
+            aria-label={isSelectingResultDownloads ? '多图下载选择' : '素材操作'}
+          >
+            {isSelectingResultDownloads ? (
+              <>
+                <span><Download size={15} aria-hidden="true" />选择下载</span>
+                <button
+                  type="button"
+                  onClick={() => setSelectedResultIndexes(
+                    selectedResultIndexes.length === resultUrls.length
+                      ? []
+                      : resultUrls.map((_, index) => index)
+                  )}
+                >
+                  {selectedResultIndexes.length === resultUrls.length
+                    ? <CheckSquare size={15} aria-hidden="true" />
+                    : <Square size={15} aria-hidden="true" />}
+                  {selectedResultIndexes.length === resultUrls.length ? '取消全选' : '全选'}
+                </button>
+                <span className="vela-media-toolbar__selection-count" aria-live="polite">
+                  已选 {selectedResultIndexes.length}/{resultUrls.length}
+                </span>
+                <button
+                  type="button"
+                  className="is-primary"
+                  disabled={selectedResultIndexes.length === 0}
+                  onClick={() => void downloadSelectedResults()}
+                >
+                  <Download size={15} aria-hidden="true" />下载已选
+                </button>
+                <button
+                  type="button"
+                  className="is-icon-only"
+                  aria-label="取消多图下载选择"
+                  onClick={() => {
+                    setIsSelectingResultDownloads(false);
+                    setSelectedResultIndexes([]);
+                  }}
+                >
+                  <X size={16} aria-hidden="true" />
+                </button>
+              </>
+            ) : (
+              <>
+                <span>{isVideoResult ? <Film size={15} /> : <ImageIcon size={15} />}{isVideoResult ? '视频素材' : '图片素材'}</span>
+                {!isVideoResult && (
+                  <button type="button" onClick={() => onOpenEditor?.(data.id)}><Crop size={15} aria-hidden="true" />裁剪</button>
+                )}
+                <button type="button" onClick={() => void downloadResult()}><Download size={15} aria-hidden="true" />下载</button>
+              </>
+            )}
+          </div>
+        )}
         {/* Unified Toolbar - Appears above the card for Image nodes on hover */}
         {!data.kind && data.type === NodeType.IMAGE && isSuccess && data.resultUrl && (
           <div
@@ -862,6 +1014,7 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
           className={data.kind
             ? `vela-node-card relative transition-all duration-200 flex flex-col ${selected ? 'is-selected' : ''}`
             : `relative ${data.type === NodeType.VIDEO ? 'w-[385px]' : 'w-[365px]'} rounded-2xl border transition-all duration-300 flex flex-col shadow-2xl ${isDark ? 'bg-[#0f0f0f]' : 'bg-white'} ${selected ? 'border-blue-500/50 ring-1 ring-blue-500/30' : isDark ? 'border-neutral-800' : 'border-neutral-200'}`}
+          style={data.kind ? { width: `${getCanvasNodeWidth(data)}px` } : undefined}
         >
           {/* Header (Editable Title) - Positioned horizontally on top-left side */}
           {isEditingTitle ? (
@@ -908,6 +1061,7 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
             isSuccess={isSuccess}
             getAspectRatioStyle={getAspectRatioStyle}
             onUpload={onUpload}
+            onRetryUpload={onRetryUpload}
             onExpand={onExpand}
             onDragStart={onDragStart}
             onDragEnd={onDragEnd}
@@ -918,18 +1072,34 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
             onImageToVideo={onImageToVideo}
             onUpdate={onUpdate}
             onPostToX={onPostToX}
+            resultSelectionMode={isSelectingResultDownloads}
+            selectedResultIndexes={selectedResultIndexes}
+            onToggleResultSelection={toggleResultDownload}
           />
+          {selected && isMediaResult && (
+            <div className="vela-media-selection-strip" aria-label="已选中素材">
+              <span>已选中</span>
+            </div>
+          )}
         </div>
 
         {/* Control Panel - Only show when single node is selected (not in group selection) */}
         {/* Hide controls for storyboard-generated scenes */}
         {selected && showControls && data.kind && (
-          <div className="vela-node-controls-shell absolute top-[calc(100%+12px)] left-1/2 -translate-x-1/2 flex justify-center z-[100]">
+          <div
+            className="vela-node-controls-shell absolute top-[calc(100%+12px)] left-1/2 flex justify-center z-[100]"
+            data-testid="fixed-screen-node-controls"
+            style={{
+              transform: `translateX(-50%) scale(${1 / zoom})`,
+              transformOrigin: 'top center'
+            }}
+          >
             <VelaNodeControls
               data={data}
               isLoading={isLoading}
               profileName={profileName}
               profiles={profiles}
+              connectedImageNodes={connectedImageNodes}
               onUpdate={onUpdate}
               onGenerate={onGenerate}
             />

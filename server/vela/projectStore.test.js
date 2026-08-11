@@ -33,6 +33,24 @@ test('ProjectStore creates the approved directory structure and lists projects',
   });
 });
 
+test('ProjectStore exposes a lightweight thumbnail and supports rename and delete', () => {
+  withTemporaryStore((store) => {
+    const project = store.saveProject({
+      ...draft('原项目'),
+      nodes: [{ id: 'n1', type: 'Image', x: 10, y: 20, resultUrl: '/api/vela/projects/p/media/m/file' }]
+    });
+    assert.equal(store.listProjects()[0].thumbnailUrl, '/api/vela/projects/p/media/m/file');
+
+    const renamed = store.renameProject(project.id, '新项目');
+    assert.equal(renamed.name, '新项目');
+    assert.equal(store.getProject(project.id).name, '新项目');
+
+    assert.equal(store.deleteProject(project.id), true);
+    assert.equal(store.getProject(project.id), null);
+    assert.equal(store.deleteProject(project.id), false);
+  });
+});
+
 test('atomic save keeps the previous project when replacement is interrupted', () => {
   withTemporaryStore((store, directory) => {
     const project = store.saveProject(draft('原项目'));
@@ -59,19 +77,48 @@ test('ProjectStore retains at most twenty lightweight snapshots', () => {
 
 test('workflow-only and media exports round-trip with hash verification', () => {
   withTemporaryStore((store) => {
-    const project = store.saveProject(draft());
+    let project = store.saveProject(draft());
+    project = store.saveProject({
+      ...project,
+      nodes: [{
+        id: 'reference',
+        type: 'Image',
+        x: 10,
+        y: 20,
+        resultUrl: `/api/vela/projects/${project.id}/media/reference/file`,
+        metadata: { nestedUrl: `/api/vela/projects/${project.id}/media/reference/file` }
+      }]
+    });
     const directory = store.findProjectDirectory(project.id);
     fs.writeFileSync(path.join(directory, 'assets', 'reference.txt'), 'asset-content');
+    fs.mkdirSync(path.join(directory, 'inputs', 'images'), { recursive: true });
+    fs.writeFileSync(path.join(directory, 'inputs', 'images', 'reference.png'), 'reference-image');
+    fs.writeFileSync(path.join(directory, 'media-index.json'), JSON.stringify([{
+      id: 'reference',
+      projectId: project.id,
+      relativePath: 'inputs/images/reference.png',
+      mime: 'image/png'
+    }]));
     assert.equal(store.exportProject(project.id).media.length, 0);
     const archive = store.exportProject(project.id, { includeMedia: true });
-    assert.equal(archive.media.length, 1);
+    assert.equal(archive.media.length, 3);
     const imported = store.importProject(archive);
     const importedDirectory = store.findProjectDirectory(imported.id);
     assert.equal(fs.readFileSync(path.join(importedDirectory, 'assets', 'reference.txt'), 'utf8'), 'asset-content');
+    assert.equal(fs.readFileSync(path.join(importedDirectory, 'inputs', 'images', 'reference.png'), 'utf8'), 'reference-image');
+    const importedMediaIndex = JSON.parse(fs.readFileSync(path.join(importedDirectory, 'media-index.json'), 'utf8'));
+    assert.equal(importedMediaIndex[0].projectId, imported.id);
+    assert.equal(imported.nodes[0].resultUrl, `/api/vela/projects/${imported.id}/media/reference/file`);
+    assert.equal(imported.nodes[0].metadata.nestedUrl, `/api/vela/projects/${imported.id}/media/reference/file`);
+    assert.doesNotMatch(imported.nodes[0].resultUrl, new RegExp(project.id));
     const packageBuffer = store.exportProjectPackage(project.id, { includeMedia: true });
     assert.ok(packageBuffer.length > 0);
     const importedFromPackage = store.importProjectPackage(packageBuffer, { name: '压缩包导入' });
     assert.equal(store.getProject(importedFromPackage.id).name, '压缩包导入');
+    assert.equal(
+      importedFromPackage.nodes[0].resultUrl,
+      `/api/vela/projects/${importedFromPackage.id}/media/reference/file`
+    );
   });
 });
 

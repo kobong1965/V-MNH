@@ -36,9 +36,15 @@ export interface NodeData {
   parentIds?: string[]; // For connecting lines (supports multiple inputs)
   groupId?: string; // ID of the group this node belongs to
   errorMessage?: string;
+  generationProgress?: number; // 0-100 progress reported by a durable generation job
+  uploadProgress?: number; // 0-100 while a local file is being read or persisted
+  uploadSource?: 'canvas-drop'; // Enables retry guidance for files dropped onto the canvas
   profileId?: string; // Account/compute profile reference; never stores a real key
   outputCount?: number; // Number of generated child jobs requested by this node
+  imageBatchMode?: 'independent' | 'pose-variation'; // One image per request; pose mode assigns a distinct action to each batch job
   jobGroupId?: string; // Durable task group reference (implemented in P2)
+  resultUrls?: string[]; // Ordered media results for the active generation batch
+  resultCollectionExpanded?: boolean; // Expanded side-by-side batch preview state
 
   // Text node specific
   textMode?: 'menu' | 'editing'; // For Text nodes: current mode
@@ -49,6 +55,7 @@ export interface NodeData {
   frameInputs?: { nodeId: string; order: 'start' | 'end' }[]; // For frame-to-frame: connected image nodes
   videoModel?: string; // Video model version (e.g., 'veo-3.1', 'kling-v2-1')
   videoDuration?: number; // Video duration in seconds (e.g., 5, 6, 8, 10)
+  videoGenerationMode?: 'text-to-video' | 'image-to-video'; // API video node submission mode
   generateAudio?: boolean; // Whether to generate native audio (Kling 2.6, Veo 3.1)
   inputUrl?: string; // Input URL for video generation (image-to-video)
 
@@ -61,6 +68,7 @@ export interface NodeData {
   imageModel?: string; // Image model version (e.g., 'gemini-pro', 'kling-v2')
   aspectRatio: string;
   resolution: string;
+  stylePreset?: string; // Optional visual style applied to the provider prompt
   isPromptExpanded?: boolean; // Whether the prompt editing area is expanded
   resultAspectRatio?: string; // Actual aspect ratio of the generated image (e.g., '16/9')
   generationStartTime?: number; // Timestamp when generation started (for recovery race condition prevention)
@@ -119,7 +127,11 @@ export interface ContextMenuState {
   y: number;
   type: 'global' | 'node-connector' | 'node-options' | 'add-nodes'; // 'global' = right click on canvas, 'add-nodes' = double click
   sourceNodeId?: string; // If 'node-connector' or 'node-options', which node originated the click
+  sourceNodeIds?: string[]; // Batch connector sources, preserving selection order
+  sourceNodeKind?: VelaNodeKind;
   connectorSide?: 'left' | 'right';
+  dropX?: number; // Unclamped screen position used to place a node created after a connector drag
+  dropY?: number;
 }
 
 export interface Viewport {

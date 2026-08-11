@@ -6,7 +6,7 @@
  */
 
 import React, { useRef, useState, useEffect } from 'react';
-import { Loader2, Maximize2, ImageIcon as ImageIcon, Film, Upload, Pencil, Video, GripVertical, Download, Expand, Shrink, HardDrive, FileText, Music2, WandSparkles } from 'lucide-react';
+import { Check, CircleAlert, Loader2, Maximize2, ImageIcon as ImageIcon, Film, Upload, Pencil, Video, GripVertical, Download, Expand, Shrink, HardDrive, FileText, Music2, WandSparkles } from 'lucide-react';
 import { NodeData, NodeStatus, NodeType } from '../../types';
 
 interface NodeContentProps {
@@ -18,6 +18,7 @@ interface NodeContentProps {
     isSuccess: boolean;
     getAspectRatioStyle: () => { aspectRatio: string };
     onUpload?: (nodeId: string, imageDataUrl: string) => void;
+    onRetryUpload?: (nodeId: string) => void;
     onExpand?: (imageUrl: string) => void;
     onDragStart?: (nodeId: string, hasContent: boolean) => void;
     onDragEnd?: () => void;
@@ -29,6 +30,9 @@ interface NodeContentProps {
     onImageToImage?: (nodeId: string) => void;
     onImageToVideo?: (nodeId: string) => void;
     onUpdate?: (nodeId: string, updates: Partial<NodeData>) => void;
+    resultSelectionMode?: boolean;
+    selectedResultIndexes?: number[];
+    onToggleResultSelection?: (index: number) => void;
     // Social sharing
     onPostToX?: (nodeId: string, mediaUrl: string, mediaType: 'image' | 'video') => void;
 }
@@ -42,6 +46,7 @@ export const NodeContent: React.FC<NodeContentProps> = ({
     isSuccess,
     getAspectRatioStyle,
     onUpload,
+    onRetryUpload,
     onExpand,
     onDragStart,
     onDragEnd,
@@ -51,7 +56,10 @@ export const NodeContent: React.FC<NodeContentProps> = ({
     onImageToImage,
     onImageToVideo,
     onUpdate,
-    onPostToX
+    onPostToX,
+    resultSelectionMode = false,
+    selectedResultIndexes = [],
+    onToggleResultSelection
 }) => {
     const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -66,6 +74,13 @@ export const NodeContent: React.FC<NodeContentProps> = ({
     const isVideoType = data.type === NodeType.VIDEO || data.type === NodeType.LOCAL_VIDEO_MODEL;
     // Helper: Check if node is local model
     const isLocalModel = data.type === NodeType.LOCAL_IMAGE_MODEL || data.type === NodeType.LOCAL_VIDEO_MODEL;
+    const resultUrls = data.resultUrls?.filter(Boolean).length
+        ? data.resultUrls.filter(Boolean)
+        : data.resultUrl
+            ? [data.resultUrl]
+            : [];
+    const hasResultCollection = isImageType && resultUrls.length > 1;
+    const isResultCollectionExpanded = hasResultCollection && Boolean(data.resultCollectionExpanded);
 
     // Sync local state ONLY when data.prompt changes externally (not from our own update)
     useEffect(() => {
@@ -109,7 +124,7 @@ export const NodeContent: React.FC<NodeContentProps> = ({
     };
 
     return (
-        <div className={`transition-all duration-200 ${data.kind ? 'p-0 rounded-2xl overflow-visible' : !selected ? 'p-0 rounded-2xl overflow-hidden' : 'p-1'}`}>
+        <div className={`vela-node-content-frame vela-node-elevation ${selected ? 'is-selected' : ''} relative transition-all duration-200 ${data.kind ? 'p-0 rounded-2xl overflow-visible' : !selected ? 'p-0 rounded-2xl overflow-hidden' : 'p-1'}`}>
             {/* Hidden File Input - Always rendered for upload functionality (image types only) */}
             {isImageType && onUpload && (
                 <input
@@ -123,6 +138,90 @@ export const NodeContent: React.FC<NodeContentProps> = ({
 
             {/* Result View - Show when successful OR when regenerating (loading with existing content) */}
             {(isSuccess || isLoading) && data.resultUrl ? (
+                hasResultCollection ? (
+                    <div
+                        className={`vela-result-collection ${isResultCollectionExpanded ? 'is-expanded' : 'is-stacked'}`}
+                        data-testid="vela-result-collection"
+                        data-count={resultUrls.length}
+                    >
+                        {isResultCollectionExpanded ? (
+                            <div
+                                className="vela-result-collection__grid"
+                                style={{ gridTemplateColumns: `repeat(${resultUrls.length}, minmax(0, 1fr))` }}
+                            >
+                                {resultUrls.map((url, index) => (
+                                    <button
+                                        type="button"
+                                        className={`vela-result-collection__item ${resultSelectionMode ? 'is-download-selecting' : ''} ${selectedResultIndexes.includes(index) ? 'is-download-selected' : ''}`}
+                                        key={`${url}-${index}`}
+                                        style={getAspectRatioStyle()}
+                                        onPointerDown={(event) => event.stopPropagation()}
+                                        onClick={() => resultSelectionMode ? onToggleResultSelection?.(index) : onExpand?.(url)}
+                                        aria-pressed={resultSelectionMode ? selectedResultIndexes.includes(index) : undefined}
+                                        aria-label={resultSelectionMode
+                                            ? `${selectedResultIndexes.includes(index) ? '取消选择' : '选择'}第 ${index + 1} 张图片`
+                                            : `查看第 ${index + 1} 张图片大图`}
+                                    >
+                                        <img src={url} alt={`生成结果 ${index + 1}`} draggable={false} />
+                                        <span className="vela-result-collection__index">{index + 1}</span>
+                                        {resultSelectionMode && (
+                                            <span className="vela-result-collection__select-indicator" aria-hidden="true">
+                                                {selectedResultIndexes.includes(index) && <Check size={16} strokeWidth={3} />}
+                                            </span>
+                                        )}
+                                    </button>
+                                ))}
+                                {!resultSelectionMode && <button
+                                    type="button"
+                                    className="vela-result-collection__toggle is-collapse"
+                                    aria-expanded="true"
+                                    onPointerDown={(event) => event.stopPropagation()}
+                                    onClick={(event) => {
+                                        event.stopPropagation();
+                                        onUpdate?.(data.id, { resultCollectionExpanded: false });
+                                    }}
+                                >
+                                    <Shrink size={15} aria-hidden="true" />
+                                    收起
+                                </button>}
+                            </div>
+                        ) : (
+                            <>
+                                <div className="vela-result-collection__layers" aria-hidden="true">
+                                    {resultUrls.slice(1, 4).reverse().map((url, reverseIndex, layers) => {
+                                        const depth = layers.length - reverseIndex;
+                                        return (
+                                            <div
+                                                className="vela-result-collection__layer"
+                                                key={`${url}-layer`}
+                                                style={{ transform: `translate(${depth * 9}px, ${depth * 7}px)` }}
+                                            >
+                                                <img src={url} alt="" draggable={false} />
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                                <div className="vela-result-collection__primary" style={getAspectRatioStyle()}>
+                                    <img src={resultUrls[0]} alt="生成结果 1" draggable={false} />
+                                </div>
+                                <button
+                                    type="button"
+                                    className="vela-result-collection__toggle"
+                                    aria-expanded="false"
+                                    aria-label={`展开查看 ${resultUrls.length} 张图片`}
+                                    onPointerDown={(event) => event.stopPropagation()}
+                                    onClick={(event) => {
+                                        event.stopPropagation();
+                                        onUpdate?.(data.id, { resultCollectionExpanded: true });
+                                    }}
+                                >
+                                    <Maximize2 size={15} aria-hidden="true" />
+                                    {resultUrls.length}张
+                                </button>
+                            </>
+                        )}
+                    </div>
+                ) : (
                 <div
                     className={`relative w-full bg-black group/image ${!selected ? '' : 'rounded-xl overflow-hidden'}`}
                     style={getAspectRatioStyle()}
@@ -133,14 +232,8 @@ export const NodeContent: React.FC<NodeContentProps> = ({
                         <img src={data.resultUrl} alt={data.kind === 'h3-video' ? 'H3 假视频预览' : '生成结果'} className="w-full h-full object-cover pointer-events-none" />
                     )}
 
-                    {/* Regenerating Overlay - Shows when loading with existing content */}
-                    {isLoading && (
-                        <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex flex-col items-center justify-center z-20">
-                            <Loader2 size={40} className="animate-spin text-blue-400" />
-                            <span className="mt-3 text-sm text-white font-medium">Regenerating...</span>
-                        </div>
-                    )}
                 </div>
+                )
             ) : data.kind ? (
                 <div className={`vela-node-content ${selected ? 'is-selected' : ''}`}>
                     {(data.kind === 'prompt' || data.kind === 'gpt-prompt-optimizer') ? (
@@ -178,17 +271,18 @@ export const NodeContent: React.FC<NodeContentProps> = ({
                             onPointerDown={(event) => event.stopPropagation()}
                             onClick={() => fileInputRef.current?.click()}
                         >
-                            <Upload size={22} aria-hidden="true" />
+                            {isLoading ? <Loader2 className="vela-spin" size={24} aria-hidden="true" /> : <Upload size={22} aria-hidden="true" />}
+                            {isLoading && <span>上传进度 {data.uploadProgress ?? 0}%</span>}
                             <strong>选择参考图片</strong>
                             <span>支持 JPG、PNG、WebP</span>
                         </button>
                     ) : (
                         <div className="vela-node-content__placeholder">
-                            {data.kind === 'h3-video' ? <Film className="vela-node-hero-icon" size={56} strokeWidth={1.5} aria-hidden="true" /> : <ImageIcon className="vela-node-hero-icon" size={56} strokeWidth={1.5} aria-hidden="true" />}
+                            {['gpt-video', 'h3-video'].includes(data.kind) ? <Film className="vela-node-hero-icon" size={56} strokeWidth={1.5} aria-hidden="true" /> : <ImageIcon className="vela-node-hero-icon" size={56} strokeWidth={1.5} aria-hidden="true" />}
                             <div className="vela-node-suggestions">
                                 <span>尝试：</span>
-                                <button type="button"><WandSparkles size={16} />{data.kind === 'h3-video' ? '图生视频' : '图生图'}</button>
-                                <button type="button"><Maximize2 size={16} />{data.kind === 'h3-video' ? '首尾帧视频' : '图片高清'}</button>
+                                <button type="button"><WandSparkles size={16} />{['gpt-video', 'h3-video'].includes(data.kind) ? '图生视频' : '图生图'}</button>
+                                <button type="button"><Maximize2 size={16} />{data.kind === 'gpt-video' ? '文生视频' : data.kind === 'h3-video' ? '首尾帧视频' : '图片高清'}</button>
                             </div>
                         </div>
                     )}
@@ -345,6 +439,64 @@ export const NodeContent: React.FC<NodeContentProps> = ({
                     )}
                 </div>
             )}
+            <NodeStatusOverlay data={data} onRetryUpload={onRetryUpload} />
+        </div>
+    );
+};
+
+const NodeStatusOverlay: React.FC<{
+    data: NodeData;
+    onRetryUpload?: (nodeId: string) => void;
+}> = ({ data, onRetryUpload }) => {
+    const isLoading = data.status === NodeStatus.LOADING;
+    const isError = data.status === NodeStatus.ERROR;
+    if (!isLoading && !isError) return null;
+
+    const isUpload = data.uploadSource === 'canvas-drop';
+    const rawProgress = isUpload ? data.uploadProgress : data.generationProgress;
+    const progress = rawProgress === undefined
+        ? undefined
+        : Math.max(0, Math.min(100, Math.round(rawProgress)));
+
+    if (isError) {
+        const cancelled = data.errorMessage === '任务已取消。';
+        return (
+            <div className="vela-node-status-overlay" data-status="error" role="alert">
+                <div className="vela-node-status-card vela-node-status-card--error">
+                    <span className="vela-node-status-title">
+                        <CircleAlert size={16} aria-hidden="true" />
+                        <strong>{cancelled ? '制作已取消' : isUpload ? '上传失败' : '制作失败'}</strong>
+                    </span>
+                    <span className="vela-node-status-reason">{data.errorMessage || '生成失败，请重试。'}</span>
+                    {isUpload && onRetryUpload && (
+                        <button type="button" onClick={() => onRetryUpload(data.id)}>重新上传</button>
+                    )}
+                </div>
+            </div>
+        );
+    }
+
+    const label = isUpload ? '正在上传' : '正在制作';
+    return (
+        <div className="vela-node-status-overlay" data-status="loading" role="status" aria-live="polite">
+            <div className="vela-node-status-card">
+                <span className="vela-node-status-title">
+                    <Loader2 className="vela-spin" size={15} aria-hidden="true" />
+                    <strong>{label}{progress === undefined ? '…' : ` ${progress}%`}</strong>
+                </span>
+                {progress !== undefined && (
+                    <span
+                        className="vela-node-progress-track"
+                        role="progressbar"
+                        aria-label={`${label}进度`}
+                        aria-valuemin={0}
+                        aria-valuemax={100}
+                        aria-valuenow={progress}
+                    >
+                        <span style={{ width: `${progress}%` }} />
+                    </span>
+                )}
+            </div>
         </div>
     );
 };

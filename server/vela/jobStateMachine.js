@@ -5,7 +5,7 @@ export const LEGAL_JOB_TRANSITIONS = Object.freeze({
   submitting: ['running', 'queued', 'failed'],
   running: ['downloading', 'reconnecting', 'failed', 'cancelled'],
   reconnecting: ['running', 'downloading', 'failed', 'cancelled'],
-  downloading: ['succeeded', 'failed'],
+  downloading: ['succeeded', 'reconnecting', 'failed'],
   succeeded: [],
   failed: ['queued'],
   cancelled: ['queued']
@@ -23,5 +23,8 @@ export const assertJobTransition = (from, to) => {
 export const getRestartRecoveryStatus = (job) => {
   if (job.status === 'submitting') return job.promptId ? 'reconnecting' : 'queued';
   if (job.status === 'running') return 'reconnecting';
+  if (job.status === 'downloading') {
+    return job.promptId && job.payload?.nodeKind === 'gpt-video' ? 'reconnecting' : 'failed';
+  }
   return job.status;
 };

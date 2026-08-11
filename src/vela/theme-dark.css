@@ -1,0 +1,140 @@
+.vela-app[data-theme="dark"] {
+  --vela-carbon: #111311;
+  --vela-carbon-deep: #0d0f0d;
+  --vela-slate: #1c1f1c;
+  --vela-slate-raised: #232723;
+  --vela-border: #343934;
+  --vela-border-strong: #474d47;
+  --vela-mist: #f2f4ef;
+  --vela-muted: #a1a69e;
+  --vela-text-secondary: #c6cbc3;
+  --vela-text-muted: #858b83;
+  --vela-amber: #f0f2ed;
+  background: #111311;
+  color: #f2f4ef;
+  color-scheme: dark;
+}
+
+.vela-app[data-theme="dark"] #canvas-background { background: #111311; }
+.vela-app[data-theme="dark"] .vela-workspace-pill,
+.vela-app[data-theme="dark"] .vela-topbar-actions,
+.vela-app[data-theme="dark"] .vela-node-rail,
+.vela-app[data-theme="dark"] .vela-panel {
+  background: rgba(27, 30, 27, .97);
+  border-color: #383d37;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, .3);
+}
+
+.vela-app[data-theme="dark"] .vela-brand-button,
+.vela-app[data-theme="dark"] .vela-canvas-switch,
+.vela-app[data-theme="dark"] .vela-title-button,
+.vela-app[data-theme="dark"] .vela-top-action,
+.vela-app[data-theme="dark"] .vela-rail-button,
+.vela-app[data-theme="dark"] .vela-assets-shortcut,
+.vela-app[data-theme="dark"] .vela-zoom-value { color: #e7eae4; }
+
+.vela-app[data-theme="dark"] .vela-brand-button:hover,
+.vela-app[data-theme="dark"] .vela-canvas-switch:hover,
+.vela-app[data-theme="dark"] .vela-title-button:hover,
+.vela-app[data-theme="dark"] .vela-top-action:hover,
+.vela-app[data-theme="dark"] .vela-rail-button:hover { background: #30342f; color: #fff; }
+.vela-app[data-theme="dark"] .vela-top-action[data-active="true"] { background: #f0f2ed; border-color: #f0f2ed; color: #171917; }
+.vela-app[data-theme="dark"] .vela-brand-mark,
+.vela-app[data-theme="dark"] .vela-save-button,
+.vela-app[data-theme="dark"] .vela-rail-button[data-primary="true"] { background: #f0f2ed; color: #171917; }
+.vela-app[data-theme="dark"] .vela-topbar-divider { background: #3b403a; }
+.vela-app[data-theme="dark"] .vela-top-action + .vela-top-action,
+.vela-app[data-theme="dark"] .vela-top-action.vela-icon-only { border-color: #3b403a; }
+.vela-app[data-theme="dark"] .vela-status-number { background: #30342f; color: #aeb3ab; }
+.vela-app[data-theme="dark"] .vela-status-number[data-online="true"] { background: #173c31; color: #71d7b5; }
+.vela-app[data-theme="dark"] .vela-status-number[data-active="true"] { background: #163740; color: #72d3e7; }
+.vela-app[data-theme="dark"] .vela-canvas-empty,
+.vela-app[data-theme="dark"] .vela-canvas-empty span:last-child { color: #7f857d; }
+.vela-app[data-theme="dark"] .vela-canvas-empty strong { color: #d9ddd6; }
+.vela-app[data-theme="dark"] .vela-canvas-empty .vela-empty-kicker { color: #686e67; }
+
+.vela-app[data-theme="dark"] .vela-button,
+.vela-app[data-theme="dark"] .vela-input,
+.vela-app[data-theme="dark"] .vela-project-title-input {
+  background: #20231f;
+  border-color: #3b403a;
+  color: #edf0ea;
+}
+.vela-app[data-theme="dark"] .vela-button:hover:not(:disabled) { background: #2d312c; border-color: #50564e; }
+.vela-app[data-theme="dark"] .vela-button[data-variant="primary"],
+.vela-app[data-theme="dark"] .vela-button--primary { background: #f0f2ed !important; border-color: #f0f2ed !important; color: #171917 !important; }
+.vela-app[data-theme="dark"] .vela-section-title,
+.vela-app[data-theme="dark"] .vela-field-label,
+.vela-app[data-theme="dark"] .vela-panel-heading { color: #e9ece6; }
+.vela-app[data-theme="dark"] .vela-field-help,
+.vela-app[data-theme="dark"] .vela-profile-card__header span,
+.vela-app[data-theme="dark"] .vela-project-meta { color: #929890; }
+.vela-app[data-theme="dark"] .vela-profile-card,
+.vela-app[data-theme="dark"] .vela-project-card,
+.vela-app[data-theme="dark"] .vela-task-row,
+.vela-app[data-theme="dark"] .vela-comfy-empty { background: #20231f; border-color: #393e38; color: #dde1da; }
+.vela-app[data-theme="dark"] .vela-profile-form { background: #1a1d1a; border-color: #393e38; }
+
+.vela-app[data-theme="dark"] .vela-node-title,
+.vela-app[data-theme="dark"] .vela-node-resolution,
+.vela-app[data-theme="dark"] .vela-node-label { color: #aeb3ab; }
+.vela-app[data-theme="dark"] .vela-node-shell,
+.vela-app[data-theme="dark"] .vela-node-body,
+.vela-app[data-theme="dark"] .vela-node-prompt-bar { border-color: #454a44; }
+
+.vela-app[data-theme="dark"] .vela-node-elevation {
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, .055),
+    0 2px 5px rgba(0, 0, 0, .58),
+    0 18px 46px rgba(0, 0, 0, .52);
+}
+
+.vela-app[data-theme="dark"] .vela-node-elevation.is-selected {
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, .09),
+    0 4px 10px rgba(0, 0, 0, .62),
+    0 24px 58px rgba(0, 0, 0, .6);
+}
+
+.vela-app[data-theme="dark"] .vela-canvas-node:hover .vela-node-elevation:not(.is-selected) {
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, .07),
+    0 3px 8px rgba(0, 0, 0, .62),
+    0 22px 52px rgba(0, 0, 0, .58);
+}
+
+.vela-app[data-theme="dark"] .vela-node-controls,
+.vela-app[data-theme="dark"] .vela-control-popover {
+  background: #20231f;
+  border-color: #3b403a;
+  color: #e9ece6;
+}
+
+.vela-app[data-theme="dark"] .vela-asset-tray button,
+.vela-app[data-theme="dark"] .vela-media-toolbar {
+  background: #20231f;
+  border-color: #3b403a;
+  color: #edf0ea;
+}
+.vela-app[data-theme="dark"] .vela-asset-tray > p,
+.vela-app[data-theme="dark"] .vela-asset-tray__grid article > div span,
+.vela-app[data-theme="dark"] .vela-media-toolbar > span { color: #9ca198; }
+.vela-app[data-theme="dark"] .vela-asset-tray__filters { background: #171917; }
+.vela-app[data-theme="dark"] .vela-asset-tray__filters button { background: transparent; color: #9ca198; }
+.vela-app[data-theme="dark"] .vela-asset-tray__filters button[data-active="true"] { background: #30342f; color: #fff; }
+.vela-app[data-theme="dark"] .vela-asset-tray__empty strong { color: #d9ddd6; }
+.vela-app[data-theme="dark"] .vela-media-toolbar button { color: #edf0ea; }
+.vela-app[data-theme="dark"] .vela-media-toolbar button:hover { background: #30342f; }
+.vela-app[data-theme="dark"] .vela-node-controls__composer textarea { color: #edf0ea; }
+.vela-app[data-theme="dark"] .vela-node-controls__chips button,
+.vela-app[data-theme="dark"] .vela-video-mode button,
+.vela-app[data-theme="dark"] .vela-setting-select,
+.vela-app[data-theme="dark"] .vela-output-count,
+.vela-app[data-theme="dark"] .vela-style-grid button { background: #2b2f2a; color: #c9cec6; }
+.vela-app[data-theme="dark"] .vela-node-controls__chips > button[data-active="true"],
+.vela-app[data-theme="dark"] .vela-video-mode button[data-active="true"],
+.vela-app[data-theme="dark"] .vela-style-grid button[data-selected="true"] { background: #173c31; border-color: #2c6a54; color: #7ed8b8; }
+.vela-app[data-theme="dark"] .vela-control-popover__empty { color: #9ca198; }
+.vela-app[data-theme="dark"] .vela-control-popover .vela-control-popover__clear { border-color: #414640; color: #c3c8c0; }
+.vela-app[data-theme="dark"] .vela-reference-grid figure { background: #171917; border-color: #414640; }
+.vela-app[data-theme="dark"] .vela-output-count output { color: #d6dad3; }

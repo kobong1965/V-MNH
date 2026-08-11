@@ -17,14 +17,17 @@ const handleError = (res, error) => {
   const message = error instanceof Error ? error.message : 'Unknown error';
   const providerError = error instanceof ProviderError || error instanceof ComfyUiError;
   const status = providerError
-    ? error.code === 'AUTH_FAILED' ? 401 : error.code === 'MODEL_NOT_FOUND' ? 422 : 502
-    : error instanceof ContractValidationError || /invalid|unsupported|required|cannot|不能为空|not found/i.test(message) ? 400 : 500;
+    ? error.code === 'AUTH_FAILED' ? 401
+      : ['MODEL_NOT_FOUND', 'CREDENTIAL_UNREADABLE', 'CREDENTIAL_MISSING'].includes(error.code) ? 422
+        : 502
+    : error instanceof ContractValidationError || /invalid|unsupported|required|cannot|不能为空|not found|不支持|无效|上传内容/i.test(message) ? 400 : 500;
   res.status(status).json(redactSecrets({
     error: message,
     ...(providerError ? {
       code: error.code,
       retryable: error.retryable,
-      safeToRetry: error.safeToRetry
+      safeToRetry: error.safeToRetry,
+      details: error.details
     } : {})
   }));
 };
@@ -94,9 +97,59 @@ router.put('/vela/projects/:id', (req, res) => {
   catch (error) { handleError(res, error); }
 });
 
+router.patch('/vela/projects/:id', (req, res) => {
+  try {
+    const project = runtime(req).projectStore.renameProject(req.params.id, req.body?.name);
+    if (!project) return res.status(404).json({ error: '项目不存在' });
+    res.json(project);
+  } catch (error) { handleError(res, error); }
+});
+
+router.delete('/vela/projects/:id', (req, res) => {
+  try {
+    const deleted = runtime(req).projectStore.deleteProject(req.params.id);
+    if (!deleted) return res.status(404).json({ error: '项目不存在' });
+    res.status(204).end();
+  } catch (error) { handleError(res, error); }
+});
+
+router.get('/vela/workflows', (req, res) => {
+  try { res.json(runtime(req).workflowTemplates.list()); }
+  catch (error) { handleError(res, error); }
+});
+
+router.post('/vela/workflows', (req, res) => {
+  try { res.status(201).json(runtime(req).workflowTemplates.save(req.body)); }
+  catch (error) { handleError(res, error); }
+});
+
+router.get('/vela/workflows/:id', (req, res) => {
+  try {
+    const template = runtime(req).workflowTemplates.get(req.params.id);
+    if (!template) return res.status(404).json({ error: '工作流不存在' });
+    res.json(template);
+  } catch (error) { handleError(res, error); }
+});
+
+router.delete('/vela/workflows/:id', (req, res) => {
+  try {
+    if (!runtime(req).workflowTemplates.delete(req.params.id)) return res.status(404).json({ error: '工作流不存在' });
+    res.status(204).end();
+  } catch (error) { handleError(res, error); }
+});
+
 router.get('/vela/projects/:id/media', (req, res) => {
   try { res.json(runtime(req).media.list(req.params.id)); }
   catch (error) { handleError(res, error); }
+});
+
+router.post('/vela/projects/:id/media', (req, res) => {
+  try {
+    res.status(201).json(runtime(req).media.saveUploadedMedia(req.params.id, {
+      dataUrl: req.body?.data,
+      fileName: req.body?.fileName
+    }));
+  } catch (error) { handleError(res, error); }
 });
 
 router.get('/vela/projects/:id/media/:mediaId/file', (req, res) => {

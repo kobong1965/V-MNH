@@ -29,8 +29,23 @@ const app = express();
 const PORT = Number.parseInt(process.env.PORT || '3001', 10);
 const HOST = process.env.VELA_LAN_ENABLED === 'true' ? '0.0.0.0' : '127.0.0.1';
 
+const readEncodedProcessArgument = (name) => {
+    const prefix = `--${name}=`;
+    const argument = process.argv.find((item) => item.startsWith(prefix));
+    if (!argument) return '';
+    try {
+        return decodeURIComponent(argument.slice(prefix.length));
+    } catch {
+        return '';
+    }
+};
+
 // Ensure library directories exist
-const LIBRARY_DIR = path.resolve(process.env.VELA_LIBRARY_DIR || path.join(__dirname, '..', 'library'));
+const LIBRARY_DIR = path.resolve(
+    process.env.VELA_LIBRARY_DIR
+    || readEncodedProcessArgument('vela-library-dir')
+    || path.join(__dirname, '..', 'library')
+);
 const WORKFLOWS_DIR = path.join(LIBRARY_DIR, 'workflows');
 const IMAGES_DIR = path.join(LIBRARY_DIR, 'images');
 const VIDEOS_DIR = path.join(LIBRARY_DIR, 'videos');
@@ -38,12 +53,15 @@ const CHATS_DIR = path.join(LIBRARY_DIR, 'chats');
 const LIBRARY_ASSETS_DIR = path.join(LIBRARY_DIR, 'assets');
 const VELA_DATA_DIR = path.resolve(
     process.env.VELA_DATA_DIR
+    || readEncodedProcessArgument('vela-data-dir')
     || (process.platform === 'win32' && process.env.LOCALAPPDATA
         ? path.join(process.env.LOCALAPPDATA, 'Vela')
         : path.join(os.homedir(), '.vela'))
 );
 const VELA_PROJECTS_DIR = path.resolve(
-    process.env.VELA_PROJECTS_DIR || path.join(os.homedir(), 'Documents', 'Vela Projects')
+    process.env.VELA_PROJECTS_DIR
+    || readEncodedProcessArgument('vela-projects-dir')
+    || path.join(os.homedir(), 'Documents', 'Vela Projects')
 );
 
 [LIBRARY_DIR, WORKFLOWS_DIR, IMAGES_DIR, VIDEOS_DIR, CHATS_DIR, LIBRARY_ASSETS_DIR].forEach(dir => {
@@ -54,7 +72,9 @@ const VELA_PROJECTS_DIR = path.resolve(
 
 // Enable CORS for all routes (must come before static file serving)
 app.use(cors());
-app.use(express.json({ limit: '100mb' }));
+// Project share packages are transported as base64 JSON. Base64 adds roughly
+// one third to the raw archive size, so allow realistic media-rich projects.
+app.use(express.json({ limit: '512mb' }));
 
 app.get('/api/vela/health', (_req, res) => {
     res.json({ ok: true, service: 'vela-control', version: 1 });
@@ -829,26 +849,67 @@ app.post('/api/gemini/optimize-prompt', async (req, res) => {
 app.post('/api/assets/:type', async (req, res) => {
     try {
         const { type } = req.params;
-        const { data, prompt } = req.body;
+        const { data, prompt, fileName } = req.body;
 
         if (!['images', 'videos'].includes(type)) {
             return res.status(400).json({ error: 'Invalid asset type' });
         }
 
+        if (typeof data !== 'string') {
+            return res.status(400).json({ error: 'Asset data is required' });
+        }
+
+        const dataUrl = data.match(/^data:([^;,]+);base64,([\s\S]+)$/i);
+        if (!dataUrl) {
+            return res.status(400).json({ error: 'Invalid asset data URL' });
+        }
+
+        const mime = dataUrl[1].toLowerCase();
+        const extensionByMime = new Map([
+            ['image/avif', 'avif'],
+            ['image/bmp', 'bmp'],
+            ['image/gif', 'gif'],
+            ['image/jpeg', 'jpg'],
+            ['image/jpg', 'jpg'],
+            ['image/png', 'png'],
+            ['image/webp', 'webp'],
+            ['video/mp4', 'mp4'],
+            ['video/quicktime', 'mov'],
+            ['video/webm', 'webm']
+        ]);
+        const allowedExtensions = type === 'images'
+            ? new Set(['avif', 'bmp', 'gif', 'jpeg', 'jpg', 'png', 'webp'])
+            : new Set(['m4v', 'mov', 'mp4', 'webm']);
+        const sourceExtension = typeof fileName === 'string'
+            ? path.extname(fileName).slice(1).toLowerCase()
+            : '';
+        const mimeExtension = extensionByMime.get(mime);
+        const ext = mimeExtension || (mime === 'application/octet-stream' && allowedExtensions.has(sourceExtension)
+            ? sourceExtension === 'jpeg' ? 'jpg' : sourceExtension
+            : null);
+        const mimeMatchesType = type === 'images' ? mime.startsWith('image/') : mime.startsWith('video/');
+        if (!ext || (!mimeMatchesType && mime !== 'application/octet-stream')) {
+            return res.status(400).json({ error: 'Unsupported asset format' });
+        }
+
         const targetDir = type === 'images' ? IMAGES_DIR : VIDEOS_DIR;
-        const id = Date.now().toString();
-        const ext = type === 'images' ? 'png' : 'mp4';
+        const id = crypto.randomUUID();
         const filename = `${id}.${ext}`;
         const metaFilename = `${id}.json`;
 
         // Save the asset file
-        const base64Data = data.replace(/^data:[^;]+;base64,/, '');
-        fs.writeFileSync(path.join(targetDir, filename), base64Data, 'base64');
+        const assetBuffer = Buffer.from(dataUrl[2], 'base64');
+        if (!assetBuffer.length) {
+            return res.status(400).json({ error: 'Asset file is empty' });
+        }
+        fs.writeFileSync(path.join(targetDir, filename), assetBuffer);
 
         // Save metadata
         const metadata = {
             id,
             filename,
+            originalName: typeof fileName === 'string' ? fileName : undefined,
+            mime,
             prompt: prompt || '',
             createdAt: new Date().toISOString(),
             type

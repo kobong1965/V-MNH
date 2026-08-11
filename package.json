@@ -1,7 +1,11 @@
 {
   "name": "vela-ai-canvas",
   "private": true,
-  "version": "0.4.0",
+  "version": "0.5.21",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kobong1965/V-MNH.git"
+  },
   "description": "Vela AI 视频无限画布 Windows 桌面端",
   "productName": "Vela AI视频画布",
   "main": "electron/main.js",
@@ -29,6 +33,7 @@
     "@types/three": "^0.182.0",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
+    "electron-updater": "^6.8.9",
     "express": "^5.2.1",
     "face-api.js": "^0.22.2",
     "form-data": "^4.0.5",
@@ -83,6 +88,11 @@
         }
       ],
       "icon": "build/icon.ico"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "kobong1965",
+      "repo": "V-MNH"
     },
     "nsis": {
       "oneClick": false,

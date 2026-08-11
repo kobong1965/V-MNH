@@ -1,10 +1,12 @@
 import { ChevronDown, ChevronUp, ListChecks, RotateCcw, X } from 'lucide-react';
 
-import type { VelaJob, VelaJobStatus } from '../services/jobService';
+import { getVelaJobErrorMessage, type VelaJob, type VelaJobStatus } from '../services/jobService';
+import type { VelaProfile } from '../services/profileService';
 
 interface VelaTaskCenterProps {
   isOpen: boolean;
   jobs: VelaJob[];
+  profiles: VelaProfile[];
   error?: string | null;
   onToggle: () => void;
   onRetry: (jobId: string) => void | Promise<void>;
@@ -27,6 +29,7 @@ const RUNNING = new Set<VelaJobStatus>(['submitting', 'running', 'reconnecting',
 export function VelaTaskCenter({
   isOpen,
   jobs,
+  profiles,
   error,
   onToggle,
   onRetry,
@@ -35,6 +38,7 @@ export function VelaTaskCenter({
   if (!isOpen) return null;
   const runningCount = jobs.filter((job) => RUNNING.has(job.status)).length;
   const failedCount = jobs.filter((job) => job.status === 'failed').length;
+  const profileNames = new Map(profiles.map((profile) => [profile.id, profile.name]));
 
   return (
     <section className="vela-task-center vela-panel" data-open={isOpen} aria-label="任务中心">
@@ -66,7 +70,12 @@ export function VelaTaskCenter({
               <span className="vela-task-state" data-status={job.status}>{STATUS_TEXT[job.status]}</span>
               <div className="vela-task-copy">
                 <strong>{String(job.payload.prompt || job.providerType)}</strong>
-                <span>{job.profileId} · Seed {job.seed} · 重试 {job.retryCount}</span>
+                <span>{profileNames.get(job.profileId) || job.profileId} · Seed {job.seed} · 重试 {job.retryCount}</span>
+                {job.status === 'failed' && (
+                  <span className="vela-task-reason" title={job.error?.message || undefined}>
+                    {getVelaJobErrorMessage(job.error)}
+                  </span>
+                )}
               </div>
               <span className="vela-task-output vela-utility-text">
                 {job.progress === null ? '—' : `${Math.round(job.progress * 100)}%`}

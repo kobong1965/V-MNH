@@ -17,6 +17,7 @@ interface UseWorkflowOptions {
     setNodes: Dispatch<SetStateAction<NodeData[]>>;
     setGroups: Dispatch<SetStateAction<NodeGroup[]>>; // For restoring groups when loading
     setSelectedNodeIds: Dispatch<SetStateAction<string[]>>;
+    setViewport: Dispatch<SetStateAction<Viewport>>;
     setCanvasTitle: (title: string) => void;
     setEditingTitleValue: (value: string) => void;
     onPanelOpen?: () => void; // Called when workflow panel opens
@@ -30,6 +31,7 @@ export const useWorkflow = ({
     setNodes,
     setGroups,
     setSelectedNodeIds,
+    setViewport,
     setCanvasTitle,
     setEditingTitleValue,
     onPanelOpen
@@ -74,6 +76,7 @@ export const useWorkflow = ({
                 setEditingTitleValue(workflow.name || '未命名工作区');
                 setNodes(workflow.nodes || []);
                 setGroups(workflow.groups || []); // Restore groups
+                setViewport(workflow.viewport || { x: 0, y: 0, zoom: 1 });
                 // Reset selection
                 setSelectedNodeIds([]);
                 setIsWorkflowPanelOpen(false);
@@ -87,7 +90,7 @@ export const useWorkflow = ({
             console.error('Failed to load workflow:', error);
         }
         return null;
-    }, [setNodes, setGroups, setSelectedNodeIds, setCanvasTitle, setEditingTitleValue]);
+    }, [setNodes, setGroups, setSelectedNodeIds, setViewport, setCanvasTitle, setEditingTitleValue]);
 
     /**
      * Handle workflow panel toggle from toolbar click

@@ -32,6 +32,31 @@ test('seed modes are deterministic and reproducible', () => {
   assert.ok(new Set(first).size > 1);
 });
 
+test('pose variation batch creates five independent single-photo prompts with distinct actions', () => {
+  const expanded = expandJobGroup({
+    ...draft(5),
+    payload: {
+      nodeKind: 'gpt-image',
+      imageBatchMode: 'pose-variation',
+      prompt: 'Keep the approved person, outfit, background, camera and lighting unchanged.'
+    }
+  });
+  const prompts = expanded.jobs.map((job) => job.payload.prompt);
+  assert.equal(prompts.length, 5);
+  assert.equal(new Set(prompts).size, 5);
+  for (const prompt of prompts) {
+    assert.match(prompt, /exactly ONE standalone, full-frame photograph/i);
+    assert.match(prompt, /Never create a collage, grid, contact sheet/i);
+    assert.match(prompt, /POSE DIRECTION FOR THIS ONE OUTPUT/i);
+    assert.match(prompt, /natural|relaxed/i);
+  }
+  const combinedPrompts = prompts.join('\n');
+  assert.match(combinedPrompts, /FRONT view/i);
+  assert.match(combinedPrompts, /LEFT view/i);
+  assert.match(combinedPrompts, /RIGHT view/i);
+  assert.match(combinedPrompts, /BACK view/i);
+});
+
 test('batch expansion rejects requests above the first-version safety limit', () => {
   assert.throws(() => expandJobGroup(draft(51)), /1-50|between 1 and 50/);
 });

@@ -7,6 +7,7 @@
 
 import React, { useState, useRef } from 'react';
 import { SelectionBox, NodeData, Viewport } from '../types';
+import { getCanvasNodeBounds } from '../utils/nodeGeometry';
 
 export const useSelectionBox = () => {
     // ============================================================================
@@ -37,7 +38,8 @@ export const useSelectionBox = () => {
     const isNodeInSelectionBox = (
         node: NodeData,
         box: SelectionBox,
-        viewport: Viewport
+        viewport: Viewport,
+        nodes: NodeData[]
     ): boolean => {
         // Convert selection box screen coordinates to canvas coordinates
         const boxLeft = Math.min(box.startX, box.endX);
@@ -51,18 +53,14 @@ export const useSelectionBox = () => {
         const canvasBoxTop = (boxTop - viewport.y) / viewport.zoom;
         const canvasBoxBottom = (boxBottom - viewport.y) / viewport.zoom;
 
-        // Node dimensions (340x300 from CanvasNode component)
-        const nodeLeft = node.x;
-        const nodeRight = node.x + 340;
-        const nodeTop = node.y;
-        const nodeBottom = node.y + 300;
+        const nodeBounds = getCanvasNodeBounds(node, nodes);
 
         // Rectangle intersection check
         return !(
-            canvasBoxRight < nodeLeft ||
-            canvasBoxLeft > nodeRight ||
-            canvasBoxBottom < nodeTop ||
-            canvasBoxTop > nodeBottom
+            canvasBoxRight < nodeBounds.left ||
+            canvasBoxLeft > nodeBounds.right ||
+            canvasBoxBottom < nodeBounds.top ||
+            canvasBoxTop > nodeBounds.bottom
         );
     };
 
@@ -81,6 +79,9 @@ export const useSelectionBox = () => {
         const relativeY = e.clientY - rect.top;
 
         isSelecting.current = true;
+        if (e.currentTarget instanceof HTMLElement) {
+            e.currentTarget.setPointerCapture(e.pointerId);
+        }
         setSelectionBox({
             isActive: true,
             startX: relativeX,
@@ -125,7 +126,7 @@ export const useSelectionBox = () => {
         if (!isSelecting.current) return [];
 
         const selectedIds = nodes
-            .filter(node => isNodeInSelectionBox(node, selectionBox, viewport))
+            .filter(node => isNodeInSelectionBox(node, selectionBox, viewport, nodes))
             .map(node => node.id);
 
         // Clear selection box

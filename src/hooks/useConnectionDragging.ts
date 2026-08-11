@@ -8,11 +8,29 @@
 import React, { useState, useRef } from 'react';
 import { NodeData, NodeType, Viewport } from '../types';
 import { canConnectNodeKinds } from '../vela/nodeCatalog';
+import { getCanvasNodeBounds } from '../utils/nodeGeometry';
 
 interface ConnectionStart {
     nodeId: string;
+    nodeIds?: string[];
     handle: 'left' | 'right';
+    origin?: { x: number; y: number };
 }
+
+type ConnectionTargetState = 'compatible' | 'incompatible' | null;
+
+const canConnect = (parentNode: NodeData, childNode: NodeData): boolean => {
+    if (parentNode.kind && childNode.kind) return canConnectNodeKinds(parentNode.kind, childNode.kind);
+    if (parentNode.type === NodeType.AUDIO || childNode.type === NodeType.AUDIO) return false;
+    if (childNode.type === NodeType.TEXT) return false;
+    if (parentNode.type === NodeType.TEXT) return childNode.type === NodeType.IMAGE || childNode.type === NodeType.VIDEO;
+    if (parentNode.type === NodeType.VIDEO) return childNode.type === NodeType.VIDEO || childNode.type === NodeType.VIDEO_EDITOR;
+    if (parentNode.type === NodeType.IMAGE || parentNode.type === NodeType.IMAGE_EDITOR) {
+        return childNode.type === NodeType.IMAGE || childNode.type === NodeType.VIDEO || childNode.type === NodeType.IMAGE_EDITOR;
+    }
+    if (parentNode.type === NodeType.VIDEO_EDITOR) return childNode.type === NodeType.VIDEO;
+    return true;
+};
 
 export const useConnectionDragging = () => {
     // ============================================================================
@@ -24,8 +42,16 @@ export const useConnectionDragging = () => {
     const [tempConnectionEnd, setTempConnectionEnd] = useState<{ x: number; y: number } | null>(null);
     const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
     const [hoveredSide, setHoveredSide] = useState<'left' | 'right' | null>(null);
+    const [connectionTargetState, setConnectionTargetState] = useState<ConnectionTargetState>(null);
     const [selectedConnection, setSelectedConnection] = useState<{ parentId: string; childId: string } | null>(null);
     const dragStartTime = useRef<number>(0);
+    // React state is used for rendering, while refs keep a pointer interaction
+    // reliable even when a quick drag ends before React commits its state.
+    const isDraggingConnectionRef = useRef(false);
+    const connectionStartRef = useRef<ConnectionStart | null>(null);
+    const hoveredNodeIdRef = useRef<string | null>(null);
+    const hoveredSideRef = useRef<'left' | 'right' | null>(null);
+    const connectionTargetStateRef = useRef<ConnectionTargetState>(null);
 
     // ============================================================================
     // HELPERS
@@ -48,24 +74,51 @@ export const useConnectionDragging = () => {
         const canvasX = (mouseX - viewport.x) / viewport.zoom;
         const canvasY = (mouseY - viewport.y) / viewport.zoom;
 
+        const activeConnectionStart = connectionStartRef.current;
         const found = nodes.find(n => {
-            if (n.id === connectionStart?.nodeId) return false;
+            if (activeConnectionStart?.nodeIds?.includes(n.id) || n.id === activeConnectionStart?.nodeId) return false;
+            const bounds = getCanvasNodeBounds(n, nodes);
+            // Ports sit slightly outside the card. Include that hit area so
+            // dropping exactly on a visible connector is accepted.
+            const portHitArea = 28;
             return (
-                canvasX >= n.x && canvasX <= n.x + 340 &&
-                canvasY >= n.y && canvasY <= n.y + 400
+                canvasX >= n.x - portHitArea && canvasX <= n.x + bounds.width + portHitArea &&
+                canvasY >= n.y && canvasY <= n.y + bounds.height
             );
         });
 
         if (found) {
+            hoveredNodeIdRef.current = found.id;
             setHoveredNodeId(found.id);
 
-            // Determine which side is being hovered
-            // Left connector is at x position, right connector is at x + 340
-            const nodeCenter = found.x + 170; // Middle of the node
-            setHoveredSide(canvasX < nodeCenter ? 'left' : 'right');
+            const bounds = getCanvasNodeBounds(found, nodes);
+            const side = canvasX < found.x + bounds.width / 2 ? 'left' : 'right';
+            hoveredSideRef.current = side;
+            setHoveredSide(side);
+
+            const sourceIds = activeConnectionStart?.nodeIds || (activeConnectionStart ? [activeConnectionStart.nodeId] : []);
+            const sources = sourceIds.map((id) => nodes.find((node) => node.id === id)).filter((node): node is NodeData => Boolean(node));
+            const isBatch = Boolean(activeConnectionStart?.nodeIds?.length);
+            const usesOppositePorts = sources.length > 0 && activeConnectionStart?.handle !== side;
+            const targetState = isBatch
+                ? usesOppositePorts && activeConnectionStart?.handle === 'right' && side === 'left' && sources.every((source) => canConnect(source, found))
+                    ? 'compatible'
+                    : 'incompatible'
+                : (() => {
+                    const source = sources[0];
+                    const parent = activeConnectionStart?.handle === 'right' ? source : found;
+                    const child = activeConnectionStart?.handle === 'right' ? found : source;
+                    return usesOppositePorts && parent && child && canConnect(parent, child) ? 'compatible' : 'incompatible';
+                })();
+            connectionTargetStateRef.current = targetState;
+            setConnectionTargetState(targetState);
         } else {
+            hoveredNodeIdRef.current = null;
+            hoveredSideRef.current = null;
+            connectionTargetStateRef.current = null;
             setHoveredNodeId(null);
             setHoveredSide(null);
+            setConnectionTargetState(null);
         }
     };
 
@@ -81,12 +134,43 @@ export const useConnectionDragging = () => {
         nodeId: string,
         side: 'left' | 'right'
     ) => {
+        if (e.button !== 0) return;
         e.stopPropagation();
         e.preventDefault();
         dragStartTime.current = Date.now();
+        const start = { nodeId, handle: side } as const;
+        isDraggingConnectionRef.current = true;
+        connectionStartRef.current = start;
+        hoveredNodeIdRef.current = null;
+        hoveredSideRef.current = null;
+        connectionTargetStateRef.current = null;
         setIsDraggingConnection(true);
-        setConnectionStart({ nodeId, handle: side });
+        setConnectionStart(start);
         setTempConnectionEnd({ x: e.clientX, y: e.clientY });
+        setConnectionTargetState(null);
+        if (e.currentTarget instanceof HTMLElement) e.currentTarget.setPointerCapture(e.pointerId);
+    };
+
+    const handleSelectionConnectorPointerDown = (
+        e: React.PointerEvent,
+        nodeIds: string[],
+        origin: { x: number; y: number }
+    ) => {
+        if (e.button !== 0 || nodeIds.length === 0) return;
+        e.stopPropagation();
+        e.preventDefault();
+        dragStartTime.current = Date.now();
+        const start: ConnectionStart = { nodeId: nodeIds[0], nodeIds: [...nodeIds], handle: 'right', origin };
+        isDraggingConnectionRef.current = true;
+        connectionStartRef.current = start;
+        hoveredNodeIdRef.current = null;
+        hoveredSideRef.current = null;
+        connectionTargetStateRef.current = null;
+        setIsDraggingConnection(true);
+        setConnectionStart(start);
+        setTempConnectionEnd({ x: e.clientX, y: e.clientY });
+        setConnectionTargetState(null);
+        if (e.currentTarget instanceof HTMLElement) e.currentTarget.setPointerCapture(e.pointerId);
     };
 
     /**
@@ -97,7 +181,7 @@ export const useConnectionDragging = () => {
         nodes: NodeData[],
         viewport: Viewport
     ) => {
-        if (!isDraggingConnection) return false;
+        if (!isDraggingConnectionRef.current) return false;
 
         setTempConnectionEnd({ x: e.clientX, y: e.clientY });
         checkHoveredNode(e.clientX, e.clientY, nodes, viewport);
@@ -111,12 +195,17 @@ export const useConnectionDragging = () => {
      * @param onConnectionMade - Optional callback called with (parentId, childId) when connection is created
      */
     const completeConnectionDrag = (
-        onAddNext: (nodeId: string, direction: 'left' | 'right') => void,
+        onAddNext: (nodeId: string, direction: 'left' | 'right', point?: { x: number; y: number }, nodeIds?: string[]) => void,
         onUpdateNodes: (updater: (prev: NodeData[]) => NodeData[]) => void,
         nodes: NodeData[],
-        onConnectionMade?: (parentId: string, childId: string) => void
+        onConnectionMade?: (parentId: string, childId: string) => void,
+        dropPoint?: { x: number; y: number }
     ): boolean => {
-        if (!isDraggingConnection || !connectionStart) return false;
+        const activeConnectionStart = connectionStartRef.current;
+        const activeHoveredNodeId = hoveredNodeIdRef.current;
+        const activeHoveredSide = hoveredSideRef.current;
+        const activeTargetState = connectionTargetStateRef.current;
+        if (!isDraggingConnectionRef.current || !activeConnectionStart) return false;
 
         const dragDuration = Date.now() - dragStartTime.current;
 
@@ -189,73 +278,106 @@ export const useConnectionDragging = () => {
             return true;
         };
 
-        // Short click - open menu
-        if (dragDuration < 200 && !hoveredNodeId) {
-            onAddNext(connectionStart.nodeId, connectionStart.handle);
+        // Clicking a connector or dragging it onto blank canvas both open the compatible-node menu.
+        // A batch connector carries every selected source into the menu so the newly
+        // created node can receive all compatible parents in one action.
+        if (!activeHoveredNodeId) {
+            onAddNext(
+                activeConnectionStart.nodeId,
+                activeConnectionStart.handle,
+                dragDuration >= 200 ? dropPoint : undefined,
+                activeConnectionStart.nodeIds
+            );
         }
         // Drag to node - create connection based on target side
-        else if (hoveredNodeId && hoveredSide) {
-            if (hoveredSide === 'left') {
+        else if (activeHoveredNodeId && activeHoveredSide && activeTargetState === 'compatible') {
+            if (activeConnectionStart.nodeIds?.length && activeHoveredSide === 'left') {
+                const sourceIds = activeConnectionStart.nodeIds.filter((sourceId) => isValidConnection(sourceId, activeHoveredNodeId));
+                onUpdateNodes((previous) => previous.map((node) => {
+                    if (node.id !== activeHoveredNodeId) return node;
+                    return { ...node, parentIds: [...new Set([...(node.parentIds || []), ...sourceIds])] };
+                }));
+                sourceIds.forEach((sourceId) => onConnectionMade?.(sourceId, activeHoveredNodeId));
+            }
+            else if (activeHoveredSide === 'left') {
                 // Connecting to LEFT connector = target receives input (target is child)
                 // source is parent, hoveredNode is child
-                if (!isValidConnection(connectionStart.nodeId, hoveredNodeId)) {
+                if (!isValidConnection(activeConnectionStart.nodeId, activeHoveredNodeId)) {
                     // Invalid connection - reset and return
+                    isDraggingConnectionRef.current = false;
+                    connectionStartRef.current = null;
+                    hoveredNodeIdRef.current = null;
+                    hoveredSideRef.current = null;
+                    connectionTargetStateRef.current = null;
                     setIsDraggingConnection(false);
                     setConnectionStart(null);
                     setTempConnectionEnd(null);
                     setHoveredNodeId(null);
                     setHoveredSide(null);
+                    setConnectionTargetState(null);
                     return true;
                 }
 
                 // Add source as a parent to target node
                 onUpdateNodes(prev => prev.map(n => {
-                    if (n.id === hoveredNodeId) {
+                    if (n.id === activeHoveredNodeId) {
                         const existingParents = n.parentIds || [];
                         // Prevent duplicate connections
-                        if (!existingParents.includes(connectionStart.nodeId)) {
-                            return { ...n, parentIds: [...existingParents, connectionStart.nodeId] };
+                        if (!existingParents.includes(activeConnectionStart.nodeId)) {
+                            return { ...n, parentIds: [...existingParents, activeConnectionStart.nodeId] };
                         }
                     }
                     return n;
                 }));
                 // Notify about new connection: source is parent, hoveredNode is child
-                onConnectionMade?.(connectionStart.nodeId, hoveredNodeId);
+                onConnectionMade?.(activeConnectionStart.nodeId, activeHoveredNodeId);
             } else {
                 // Connecting to RIGHT connector = target provides output (target is parent)
                 // hoveredNode is parent, source is child
-                if (!isValidConnection(hoveredNodeId, connectionStart.nodeId)) {
+                if (!isValidConnection(activeHoveredNodeId, activeConnectionStart.nodeId)) {
                     // Invalid connection - reset and return
+                    isDraggingConnectionRef.current = false;
+                    connectionStartRef.current = null;
+                    hoveredNodeIdRef.current = null;
+                    hoveredSideRef.current = null;
+                    connectionTargetStateRef.current = null;
                     setIsDraggingConnection(false);
                     setConnectionStart(null);
                     setTempConnectionEnd(null);
                     setHoveredNodeId(null);
                     setHoveredSide(null);
+                    setConnectionTargetState(null);
                     return true;
                 }
 
                 // Add target as a parent to source node
                 onUpdateNodes(prev => prev.map(n => {
-                    if (n.id === connectionStart.nodeId) {
+                    if (n.id === activeConnectionStart.nodeId) {
                         const existingParents = n.parentIds || [];
                         // Prevent duplicate connections
-                        if (!existingParents.includes(hoveredNodeId)) {
-                            return { ...n, parentIds: [...existingParents, hoveredNodeId] };
+                        if (!existingParents.includes(activeHoveredNodeId)) {
+                            return { ...n, parentIds: [...existingParents, activeHoveredNodeId] };
                         }
                     }
                     return n;
                 }));
                 // Notify about new connection: hoveredNode is parent, source is child
-                onConnectionMade?.(hoveredNodeId, connectionStart.nodeId);
+                onConnectionMade?.(activeHoveredNodeId, activeConnectionStart.nodeId);
             }
         }
 
         // Reset state
+        isDraggingConnectionRef.current = false;
+        connectionStartRef.current = null;
+        hoveredNodeIdRef.current = null;
+        hoveredSideRef.current = null;
+        connectionTargetStateRef.current = null;
         setIsDraggingConnection(false);
         setConnectionStart(null);
         setTempConnectionEnd(null);
         setHoveredNodeId(null);
         setHoveredSide(null);
+        setConnectionTargetState(null);
         return true;
     };
 
@@ -293,9 +415,11 @@ export const useConnectionDragging = () => {
         connectionStart,
         tempConnectionEnd,
         hoveredNodeId,
+        connectionTargetState,
         selectedConnection,
         setSelectedConnection,
         handleConnectorPointerDown,
+        handleSelectionConnectorPointerDown,
         updateConnectionDrag,
         completeConnectionDrag,
         handleEdgeClick,
