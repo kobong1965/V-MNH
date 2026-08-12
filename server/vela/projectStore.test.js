@@ -33,6 +33,29 @@ test('ProjectStore creates the approved directory structure and lists projects',
   });
 });
 
+test('ProjectStore preserves image annotations and styled group labels', () => {
+  withTemporaryStore((store) => {
+    const project = store.saveProject({
+      ...draft('可读画布'),
+      nodes: [{
+        id: 'image-1', type: 'Image', x: 10, y: 20,
+        annotationText: '主商品图', annotationColor: '#4433aa', annotationFontSize: 32
+      }],
+      groups: [{
+        id: 'group-1', nodeIds: ['image-1'], label: '买家秀首图',
+        labelColor: '#aa3322', labelFontSize: 28
+      }]
+    });
+    const loaded = store.getProject(project.id);
+    assert.equal(loaded.nodes[0].annotationText, '主商品图');
+    assert.equal(loaded.nodes[0].annotationColor, '#4433aa');
+    assert.equal(loaded.nodes[0].annotationFontSize, 32);
+    assert.equal(loaded.groups[0].label, '买家秀首图');
+    assert.equal(loaded.groups[0].labelColor, '#aa3322');
+    assert.equal(loaded.groups[0].labelFontSize, 28);
+  });
+});
+
 test('ProjectStore exposes a lightweight thumbnail and supports rename and delete', () => {
   withTemporaryStore((store) => {
     const project = store.saveProject({

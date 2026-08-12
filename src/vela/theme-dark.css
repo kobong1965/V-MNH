@@ -125,6 +125,27 @@
 .vela-app[data-theme="dark"] .vela-asset-tray__empty strong { color: #d9ddd6; }
 .vela-app[data-theme="dark"] .vela-media-toolbar button { color: #edf0ea; }
 .vela-app[data-theme="dark"] .vela-media-toolbar button:hover { background: #30342f; }
+.vela-app[data-theme="dark"] .vela-image-node-quick-actions,
+.vela-app[data-theme="dark"] .vela-canvas-text-editor,
+.vela-app[data-theme="dark"] .vela-group-label {
+  background: rgba(32, 35, 31, .98);
+  border-color: #3b403a;
+  color: #edf0ea;
+}
+.vela-app[data-theme="dark"] .vela-image-node-quick-actions button,
+.vela-app[data-theme="dark"] .vela-canvas-text-editor button { color: #edf0ea; }
+.vela-app[data-theme="dark"] .vela-image-node-quick-actions button:hover,
+.vela-app[data-theme="dark"] .vela-image-node-quick-actions button:focus-visible,
+.vela-app[data-theme="dark"] .vela-image-node-quick-actions button[data-active="true"],
+.vela-app[data-theme="dark"] .vela-canvas-text-editor button:hover { background: #30342f; }
+.vela-app[data-theme="dark"] .vela-canvas-text-editor label > span { color: #a9aea6; }
+.vela-app[data-theme="dark"] .vela-canvas-text-editor textarea,
+.vela-app[data-theme="dark"] .vela-canvas-text-editor input[type="number"],
+.vela-app[data-theme="dark"] .vela-canvas-text-editor input[type="text"] {
+  background: #171917;
+  border-color: #3b403a;
+  color: #edf0ea;
+}
 .vela-app[data-theme="dark"] .vela-node-controls__composer textarea { color: #edf0ea; }
 .vela-app[data-theme="dark"] .vela-node-controls__chips button,
 .vela-app[data-theme="dark"] .vela-video-mode button,

@@ -7,8 +7,9 @@
 
 import React, { useState } from 'react';
 import { NodeData, NodeGroup, NodeType } from '../../types';
-import { Boxes, Download, Plus, Ungroup } from 'lucide-react';
+import { Boxes, Download, Plus, Type, Ungroup } from 'lucide-react';
 import { getCanvasNodeBounds } from '../../utils/nodeGeometry';
+import { CanvasTextStyleEditor } from './CanvasTextStyleEditor';
 
 interface SelectionBoundingBoxProps {
     selectedNodes: NodeData[];
@@ -16,8 +17,10 @@ interface SelectionBoundingBoxProps {
     viewport: { x: number; y: number; zoom: number };
     onGroup: () => void;
     onUngroup: () => void;
+    onUpdateGroup?: (updates: Partial<Pick<NodeGroup, 'label' | 'labelColor' | 'labelFontSize'>>) => void;
     onBoundingBoxPointerDown: (e: React.PointerEvent) => void;
     showToolbar?: boolean;
+    canvasTheme?: 'dark' | 'light';
     onBatchConnectorPointerDown?: (
         event: React.PointerEvent,
         nodeIds: string[],
@@ -147,8 +150,10 @@ export const SelectionBoundingBox: React.FC<SelectionBoundingBoxProps> = ({
     viewport,
     onGroup,
     onUngroup,
+    onUpdateGroup,
     onBoundingBoxPointerDown,
     showToolbar = true,
+    canvasTheme = 'light',
     onBatchConnectorPointerDown
 }) => {
     // ============================================================================
@@ -156,6 +161,7 @@ export const SelectionBoundingBox: React.FC<SelectionBoundingBoxProps> = ({
     // ============================================================================
 
     const [downloadStatus, setDownloadStatus] = useState<'idle' | 'downloading' | 'done'>('idle');
+    const [isGroupLabelEditorOpen, setIsGroupLabelEditorOpen] = useState(false);
     // ============================================================================
     // CALCULATIONS
     // ============================================================================
@@ -256,6 +262,53 @@ export const SelectionBoundingBox: React.FC<SelectionBoundingBoxProps> = ({
                 }
             }}
         >
+            {group && (
+                <>
+                    <button
+                        type="button"
+                        className="vela-group-label"
+                        style={{
+                            color: group.labelColor || (canvasTheme === 'dark' ? '#f5f5f3' : '#242422'),
+                            fontSize: `${Math.max(12, Math.min(72, group.labelFontSize || 22))}px`,
+                            transform: `scale(${uiScale})`,
+                            transformOrigin: 'bottom left'
+                        }}
+                        aria-label={`编辑分组名称：${group.label}`}
+                        title="双击或点击可编辑工作流名称"
+                        onPointerDown={(event) => event.stopPropagation()}
+                        onDoubleClick={(event) => {
+                            event.stopPropagation();
+                            setIsGroupLabelEditorOpen(true);
+                        }}
+                        onClick={(event) => {
+                            event.stopPropagation();
+                            if (showToolbar) setIsGroupLabelEditorOpen(true);
+                        }}
+                    >
+                        {group.label || '工作流分组'}
+                    </button>
+                    {isGroupLabelEditorOpen && onUpdateGroup && (
+                        <div
+                            className="vela-group-text-editor-anchor"
+                            style={{ transform: `scale(${uiScale})` }}
+                        >
+                            <CanvasTextStyleEditor
+                                heading="工作流分组名称"
+                                value={group.label || ''}
+                                color={group.labelColor || (canvasTheme === 'dark' ? '#f5f5f3' : '#242422')}
+                                fontSize={group.labelFontSize || 22}
+                                placeholder="例如：买家秀首图生成"
+                                onChange={(updates) => onUpdateGroup({
+                                    label: updates.value ?? group.label,
+                                    labelColor: updates.color ?? group.labelColor,
+                                    labelFontSize: updates.fontSize ?? group.labelFontSize
+                                })}
+                                onClose={() => setIsGroupLabelEditorOpen(false)}
+                            />
+                        </div>
+                    )}
+                </>
+            )}
             {onBatchConnectorPointerDown && (
                 <button
                     type="button"
@@ -319,6 +372,16 @@ export const SelectionBoundingBox: React.FC<SelectionBoundingBoxProps> = ({
                         {isGrouped ? <Ungroup size={16} aria-hidden="true" /> : <Boxes size={16} aria-hidden="true" />}
                         {isGrouped ? '取消打组' : '打组'}
                     </button>
+                    {isGrouped && onUpdateGroup && (
+                        <button
+                            type="button"
+                            onClick={() => setIsGroupLabelEditorOpen(true)}
+                            className="bg-white border border-neutral-300 hover:bg-neutral-50 text-neutral-900 text-sm px-4 py-2.5 rounded-lg flex items-center gap-2 transition-colors shadow-sm whitespace-nowrap"
+                        >
+                            <Type size={16} aria-hidden="true" />
+                            命名
+                        </button>
+                    )}
                     <button
                         type="button"
                         onClick={() => void downloadSelectedImages()}

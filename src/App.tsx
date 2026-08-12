@@ -288,7 +288,8 @@ export default function App() {
     cleanupInvalidGroups,
     getCommonGroup,
     sortGroupNodes,
-    renameGroup
+    renameGroup,
+    updateGroup
   } = useGroupManagement();
 
   // History for undo/redo
@@ -365,7 +366,7 @@ export default function App() {
       handleSaveWithTracking();
     }
     lastLoadingCountRef.current = currentLoadingCount;
-  }, [nodes, canvasTitle]);
+  }, [nodes, groups, canvasTitle]);
 
   // Update saved state after workflow save
   const handleSaveWithTracking = async () => {
@@ -698,8 +699,9 @@ export default function App() {
     handleContextUpload
   } = useAssetHandlers({ nodes, viewport, contextMenu, setNodes });
 
-  const { uploadFilesAt, retryCanvasUpload } = useCanvasFileUpload({
+  const { uploadFilesAt, retryCanvasUpload, replaceNodeImage } = useCanvasFileUpload({
     projectId: workflowId,
+    nodes,
     viewport,
     setNodes,
     setSelectedNodeIds,
@@ -1692,6 +1694,7 @@ export default function App() {
                 connectionTargetState={connectionHoveredNodeId === node.id ? connectionTargetState : null}
                 onOpenEditor={handleOpenEditor}
                 onUpload={handleUpload}
+                onReplaceImage={replaceNodeImage}
                 onRetryUpload={retryCanvasUpload}
                 onExpand={handleExpandImage}
                 onDragStart={handleNodeDragStart}
@@ -1724,6 +1727,10 @@ export default function App() {
                 const group = getCommonGroup(selectedNodeIds);
                 if (group) ungroupNodes(group.id, setNodes);
               }}
+              onUpdateGroup={(updates) => {
+                const group = getCommonGroup(selectedNodeIds);
+                if (group) updateGroup(group.id, updates);
+              }}
               onBoundingBoxPointerDown={(e) => {
                 // Start dragging all selected nodes when clicking on bounding box
                 e.stopPropagation();
@@ -1732,6 +1739,7 @@ export default function App() {
                 }
               }}
               onBatchConnectorPointerDown={handleSelectionConnectorPointerDown}
+              canvasTheme={canvasTheme}
             />
           )}
 
@@ -1755,6 +1763,7 @@ export default function App() {
                 viewport={viewport}
                 onGroup={() => { }} // Already grouped
                 onUngroup={() => ungroupNodes(group.id, setNodes)}
+                onUpdateGroup={(updates) => updateGroup(group.id, updates)}
                 onBoundingBoxPointerDown={(e) => {
                   // Select all nodes in this group and start dragging
                   e.stopPropagation();
@@ -1765,6 +1774,7 @@ export default function App() {
                   }
                 }}
                 showToolbar={false}
+                canvasTheme={canvasTheme}
                 onBatchConnectorPointerDown={handleSelectionConnectorPointerDown}
               />
             );

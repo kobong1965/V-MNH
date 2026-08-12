@@ -29,7 +29,7 @@ export const useGroupManagement = () => {
     const groupNodes = (
         nodeIds: string[],
         onUpdateNodes: (updater: (prev: NodeData[]) => NodeData[]) => void,
-        label: string = 'New Group'
+        label: string = '工作流分组'
     ): string => {
         const groupId = crypto.randomUUID();
 
@@ -218,6 +218,15 @@ export const useGroupManagement = () => {
         ));
     };
 
+    const updateGroup = (
+        groupId: string,
+        updates: Partial<Pick<NodeGroup, 'label' | 'labelColor' | 'labelFontSize'>>
+    ): void => {
+        setGroups(prev => prev.map(group =>
+            group.id === groupId ? { ...group, ...updates } : group
+        ));
+    };
+
     // ============================================================================
     // RETURN
     // ============================================================================
@@ -232,6 +241,7 @@ export const useGroupManagement = () => {
         getGroupById,
         getCommonGroup,
         sortGroupNodes,
-        renameGroup
+        renameGroup,
+        updateGroup
     };
 };

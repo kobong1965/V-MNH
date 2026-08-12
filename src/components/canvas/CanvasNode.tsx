@@ -6,7 +6,7 @@
  */
 
 import React from 'react';
-import { CheckSquare, Crop, Download, Film, Image as ImageIcon, Square, X } from 'lucide-react';
+import { CheckSquare, Crop, Download, Film, Image as ImageIcon, Square, Type, Upload, X } from 'lucide-react';
 import { NodeData, NodeStatus, NodeType } from '../../types';
 import { NodeConnectors } from './NodeConnectors';
 import { NodeContent } from './NodeContent';
@@ -14,6 +14,7 @@ import { NodeControls } from './NodeControls';
 import { ChangeAnglePanel } from './ChangeAnglePanel';
 import { VelaNodeControls } from '../../vela/components/VelaNodeControls';
 import type { VelaProfile } from '../../vela/services/profileService';
+import { CanvasTextStyleEditor } from './CanvasTextStyleEditor';
 import {
   getCanvasNodeHeight,
   getCanvasNodeWidth,
@@ -45,6 +46,7 @@ interface CanvasNodeProps {
   connectionTargetState?: 'compatible' | 'incompatible' | null;
   onOpenEditor?: (nodeId: string) => void;
   onUpload?: (nodeId: string, imageDataUrl: string) => void;
+  onReplaceImage?: (nodeId: string, file: File) => void;
   onRetryUpload?: (nodeId: string) => void;
   onExpand?: (imageUrl: string) => void;
   onDragStart?: (nodeId: string, hasContent: boolean) => void;
@@ -88,6 +90,7 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
   connectionTargetState,
   onOpenEditor,
   onUpload,
+  onReplaceImage,
   onRetryUpload,
   onExpand,
   onDragStart,
@@ -112,6 +115,7 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
   const [editedTitle, setEditedTitle] = React.useState(data.title || data.type);
   const [isSelectingResultDownloads, setIsSelectingResultDownloads] = React.useState(false);
   const [selectedResultIndexes, setSelectedResultIndexes] = React.useState<number[]>([]);
+  const [isAnnotationEditorOpen, setIsAnnotationEditorOpen] = React.useState(false);
   const titleInputRef = React.useRef<HTMLInputElement>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const resizeSessionRef = React.useRef<{
@@ -131,6 +135,7 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
 
   // Theme helper
   const isDark = canvasTheme === 'dark';
+  const defaultAnnotationColor = isDark ? '#f5f5f3' : '#242422';
 
   // Inverse scaling for toolbar to keep it readable when zooming out
   // Same logic as NodeControls prompt bar
@@ -273,6 +278,7 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
 
   const isMediaResult = Boolean(data.resultUrl) && (data.type === NodeType.IMAGE || data.type === NodeType.VIDEO);
   const isVideoResult = data.type === NodeType.VIDEO;
+  const isImageNode = data.type === NodeType.IMAGE;
   const resultUrls = data.resultUrls?.filter(Boolean).length
     ? data.resultUrls.filter(Boolean)
     : data.resultUrl
@@ -727,6 +733,97 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
 
       {/* Relative wrapper for the Image Card to allow absolute positioning of controls below it */}
       <div className={`relative group/nodecard ${data.kind ? 'vela-node-stack' : ''}`}>
+        {isImageNode && (
+          <>
+            <div
+              className="vela-image-node-quick-actions"
+              style={{ transform: `scale(${localScale})`, transformOrigin: 'top right' }}
+              role="toolbar"
+              aria-label="图片节点操作"
+              onPointerDown={(event) => event.stopPropagation()}
+            >
+              <button
+                type="button"
+                aria-label="替换图片"
+                title="上传新图片并覆盖当前节点"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <Upload size={16} aria-hidden="true" />
+              </button>
+              <button
+                type="button"
+                aria-label="编辑文字标注"
+                title="添加或修改节点说明"
+                data-active={isAnnotationEditorOpen}
+                onClick={() => setIsAnnotationEditorOpen((open) => !open)}
+              >
+                <Type size={16} aria-hidden="true" />
+              </button>
+            </div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*,.avif,.bmp,.gif,.jpeg,.jpg,.png,.webp"
+              className="hidden"
+              aria-label="选择用于覆盖节点的图片"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (file) {
+                  if (onReplaceImage) {
+                    onReplaceImage(data.id, file);
+                  } else if (onUpload) {
+                    const reader = new FileReader();
+                    reader.onload = () => onUpload(data.id, String(reader.result || ''));
+                    reader.readAsDataURL(file);
+                  }
+                }
+                event.target.value = '';
+              }}
+            />
+            {data.annotationText?.trim() && (
+              <div
+                className="vela-node-annotation"
+                style={{
+                  color: data.annotationColor || defaultAnnotationColor,
+                  fontSize: `${Math.max(12, Math.min(72, data.annotationFontSize || 20))}px`,
+                  transform: `scale(${localScale})`,
+                  transformOrigin: 'top left'
+                }}
+                onDoubleClick={(event) => {
+                  event.stopPropagation();
+                  setIsAnnotationEditorOpen(true);
+                }}
+                title="双击编辑文字标注"
+              >
+                {data.annotationText}
+              </div>
+            )}
+            {isAnnotationEditorOpen && (
+              <div
+                className="vela-node-text-editor-anchor"
+                style={{ transform: `scale(${1 / zoom})` }}
+              >
+                <CanvasTextStyleEditor
+                  heading="节点文字标注"
+                  value={data.annotationText || ''}
+                  color={data.annotationColor || defaultAnnotationColor}
+                  fontSize={data.annotationFontSize || 20}
+                  placeholder="例如：商品裤子参考图"
+                  onChange={(updates) => onUpdate(data.id, {
+                    annotationText: updates.value ?? data.annotationText,
+                    annotationColor: updates.color ?? data.annotationColor ?? defaultAnnotationColor,
+                    annotationFontSize: updates.fontSize ?? data.annotationFontSize ?? 20
+                  })}
+                  onClear={() => {
+                    onUpdate(data.id, { annotationText: '' });
+                    setIsAnnotationEditorOpen(false);
+                  }}
+                  onClose={() => setIsAnnotationEditorOpen(false)}
+                />
+              </div>
+            )}
+          </>
+        )}
         {selected && showControls && isMediaResult && (
           <div
             className={`vela-media-toolbar ${isSelectingResultDownloads ? 'is-result-selection' : ''}`}
@@ -834,25 +931,6 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
                     </svg>
                     Upload
                   </button>
-                  {/* Hidden file input for upload */}
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file && onUpload) {
-                        const reader = new FileReader();
-                        reader.onload = (ev) => {
-                          const dataUrl = ev.target?.result as string;
-                          onUpload(data.id, dataUrl);
-                        };
-                        reader.readAsDataURL(file);
-                      }
-                      e.target.value = ''; // Reset for re-upload
-                    }}
-                  />
                 </>
               )}
               {/* Expand Button */}

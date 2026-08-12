@@ -12,6 +12,7 @@ type CanvasPoint = { x: number; y: number };
 
 interface CanvasFileUploadOptions {
   projectId?: string | null;
+  nodes: NodeData[];
   viewport: Viewport;
   setNodes: Dispatch<SetStateAction<NodeData[]>>;
   setSelectedNodeIds: Dispatch<SetStateAction<string[]>>;
@@ -95,8 +96,11 @@ const readMediaSize = (url: string, type: 'image' | 'video') => new Promise<{ re
   video.src = url;
 });
 
-export const useCanvasFileUpload = ({ projectId, viewport, setNodes, setSelectedNodeIds, onFeedback }: CanvasFileUploadOptions) => {
+export const useCanvasFileUpload = ({ projectId, nodes, viewport, setNodes, setSelectedNodeIds, onFeedback }: CanvasFileUploadOptions) => {
   const filesByNodeId = useRef(new Map<string, File>());
+  const replacementSnapshots = useRef(new Map<string, Pick<NodeData,
+    'status' | 'resultUrl' | 'resultUrls' | 'resultCollectionExpanded' | 'resultAspectRatio' | 'aspectRatio' | 'errorMessage' | 'uploadProgress'
+  >>());
 
   const updateUpload = useCallback((nodeId: string, updates: Partial<NodeData>) => {
     setNodes((current) => current.map((node) => node.id === nodeId ? { ...node, ...updates } : node));
@@ -106,7 +110,7 @@ export const useCanvasFileUpload = ({ projectId, viewport, setNodes, setSelected
     const mediaKind = getMediaKind(file);
     if (!mediaKind) {
       updateUpload(nodeId, { status: NodeStatus.ERROR, errorMessage: '不支持此文件格式。' });
-      return;
+      return false;
     }
     const isImage = mediaKind === 'image';
     updateUpload(nodeId, { status: NodeStatus.LOADING, uploadProgress: 0, errorMessage: undefined });
@@ -117,18 +121,27 @@ export const useCanvasFileUpload = ({ projectId, viewport, setNodes, setSelected
       const { url } = await persistAsset(projectId, data, file.name, (uploadProgress) => updateUpload(nodeId, { uploadProgress }));
       const media = await readMediaSize(url, isImage ? 'image' : 'video');
       filesByNodeId.current.delete(nodeId);
+      replacementSnapshots.current.delete(nodeId);
       updateUpload(nodeId, {
         status: NodeStatus.SUCCESS,
         resultUrl: url,
+        resultUrls: undefined,
+        resultCollectionExpanded: false,
         resultAspectRatio: media.resultAspectRatio,
         aspectRatio: media.aspectRatio,
         uploadProgress: 100,
         errorMessage: undefined
       });
+      return true;
     } catch (error) {
       const message = error instanceof Error ? error.message : '上传失败，请重试';
-      updateUpload(nodeId, { status: NodeStatus.ERROR, uploadProgress: undefined, errorMessage: message });
+      const previous = replacementSnapshots.current.get(nodeId);
+      replacementSnapshots.current.delete(nodeId);
+      updateUpload(nodeId, previous
+        ? { ...previous, errorMessage: undefined }
+        : { status: NodeStatus.ERROR, uploadProgress: undefined, errorMessage: message });
       onFeedback(`“${file.name}”上传失败：${message}`);
+      return false;
     }
   }, [onFeedback, projectId, updateUpload]);
 
@@ -183,5 +196,35 @@ export const useCanvasFileUpload = ({ projectId, viewport, setNodes, setSelected
     void uploadNode(nodeId, file);
   }, [onFeedback, uploadNode]);
 
-  return { uploadFilesAt, retryCanvasUpload };
+  const replaceNodeImage = useCallback((nodeId: string, file: File) => {
+    if (getMediaKind(file) !== 'image') {
+      onFeedback('请选择 JPG、PNG、WebP 等图片文件。');
+      return;
+    }
+    if (file.size > MAX_FILE_SIZE) {
+      onFeedback(`“${file.name}”超过 100MB，未上传。`);
+      return;
+    }
+    filesByNodeId.current.set(nodeId, file);
+    const node = nodes.find((candidate) => candidate.id === nodeId);
+    if (!node) {
+      onFeedback('当前图片节点不存在，请刷新画布后重试。');
+      return;
+    }
+    replacementSnapshots.current.set(nodeId, {
+      status: node.status,
+      resultUrl: node.resultUrl,
+      resultUrls: node.resultUrls,
+      resultCollectionExpanded: node.resultCollectionExpanded,
+      resultAspectRatio: node.resultAspectRatio,
+      aspectRatio: node.aspectRatio,
+      errorMessage: node.errorMessage,
+      uploadProgress: node.uploadProgress
+    });
+    void uploadNode(nodeId, file).then((succeeded) => {
+      if (succeeded) onFeedback(`已用“${file.name}”覆盖当前图片节点。`);
+    });
+  }, [nodes, onFeedback, uploadNode]);
+
+  return { uploadFilesAt, retryCanvasUpload, replaceNodeImage };
 };

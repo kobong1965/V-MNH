@@ -47,6 +47,9 @@ export interface NodeData {
   jobGroupId?: string; // Durable task group reference (implemented in P2)
   resultUrls?: string[]; // Ordered media results for the active generation batch
   resultCollectionExpanded?: boolean; // Expanded side-by-side batch preview state
+  annotationText?: string; // User-facing note shown above an image node
+  annotationColor?: string; // CSS color for the user-facing node note
+  annotationFontSize?: number; // Canvas-space font size for the user-facing node note
 
   // Text node specific
   textMode?: 'menu' | 'editing'; // For Text nodes: current mode
@@ -154,6 +157,8 @@ export interface NodeGroup {
   id: string;
   nodeIds: string[];
   label: string;
+  labelColor?: string;
+  labelFontSize?: number;
   storyContext?: {
     story: string;
     scripts: any[];

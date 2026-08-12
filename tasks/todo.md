@@ -413,3 +413,21 @@
   - Acceptance：快速划过不显示；持续悬停显示；点击只删除目标连线；深浅色画布可识别。
   - Verify：类型检查、Node 测试、生产构建、浏览器实测、桌面安装连续性检查。
   - Files：`ConnectionsLayer.tsx`、`useConnectionDragging.ts`、`App.tsx`、版本与 QA 文档。
+
+## 0.5.24 图片覆盖与画布文字标注
+
+- [x] T121 图片节点原位覆盖上传
+  - Acceptance：每个图片节点右上角可选本机图片；成功后覆盖当前节点并保留位置、连线、分组和节点 ID。
+  - Verify：浏览器替换后比较节点 ID/parentIds/groupId，保存并重开项目。
+  - Files：`useCanvasFileUpload.ts`、`CanvasNode.tsx`、`App.tsx`。
+- [x] T122 节点说明文字与自由样式
+  - Acceptance：图片上方可显示多行文字，字号 12–72px、颜色可修改并随项目保存。
+  - Verify：浅色/深色画布编辑、键盘操作、项目重开。
+  - Files：`types.ts`、画布标注组件、样式。
+- [x] T123 工作流分组命名与自由样式
+  - Acceptance：分组包围框显示名称；选中整组或双击名称可编辑文字、字号和颜色。
+  - Verify：保存工作流模板后重新插入，分组样式仍存在。
+  - Files：`types.ts`、`useGroupManagement.ts`、`SelectionBoundingBox.tsx`、`App.tsx`。
+- [x] T124 v0.5.24 回归与原位安装
+  - Acceptance：类型、Node 测试、生产构建、浏览器验收和桌面连续性通过；不上传 GitHub。
+  - Verify：原快捷方式打开 v0.5.24，项目、素材和账户数据保留。
