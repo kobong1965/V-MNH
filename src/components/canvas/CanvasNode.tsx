@@ -14,7 +14,15 @@ import { NodeControls } from './NodeControls';
 import { ChangeAnglePanel } from './ChangeAnglePanel';
 import { VelaNodeControls } from '../../vela/components/VelaNodeControls';
 import type { VelaProfile } from '../../vela/services/profileService';
-import { getCanvasNodeWidth } from '../../utils/nodeGeometry';
+import {
+  getCanvasNodeHeight,
+  getCanvasNodeWidth,
+  isResizableTextNode,
+  TEXT_NODE_MAX_HEIGHT,
+  TEXT_NODE_MAX_WIDTH,
+  TEXT_NODE_MIN_HEIGHT,
+  TEXT_NODE_MIN_WIDTH
+} from '../../utils/nodeGeometry';
 
 interface CanvasNodeProps {
   data: NodeData;
@@ -29,6 +37,8 @@ interface CanvasNodeProps {
   showControls?: boolean; // Only show controls when single node is selected (not in group selection)
   onSelect: (id: string) => void;
   onNodePointerDown: (e: React.PointerEvent, id: string) => void;
+  onResizeStart?: (id: string) => void;
+  onResizeEnd?: (id: string) => void;
   onContextMenu: (e: React.MouseEvent, id: string) => void;
   onConnectorDown: (e: React.PointerEvent, id: string, side: 'left' | 'right') => void;
   isHoveredForConnection?: boolean;
@@ -40,7 +50,6 @@ interface CanvasNodeProps {
   onDragStart?: (nodeId: string, hasContent: boolean) => void;
   onDragEnd?: () => void;
   // Text node callbacks
-  onWriteContent?: (nodeId: string) => void;
   onTextToVideo?: (nodeId: string) => void;
   onTextToImage?: (nodeId: string) => void;
   // Image node callbacks
@@ -71,6 +80,8 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
   showControls = true, // Default to true for backward compatibility
   onSelect,
   onNodePointerDown,
+  onResizeStart,
+  onResizeEnd,
   onContextMenu,
   onConnectorDown,
   isHoveredForConnection,
@@ -81,7 +92,6 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
   onExpand,
   onDragStart,
   onDragEnd,
-  onWriteContent,
   onTextToVideo,
   onTextToImage,
   onImageToImage,
@@ -104,10 +114,20 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
   const [selectedResultIndexes, setSelectedResultIndexes] = React.useState<number[]>([]);
   const titleInputRef = React.useRef<HTMLInputElement>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const resizeSessionRef = React.useRef<{
+    pointerId: number;
+    startX: number;
+    startY: number;
+    width: number;
+    height: number;
+  } | null>(null);
 
   const isIdle = data.status === NodeStatus.IDLE || data.status === NodeStatus.ERROR;
   const isLoading = data.status === NodeStatus.LOADING;
   const isSuccess = data.status === NodeStatus.SUCCESS;
+  const canResizeTextNode = isResizableTextNode(data);
+  const textNodeWidth = canResizeTextNode ? getCanvasNodeWidth(data) : undefined;
+  const textNodeHeight = canResizeTextNode ? getCanvasNodeHeight(data) : undefined;
 
   // Theme helper
   const isDark = canvasTheme === 'dark';
@@ -203,6 +223,52 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
     } else if (!trimmed) {
       setEditedTitle(data.title || data.type);
     }
+  };
+
+  const handleTextResizeStart = (event: React.PointerEvent<HTMLButtonElement>) => {
+    if (event.button !== 0 || !canResizeTextNode || !textNodeWidth || !textNodeHeight) return;
+    event.preventDefault();
+    event.stopPropagation();
+    resizeSessionRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      width: textNodeWidth,
+      height: textNodeHeight
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
+    onResizeStart?.(data.id);
+  };
+
+  const handleTextResizeMove = (event: React.PointerEvent<HTMLButtonElement>) => {
+    const session = resizeSessionRef.current;
+    if (!session || session.pointerId !== event.pointerId) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const nextWidth = Math.min(
+      TEXT_NODE_MAX_WIDTH,
+      Math.max(TEXT_NODE_MIN_WIDTH, session.width + (event.clientX - session.startX) / zoom)
+    );
+    const nextHeight = Math.min(
+      TEXT_NODE_MAX_HEIGHT,
+      Math.max(TEXT_NODE_MIN_HEIGHT, session.height + (event.clientY - session.startY) / zoom)
+    );
+    onUpdate(data.id, {
+      canvasWidth: Math.round(nextWidth),
+      canvasHeight: Math.round(nextHeight)
+    });
+  };
+
+  const handleTextResizeEnd = (event: React.PointerEvent<HTMLButtonElement>) => {
+    const session = resizeSessionRef.current;
+    if (!session || session.pointerId !== event.pointerId) return;
+    event.preventDefault();
+    event.stopPropagation();
+    resizeSessionRef.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    onResizeEnd?.(data.id);
   };
 
   const isMediaResult = Boolean(data.resultUrl) && (data.type === NodeType.IMAGE || data.type === NodeType.VIDEO);
@@ -1014,7 +1080,11 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
           className={data.kind
             ? `vela-node-card relative transition-all duration-200 flex flex-col ${selected ? 'is-selected' : ''}`
             : `relative ${data.type === NodeType.VIDEO ? 'w-[385px]' : 'w-[365px]'} rounded-2xl border transition-all duration-300 flex flex-col shadow-2xl ${isDark ? 'bg-[#0f0f0f]' : 'bg-white'} ${selected ? 'border-blue-500/50 ring-1 ring-blue-500/30' : isDark ? 'border-neutral-800' : 'border-neutral-200'}`}
-          style={data.kind ? { width: `${getCanvasNodeWidth(data)}px` } : undefined}
+          style={data.kind
+            ? { width: `${getCanvasNodeWidth(data)}px` }
+            : canResizeTextNode
+              ? { width: `${textNodeWidth}px`, height: `${textNodeHeight}px` }
+              : undefined}
         >
           {/* Header (Editable Title) - Positioned horizontally on top-left side */}
           {isEditingTitle ? (
@@ -1065,7 +1135,6 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
             onExpand={onExpand}
             onDragStart={onDragStart}
             onDragEnd={onDragEnd}
-            onWriteContent={onWriteContent}
             onTextToVideo={onTextToVideo}
             onTextToImage={onTextToImage}
             onImageToImage={onImageToImage}
@@ -1083,6 +1152,21 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
           )}
         </div>
 
+        {canResizeTextNode && (
+          <button
+            type="button"
+            className={`vela-text-node-resize-handle ${selected ? 'is-visible' : ''}`}
+            aria-label="拖动调整文本节点大小"
+            title="拖动调整文本节点大小"
+            onPointerDown={handleTextResizeStart}
+            onPointerMove={handleTextResizeMove}
+            onPointerUp={handleTextResizeEnd}
+            onPointerCancel={handleTextResizeEnd}
+          >
+            <span aria-hidden="true" />
+          </button>
+        )}
+
         {/* Control Panel - Only show when single node is selected (not in group selection) */}
         {/* Hide controls for storyboard-generated scenes */}
         {selected && showControls && data.kind && (
@@ -1094,15 +1178,17 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
               transformOrigin: 'top center'
             }}
           >
-            <VelaNodeControls
-              data={data}
-              isLoading={isLoading}
-              profileName={profileName}
-              profiles={profiles}
-              connectedImageNodes={connectedImageNodes}
-              onUpdate={onUpdate}
-              onGenerate={onGenerate}
-            />
+            {data.type === NodeType.TEXT && data.textMode === 'editing' ? null : (
+              <VelaNodeControls
+                data={data}
+                isLoading={isLoading}
+                profileName={profileName}
+                profiles={profiles}
+                connectedImageNodes={connectedImageNodes}
+                onUpdate={onUpdate}
+                onGenerate={onGenerate}
+              />
+            )}
           </div>
         )}
         {selected && showControls && !data.kind && data.type !== NodeType.TEXT && !(data.prompt && data.prompt.startsWith('Extract panel #')) && (

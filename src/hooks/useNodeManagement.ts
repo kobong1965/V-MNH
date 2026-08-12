@@ -89,6 +89,10 @@ export const useNodeManagement = () => {
             videoGenerationMode: kind === 'gpt-video' ? 'text-to-video' : undefined
         };
 
+        if (type === NodeType.TEXT && (!kind || ['prompt', 'gpt-prompt-optimizer'].includes(kind))) {
+            newNode.textMode = 'menu';
+        }
+
         setNodes(prev => [...prev, newNode]);
         setSelectedNodeIds([newNode.id]);
 

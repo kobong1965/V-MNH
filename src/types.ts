@@ -29,6 +29,8 @@ export interface NodeData {
   title?: string; // Custom title for the node (defaults to type if not set)
   x: number;
   y: number;
+  canvasWidth?: number; // User-resized canvas width for resizable text nodes
+  canvasHeight?: number; // User-resized canvas height for resizable text nodes
   prompt: string;
   status: NodeStatus;
   resultUrl?: string; // Image URL or Video URL

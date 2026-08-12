@@ -1,5 +1,31 @@
 # Vela 第一版任务清单（已审批）
 
+## 0.5.6 框选与素材盘增强
+
+- [x] T095 首页精简与素材盘入口
+  - Acceptance：三个冗余首页入口移除；画布顶部“算力”替换为可用“素材盘”。
+- [x] T096 多选整组操作与空白拖线
+  - Acceptance：选中暗部明确；拖任一选中节点整组移动；可打组；批量拖线空白处弹菜单并自动连接。
+- [x] T097 生成素材自动入盘与节点操作
+  - Acceptance：成功图片/视频自动出现、可回插画布；图片可裁剪，图片/视频可下载。
+- [x] T098 自动化、视觉 QA 与 0.5.6 原位安装
+  - Acceptance：测试、构建、同图对照通过；旧快捷方式打开 0.5.6 且用户数据保留。
+
+规格：`docs/FEATURE_SELECTION_ASSET_TRAY_V056.md`。
+
+## 0.5.5 画布效率增强
+
+- [x] T091 素材预览和固定尺寸生成输入框
+  - Acceptance：连接素材显示编号缩略图；100% 与 44% 缩放下输入面板屏幕宽度误差不超过 4px。
+- [x] T092 框选后的批量连线
+  - Acceptance：一次拖线把全部兼容选中节点加入目标 `parentIds`，顺序稳定且去重。
+- [x] T093 本地工作流模板
+  - Acceptance：可保存、查看、使用、删除；新画布插入时不携带密钥、任务状态或历史结果。
+- [x] T094 自动化、视觉 QA 与 0.5.5 原位安装
+  - Acceptance：测试、构建、同图对照通过；旧桌面快捷方式打开 0.5.5 且用户数据保留。
+
+规格：`docs/FEATURE_CANVAS_WORKFLOW_V055.md`。
+
 > 每项任务控制在一个专注开发会话内。
 > `[ ]` 未开始，`[~]` 进行中，`[x]` 完成。P0、P1、P2 已完成。
 
@@ -296,3 +322,94 @@
 - [ ] 更多 GPT/图片供应商适配器。
 - [ ] 算力自动选择与跨实例调度。
 - [ ] 可选自动更新和代码签名。
+
+## 0.5 设置、API 与更新（用户已确认实施）
+
+- [x] T080 增加主页左下角 API/设置导航
+  - Acceptance：入口固定可见，页面切换不影响项目数据。
+  - Verify：键盘导航和桌面截图。
+  - Files：`VelaHome.tsx`、`VelaHome.css`、两个新页面组件。
+
+- [x] T081 外观与画布主题持久化
+  - Acceptance：跟随系统/明亮/深色与白/黑画布独立生效并在重启后恢复。
+  - Verify：刷新、重启和系统主题模拟。
+  - Files：设置服务、App、主题 CSS、设置页。
+
+- [x] T082 统一大模型 API 配置
+  - Acceptance：可保存提示词、图片、视频模型及端点，Key 不回传前端。
+  - Verify：Profile 仓储/API 测试和前端表单测试。
+  - Files：Profile 契约、仓储、服务、API 页面、测试。
+
+- [x] T083 GitHub Releases 更新
+  - Acceptance：桌面端可检查、下载、安装更新并报告进度和错误；Web 端安全降级。
+  - Verify：纯函数测试、无 Release 错误态和打包版 IPC 冒烟测试。
+  - Files：Electron updater、preload、设置页、package 配置、测试。
+
+- [x] T084 构建、视觉 QA 和 Windows 覆盖安装
+  - Acceptance：Node 测试、TypeScript、Vite、NSIS、明暗界面 QA 全部通过。
+  - Verify：`npm run test:node`、`npx tsc --noEmit`、`npm run build`、`npm run build:win`。
+  - Files：`design-qa.md`、release 产物。
+## 0.5.7 Boundless Seedance 2.5 视频生成
+
+- [x] T103 Boundless Profile 契约与预设
+  - Acceptance：预设自动填写 `https://boundles.cc/v1`、`seedance-2.5-720p`、`/videos`、`/videos/{id}`，Key 仍只在本机加密保存。
+  - Verify：Profile 单元测试与 API 页面构建。
+  - Files：`profileRepository.js`、`profileService.ts`、`VelaApiSettings.tsx`、对应测试。
+- [x] T104 视频 Provider 异步协议
+  - Acceptance：提交保存 task id，轮询 queued/processing/completed/failed，进度和失败原因规范化，未知提交结果不自动重提。
+  - Verify：Provider 单元测试。
+  - Files：`openAiCompatibleProvider.js`、`openAiCompatibleProvider.test.js`。
+- [x] T105 Runtime 与视频媒体持久化
+  - Acceptance：任务中心收到进度；完成视频下载至项目；日志、任务和媒体索引不含 Key。
+  - Verify：Runtime、MediaStore、JobRepository 测试。
+  - Files：`runtime.js`、`jobRepository.js`、`mediaStore.js`、对应测试。
+- [x] T106 API 视频节点与双模式交互
+  - Acceptance：节点可从菜单创建，支持文生/图生切换、1:1/16:9/9:16、4–180 秒、720p、账户选择和错误提示。
+  - Verify：节点目录测试、TypeScript 生产构建、键盘交互检查。
+  - Files：`nodeCatalog.ts`、`types.ts`、`VelaNodeControls.tsx`、`App.tsx`、画布相关组件和样式。
+- [x] T107 0.5.7 回归、打包与原位安装
+  - Acceptance：全部测试与构建通过；原安装路径、原桌面快捷方式和用户数据不变；新节点可从同一快捷方式打开。
+  - Verify：`npm run test:node`、`npm run build`、`npm run build:win`、安装后启动与界面截图。
+  - Files：`package.json`、`package-lock.json`、`CHANGELOG.md`、安装产物。
+
+## 0.5.8 Boundless 实账户校正
+
+- [x] T108 实账户连接与模型发现
+  - Acceptance：已加密保存的 SD2.5 账户连接成功，`seedance-2.5-720p` 存在于模型列表。
+- [x] T109 预设与账户路径校正
+  - Acceptance：新预设默认 720p 实测模型；提交 `/videos`，查询 `/videos/{id}`，超时 1800 秒。
+- [x] T110 0.5.8 回归、打包与原位安装
+  - Acceptance：测试、构建、Windows 打包通过；原快捷方式、密钥、项目与素材保留。
+
+## 0.5.9 视频任务续查与数据连续性
+
+- [x] T111 unknown 状态容错与原任务续查
+  - Acceptance：新任务短暂返回 unknown 时继续轮询；已有 task ID 的重试不得再次提交。
+- [x] T112 节点生成幂等保护
+  - Acceptance：参数未变化且存在可恢复远端任务时，生成按钮复用原任务组。
+- [x] T113 桌面数据目录双重锁定
+  - Acceptance：环境变量失效时仍通过显式启动参数读取原 API、任务、项目和素材目录。
+- [x] T114 恢复、回归、0.5.9 原位安装与连续性验收
+  - Acceptance：两个历史远端任务恢复成功；测试与构建通过；原快捷方式和用户数据不变。
+
+## 0.5.15 买家秀参考效果与分享包
+
+- [x] T115 两个通用提示词与 7 套参考效果
+  - Acceptance：所有首图节点共用提示词 A，所有分裂节点共用提示词 B；裤子属性只从商品图读取；7 张参考图与对应分支相邻。
+- [x] T116 项目分享包导出与导入
+  - Acceptance：首页可下载 `.vela` 分享包并导入为独立项目；包中包含素材但不包含 API Key。
+- [x] T117 导入素材链接改写与回归测试
+  - Acceptance：导入后节点素材 URL 使用新项目 ID，素材可读取，哈希校验与明文密钥检查继续通过。
+- [x] T118 0.5.17 打包与原位更新
+  - Acceptance：测试、构建、Windows 安装包通过；原安装位置、桌面快捷方式和用户数据不变。
+
+## 0.5.18 买家秀独立姿势结果
+
+- [x] T119 五个独立图片任务与动作分配
+  - Acceptance：姿势节点生成 5 次时，每个任务只请求 1 张完整图片，提示词禁止五宫格并为五个任务提供不同自然动作。
+- [x] T120 本地项目升级与原位测试版更新
+  - Acceptance：现有“买家秀”项目不重建，只更新 7 个姿势节点；原快捷方式、API 配置、项目与素材保留，不导出工作流分享包。
+- [x] v0.5.23：已有连线悬停 2 秒显示剪刀按钮
+  - Acceptance：快速划过不显示；持续悬停显示；点击只删除目标连线；深浅色画布可识别。
+  - Verify：类型检查、Node 测试、生产构建、浏览器实测、桌面安装连续性检查。
+  - Files：`ConnectionsLayer.tsx`、`useConnectionDragging.ts`、`App.tsx`、版本与 QA 文档。

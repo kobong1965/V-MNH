@@ -6,8 +6,9 @@
  */
 
 import React, { useRef, useState, useEffect } from 'react';
-import { Check, CircleAlert, Loader2, Maximize2, ImageIcon as ImageIcon, Film, Upload, Pencil, Video, GripVertical, Download, Expand, Shrink, HardDrive, FileText, Music2, WandSparkles } from 'lucide-react';
+import { Check, CircleAlert, Loader2, Maximize2, ImageIcon as ImageIcon, Film, Upload, Video, GripVertical, Download, Expand, Shrink, HardDrive, FileText, Music2, WandSparkles } from 'lucide-react';
 import { NodeData, NodeStatus, NodeType } from '../../types';
+import { getCanvasNodeHeight, isResizableTextNode } from '../../utils/nodeGeometry';
 
 interface NodeContentProps {
     data: NodeData;
@@ -23,7 +24,6 @@ interface NodeContentProps {
     onDragStart?: (nodeId: string, hasContent: boolean) => void;
     onDragEnd?: () => void;
     // Text node callbacks
-    onWriteContent?: (nodeId: string) => void;
     onTextToVideo?: (nodeId: string) => void;
     onTextToImage?: (nodeId: string) => void;
     // Image node callbacks
@@ -50,7 +50,6 @@ export const NodeContent: React.FC<NodeContentProps> = ({
     onExpand,
     onDragStart,
     onDragEnd,
-    onWriteContent,
     onTextToVideo,
     onTextToImage,
     onImageToImage,
@@ -81,6 +80,8 @@ export const NodeContent: React.FC<NodeContentProps> = ({
             : [];
     const hasResultCollection = isImageType && resultUrls.length > 1;
     const isResultCollectionExpanded = hasResultCollection && Boolean(data.resultCollectionExpanded);
+    const resizableTextHeight = isResizableTextNode(data) ? getCanvasNodeHeight(data) : undefined;
+    const isTextEditing = isResizableTextNode(data) && data.textMode === 'editing';
 
     // Sync local state ONLY when data.prompt changes externally (not from our own update)
     useEffect(() => {
@@ -235,10 +236,23 @@ export const NodeContent: React.FC<NodeContentProps> = ({
                 </div>
                 )
             ) : data.kind ? (
-                <div className={`vela-node-content ${selected ? 'is-selected' : ''}`}>
+                <div
+                    className={`vela-node-content ${selected ? 'is-selected' : ''}`}
+                    style={resizableTextHeight ? { height: `${resizableTextHeight}px`, minHeight: `${resizableTextHeight}px` } : undefined}
+                >
                     {(data.kind === 'prompt' || data.kind === 'gpt-prompt-optimizer') ? (
-                        <div className="vela-prompt-content">
-                            {localPrompt ? (
+                        <div
+                            className={`vela-prompt-content ${isTextEditing ? 'is-editing' : 'is-viewing'}`}
+                            onDoubleClick={(event) => {
+                                if (isTextEditing) return;
+                                if ((event.target as HTMLElement).closest('button, input, textarea, select')) return;
+                                event.preventDefault();
+                                event.stopPropagation();
+                                onUpdate?.(data.id, { textMode: 'editing' });
+                            }}
+                            title={isTextEditing ? undefined : '双击编辑文字'}
+                        >
+                            {isTextEditing ? (
                                 <textarea
                                     value={localPrompt}
                                     onChange={(event) => handleTextChange(event.target.value)}
@@ -246,17 +260,30 @@ export const NodeContent: React.FC<NodeContentProps> = ({
                                     onWheel={(event) => event.stopPropagation()}
                                     onBlur={() => {
                                         if (updateTimeoutRef.current) clearTimeout(updateTimeoutRef.current);
-                                        if (localPrompt !== data.prompt) onUpdate?.(data.id, { prompt: localPrompt });
+                                        onUpdate?.(data.id, {
+                                            ...(localPrompt !== data.prompt ? { prompt: localPrompt } : {}),
+                                            textMode: 'menu'
+                                        });
+                                    }}
+                                    onKeyDown={(event) => {
+                                        if (event.key === 'Escape') {
+                                            event.preventDefault();
+                                            event.currentTarget.blur();
+                                        }
                                     }}
                                     placeholder={data.kind === 'prompt' ? '写下你想生成的画面、动作和镜头…' : '连接提示词后，在这里查看或修改优化结果…'}
                                     aria-label={data.kind === 'prompt' ? '提示词内容' : '优化后的提示词'}
+                                    autoFocus
                                 />
+                            ) : localPrompt ? (
+                                <div className="vela-prompt-content__view" aria-label={data.kind === 'prompt' ? '提示词内容' : '优化后的提示词'}>
+                                    {localPrompt}
+                                </div>
                             ) : (
                                 <>
                                     <FileText className="vela-node-hero-icon" size={54} strokeWidth={1.5} aria-hidden="true" />
                                     <div className="vela-node-suggestions">
-                                        <span>尝试：</span>
-                                        <button type="button" onClick={() => onWriteContent?.(data.id)}><FileText size={16} />自己编写内容</button>
+                                        <span>双击节点输入文字，或尝试：</span>
                                         <button type="button" onClick={() => onTextToVideo?.(data.id)}><Video size={16} />文生视频</button>
                                         <button type="button" onClick={() => onTextToImage?.(data.id)}><ImageIcon size={16} />图片反推提示词</button>
                                         <button type="button"><Music2 size={16} />文字生音乐</button>
@@ -265,17 +292,29 @@ export const NodeContent: React.FC<NodeContentProps> = ({
                             )}
                         </div>
                     ) : data.kind === 'image-input' ? (
-                        <button
-                            type="button"
+                        <div
                             className="vela-node-content__upload"
-                            onPointerDown={(event) => event.stopPropagation()}
-                            onClick={() => fileInputRef.current?.click()}
+                            role="button"
+                            tabIndex={0}
+                            aria-label="双击选择参考图片"
+                            title="单击拖动节点，双击选择参考图片"
+                            onDoubleClick={(event) => {
+                                event.preventDefault();
+                                event.stopPropagation();
+                                fileInputRef.current?.click();
+                            }}
+                            onKeyDown={(event) => {
+                                if (event.key !== 'Enter' && event.key !== ' ') return;
+                                event.preventDefault();
+                                event.stopPropagation();
+                                fileInputRef.current?.click();
+                            }}
                         >
                             {isLoading ? <Loader2 className="vela-spin" size={24} aria-hidden="true" /> : <Upload size={22} aria-hidden="true" />}
                             {isLoading && <span>上传进度 {data.uploadProgress ?? 0}%</span>}
-                            <strong>选择参考图片</strong>
-                            <span>支持 JPG、PNG、WebP</span>
-                        </button>
+                            <strong>双击选择参考图片</strong>
+                            <span>单击拖动节点 · 支持 JPG、PNG、WebP</span>
+                        </div>
                     ) : (
                         <div className="vela-node-content__placeholder">
                             {['gpt-video', 'h3-video'].includes(data.kind) ? <Film className="vela-node-hero-icon" size={56} strokeWidth={1.5} aria-hidden="true" /> : <ImageIcon className="vela-node-hero-icon" size={56} strokeWidth={1.5} aria-hidden="true" />}
@@ -289,10 +328,21 @@ export const NodeContent: React.FC<NodeContentProps> = ({
                 </div>
             ) : data.type === NodeType.TEXT ? (
                 /* Text Node - Menu or Editing Mode */
-                <div className={`relative w-full bg-[#1a1a1a] rounded-2xl overflow-hidden ${selected ? 'ring-1 ring-blue-500/30' : ''}`}>
-                    {data.textMode === 'editing' ? (
+                <div
+                    className={`relative w-full h-full bg-[#1a1a1a] rounded-2xl overflow-hidden ${selected ? 'ring-1 ring-blue-500/30' : ''}`}
+                    style={resizableTextHeight ? { minHeight: `${resizableTextHeight}px` } : undefined}
+                    onDoubleClick={(event) => {
+                        if (isTextEditing) return;
+                        if ((event.target as HTMLElement).closest('button, input, textarea, select')) return;
+                        event.preventDefault();
+                        event.stopPropagation();
+                        onUpdate?.(data.id, { textMode: 'editing' });
+                    }}
+                    title={isTextEditing ? undefined : '双击编辑文字'}
+                >
+                    {isTextEditing ? (
                         /* Editing Mode - Text Area */
-                        <div className="p-4">
+                        <div className="p-4 h-full flex flex-col">
                             <textarea
                                 value={localPrompt}
                                 onChange={(e) => handleTextChange(e.target.value)}
@@ -303,13 +353,20 @@ export const NodeContent: React.FC<NodeContentProps> = ({
                                     if (updateTimeoutRef.current) {
                                         clearTimeout(updateTimeoutRef.current);
                                     }
-                                    if (localPrompt !== data.prompt) {
-                                        onUpdate?.(data.id, { prompt: localPrompt });
+                                    onUpdate?.(data.id, {
+                                        ...(localPrompt !== data.prompt ? { prompt: localPrompt } : {}),
+                                        textMode: 'menu'
+                                    });
+                                }}
+                                onKeyDown={(event) => {
+                                    if (event.key === 'Escape') {
+                                        event.preventDefault();
+                                        event.currentTarget.blur();
                                     }
                                 }}
                                 placeholder="Write your text content here..."
                                 className="w-full bg-transparent text-white text-sm resize-none outline-none placeholder:text-neutral-600"
-                                style={{ minHeight: data.isPromptExpanded ? '300px' : '150px' }}
+                                style={{ minHeight: 0, flex: 1 }}
                                 autoFocus
                             />
                             {/* Expand/Shrink Button */}
@@ -325,6 +382,10 @@ export const NodeContent: React.FC<NodeContentProps> = ({
                                 </button>
                             </div>
                         </div>
+                    ) : localPrompt ? (
+                        <div className="h-full overflow-auto whitespace-pre-wrap p-4 text-sm leading-relaxed text-white">
+                            {localPrompt}
+                        </div>
                     ) : (
                         /* Menu Mode - Show Options */
                         <div className="p-5 flex flex-col gap-4">
@@ -335,11 +396,7 @@ export const NodeContent: React.FC<NodeContentProps> = ({
 
                             {/* Menu Options */}
                             <div className="flex flex-col gap-1">
-                                <TextNodeMenuItem
-                                    icon={<Pencil size={16} />}
-                                    label="Write your own content"
-                                    onClick={() => onWriteContent?.(data.id)}
-                                />
+                                <div className="px-3 py-2 text-sm text-neutral-300">双击节点编写文字</div>
                                 <TextNodeMenuItem
                                     icon={<Video size={16} />}
                                     label="Text to Video"

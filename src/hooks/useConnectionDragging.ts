@@ -406,6 +406,26 @@ export const useConnectionDragging = () => {
         return true;
     };
 
+    /** Deletes one explicit connection, used by the delayed scissors action. */
+    const deleteConnection = (
+        parentId: string,
+        childId: string,
+        onUpdateNodes: (updater: (prev: NodeData[]) => NodeData[]) => void
+    ) => {
+        let deleted = false;
+
+        onUpdateNodes(prev => prev.map(node => {
+            if (node.id !== childId || !node.parentIds?.includes(parentId)) return node;
+            deleted = true;
+            return { ...node, parentIds: node.parentIds.filter(id => id !== parentId) };
+        }));
+
+        if (selectedConnection?.parentId === parentId && selectedConnection?.childId === childId) {
+            setSelectedConnection(null);
+        }
+        return deleted;
+    };
+
     // ============================================================================
     // RETURN
     // ============================================================================
@@ -423,6 +443,7 @@ export const useConnectionDragging = () => {
         updateConnectionDrag,
         completeConnectionDrag,
         handleEdgeClick,
+        deleteConnection,
         deleteSelectedConnection
     };
 };

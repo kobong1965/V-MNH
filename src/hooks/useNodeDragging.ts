@@ -10,6 +10,8 @@ import { NodeData, Viewport } from '../types';
 
 interface DragNode {
     id: string;
+    lastClientX: number;
+    lastClientY: number;
 }
 
 export const useNodeDragging = () => {
@@ -40,7 +42,11 @@ export const useNodeDragging = () => {
         // The middle button is reserved globally for canvas panning.
         if (e.button !== 0) return;
         e.stopPropagation();
-        dragNodeRef.current = { id };
+        dragNodeRef.current = {
+            id,
+            lastClientX: e.clientX,
+            lastClientY: e.clientY
+        };
         setIsDragging(true);
 
         // Select the node
@@ -65,9 +71,18 @@ export const useNodeDragging = () => {
     ): boolean => {
         if (!dragNodeRef.current) return false;
 
-        const nodeId = dragNodeRef.current.id;
-        const zoomAdjustedDx = e.movementX / viewport.zoom;
-        const zoomAdjustedDy = e.movementY / viewport.zoom;
+        const dragNode = dragNodeRef.current;
+        const nodeId = dragNode.id;
+        const clientDx = e.clientX - dragNode.lastClientX;
+        const clientDy = e.clientY - dragNode.lastClientY;
+
+        dragNode.lastClientX = e.clientX;
+        dragNode.lastClientY = e.clientY;
+
+        if (clientDx === 0 && clientDy === 0) return true;
+
+        const zoomAdjustedDx = clientDx / viewport.zoom;
+        const zoomAdjustedDy = clientDy / viewport.zoom;
 
         // If dragging a selected node, move all selected nodes
         const nodesToMove = selectedNodeIds.includes(nodeId) && selectedNodeIds.length > 1

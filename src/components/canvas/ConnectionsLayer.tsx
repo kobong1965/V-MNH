@@ -6,6 +6,7 @@
  */
 
 import React from 'react';
+import { Scissors } from 'lucide-react';
 import { NodeData, NodeStatus, NodeType, Viewport } from '../../types';
 import { calculateConnectionPath } from '../../utils/connectionHelpers';
 import { getCanvasNodeHeight, getCanvasNodeWidth } from '../../utils/nodeGeometry';
@@ -20,7 +21,7 @@ import { getCanvasNodeHeight, getCanvasNodeWidth } from '../../utils/nodeGeometr
  * @param parentNode - Optional parent node (used for Editor nodes to determine width when they have input content)
  */
 const getNodeWidth = (node: NodeData, parentNode?: NodeData): number => {
-    if (node.kind) {
+    if (node.kind || node.type === NodeType.TEXT) {
         return getCanvasNodeWidth(node, parentNode);
     }
     // Image Editor with input from parent: width depends on aspect ratio
@@ -76,7 +77,8 @@ const getNodeHeight = (node: NodeData, parentNode?: NodeData): number => {
     const baseWidth = getNodeWidth(node, parentNode);
     const hasContent = node.status === NodeStatus.SUCCESS && node.resultUrl;
 
-    if (node.kind) {
+    if (node.kind || node.type === NodeType.TEXT) {
+        if (node.type === NodeType.TEXT) return getCanvasNodeHeight(node, parentNode);
         if (node.resultCollectionExpanded && (node.resultUrls?.length || 0) > 1) {
             return getCanvasNodeHeight(node, parentNode);
         }
@@ -190,6 +192,7 @@ interface ConnectionsLayerProps {
     // Selection
     selectedConnection: Connection | null;
     onEdgeClick: (e: React.MouseEvent, parentId: string, childId: string) => void;
+    onDeleteConnection: (parentId: string, childId: string) => void;
     canvasTheme?: 'dark' | 'light';
 }
 
@@ -201,8 +204,41 @@ export const ConnectionsLayer: React.FC<ConnectionsLayerProps> = ({
     tempConnectionEnd,
     selectedConnection,
     onEdgeClick,
+    onDeleteConnection,
     canvasTheme = 'dark'
 }) => {
+    const [hoveredConnection, setHoveredConnection] = React.useState<Connection | null>(null);
+    const [scissorsConnection, setScissorsConnection] = React.useState<Connection | null>(null);
+    const hoverTimerRef = React.useRef<number | null>(null);
+
+    const sameConnection = (left: Connection | null, right: Connection | null) =>
+        left?.parentId === right?.parentId && left?.childId === right?.childId;
+
+    const clearHoverTimer = React.useCallback(() => {
+        if (hoverTimerRef.current === null) return;
+        window.clearTimeout(hoverTimerRef.current);
+        hoverTimerRef.current = null;
+    }, []);
+
+    const handleConnectionEnter = React.useCallback((connection: Connection) => {
+        clearHoverTimer();
+        setHoveredConnection(connection);
+        if (sameConnection(scissorsConnection, connection)) return;
+        setScissorsConnection(null);
+        hoverTimerRef.current = window.setTimeout(() => {
+            setScissorsConnection(connection);
+            hoverTimerRef.current = null;
+        }, 2000);
+    }, [clearHoverTimer, scissorsConnection]);
+
+    const handleConnectionLeave = React.useCallback(() => {
+        clearHoverTimer();
+        setHoveredConnection(null);
+        setScissorsConnection(null);
+    }, [clearHoverTimer]);
+
+    React.useEffect(() => () => clearHoverTimer(), [clearHoverTimer]);
+
     // Render permanent connections between nodes
     const connections: React.ReactNode[] = [];
 
@@ -220,11 +256,18 @@ export const ConnectionsLayer: React.FC<ConnectionsLayerProps> = ({
 
             const path = calculateConnectionPath(startX, startY, endX, endY, 'right');
             const isSelected = selectedConnection?.parentId === parentId && selectedConnection?.childId === node.id;
+            const connection = { parentId, childId: node.id };
+            const isHovered = sameConnection(hoveredConnection, connection);
+            const showScissors = sameConnection(scissorsConnection, connection);
+            const midpointX = (startX + endX) / 2;
+            const midpointY = (startY + endY) / 2;
 
             connections.push(
                 <g
                     key={`${parent.id}-${node.id}`}
                     onClick={(e) => onEdgeClick(e, parent.id, node.id)}
+                    onPointerEnter={() => handleConnectionEnter(connection)}
+                    onPointerLeave={handleConnectionLeave}
                     className="cursor-pointer group pointer-events-auto"
                 >
                     <path
@@ -239,13 +282,40 @@ export const ConnectionsLayer: React.FC<ConnectionsLayerProps> = ({
                         stroke={isSelected
                             ? (canvasTheme === 'dark' ? '#f4f4f5' : '#2f3338')
                             : (canvasTheme === 'dark' ? '#8b9098' : '#5f6368')}
-                        strokeWidth={isSelected ? 3 : 2.4}
+                        strokeWidth={isSelected || isHovered ? 3 : 2.4}
                         fill="none"
                         vectorEffect="non-scaling-stroke"
                         strokeLinecap="round"
                         strokeLinejoin="round"
                         className={`transition-colors ${!isSelected ? (canvasTheme === 'dark' ? 'group-hover:stroke-neutral-200' : 'group-hover:stroke-neutral-800') : ''}`}
                     />
+                    {showScissors && (
+                        <foreignObject
+                            x={midpointX - 18 / viewport.zoom}
+                            y={midpointY - 18 / viewport.zoom}
+                            width={36 / viewport.zoom}
+                            height={36 / viewport.zoom}
+                            overflow="visible"
+                            onClick={(event) => event.stopPropagation()}
+                        >
+                            <button
+                                type="button"
+                                aria-label="删除这条连线"
+                                title="取消连线"
+                                className={`vela-connection-cut ${canvasTheme === 'dark' ? 'is-dark' : ''}`}
+                                style={{ transform: `scale(${1 / viewport.zoom})`, transformOrigin: 'top left' }}
+                                onClick={(event) => {
+                                    event.stopPropagation();
+                                    clearHoverTimer();
+                                    setHoveredConnection(null);
+                                    setScissorsConnection(null);
+                                    onDeleteConnection(parent.id, node.id);
+                                }}
+                            >
+                                <Scissors size={16} strokeWidth={2} aria-hidden="true" />
+                            </button>
+                        </foreignObject>
+                    )}
                 </g>
             );
         });

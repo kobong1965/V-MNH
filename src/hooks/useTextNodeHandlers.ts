@@ -21,13 +21,6 @@ export const useTextNodeHandlers = ({
     setSelectedNodeIds
 }: UseTextNodeHandlersOptions) => {
     /**
-     * Handle "Write your own content" - switches Text node to editing mode
-     */
-    const handleWriteContent = (nodeId: string) => {
-        updateNode(nodeId, { textMode: 'editing' });
-    };
-
-    /**
      * Handle "Text to Video" - switches to editing mode and creates connected Video node
      */
     const handleTextToVideo = (nodeId: string) => {
@@ -58,9 +51,8 @@ export const useTextNodeHandlers = ({
             videoGenerationMode: 'text-to-video'
         };
 
-        // Update text node to editing mode with linked video
+        // Keep the text node in drag mode; editing is entered only by double-click.
         updateNode(nodeId, {
-            textMode: 'editing',
             linkedVideoNodeId: videoNodeId
         });
 
@@ -94,18 +86,12 @@ export const useTextNodeHandlers = ({
             parentIds: [nodeId]
         };
 
-        // Update text node to editing mode
-        updateNode(nodeId, {
-            textMode: 'editing'
-        });
-
         // Add image node
         setNodes(prev => [...prev, imageNode]);
         setSelectedNodeIds([nodeId]);
     };
 
     return {
-        handleWriteContent,
         handleTextToVideo,
         handleTextToImage
     };

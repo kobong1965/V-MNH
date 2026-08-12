@@ -1017,6 +1017,50 @@
   overflow: visible;
 }
 
+.vela-text-node-resize-handle {
+  align-items: flex-end;
+  background: transparent;
+  border: 0;
+  bottom: -8px;
+  cursor: nwse-resize;
+  display: flex;
+  height: 28px;
+  justify-content: flex-end;
+  opacity: 0;
+  padding: 5px;
+  position: absolute;
+  right: -8px;
+  touch-action: none;
+  transition: opacity .15s ease;
+  width: 28px;
+  z-index: 140;
+}
+
+.vela-text-node-resize-handle span {
+  border-bottom: 2px solid #6c6c68;
+  border-right: 2px solid #6c6c68;
+  border-radius: 0 0 3px;
+  display: block;
+  height: 12px;
+  width: 12px;
+}
+
+.vela-canvas-node:hover .vela-text-node-resize-handle,
+.vela-text-node-resize-handle.is-visible,
+.vela-text-node-resize-handle:focus-visible {
+  opacity: 1;
+}
+
+.vela-text-node-resize-handle:hover span,
+.vela-text-node-resize-handle:focus-visible span {
+  border-color: #11110f;
+}
+
+.vela-text-node-resize-handle:focus-visible {
+  outline: 2px solid #6b8afd;
+  outline-offset: 1px;
+}
+
 .vela-result-collection {
   position: relative;
   width: 100%;
@@ -1355,7 +1399,32 @@
 
 .vela-canvas-node--prompt .vela-prompt-content,
 .vela-canvas-node--gpt-prompt-optimizer .vela-prompt-content {
-  min-height: 368px;
+  height: 100%;
+  min-height: 100%;
+}
+
+.vela-prompt-content.is-viewing {
+  cursor: grab;
+}
+
+.vela-prompt-content.is-viewing:active {
+  cursor: grabbing;
+}
+
+.vela-prompt-content__view {
+  align-self: stretch;
+  color: #242422;
+  cursor: inherit;
+  font-size: var(--vela-font-body);
+  height: 100%;
+  line-height: 1.65;
+  overflow: auto;
+  overflow-wrap: anywhere;
+  padding: 24px;
+  text-align: left;
+  user-select: none;
+  white-space: pre-wrap;
+  width: 100%;
 }
 
 .vela-node-content textarea,
@@ -1371,6 +1440,12 @@
   padding: 24px;
   resize: none;
   width: 100%;
+}
+
+.vela-canvas-node--prompt .vela-prompt-content textarea,
+.vela-canvas-node--gpt-prompt-optimizer .vela-prompt-content textarea {
+  height: 100%;
+  min-height: 100%;
 }
 
 .vela-node-content textarea::placeholder {
@@ -1417,12 +1492,22 @@
 
 .vela-node-content__upload {
   border: 0;
-  cursor: pointer;
+  cursor: grab;
+  user-select: none;
 }
 
 .vela-node-content__upload:hover {
   background: #f8f8f6;
   color: #4c4c49;
+}
+
+.vela-node-content__upload:active {
+  cursor: grabbing;
+}
+
+.vela-node-content__upload:focus-visible {
+  box-shadow: inset 0 0 0 2px #20201f;
+  outline: none;
 }
 
 .vela-node-content__upload strong {
@@ -2232,4 +2317,39 @@
   .vela-shortcut-column:nth-child(2) {
     border-right: 0;
   }
+}
+.vela-connection-cut {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #b8b8b3;
+  border-radius: 999px;
+  box-shadow: 0 4px 14px rgb(0 0 0 / 14%);
+  color: #343432;
+  cursor: pointer;
+  display: flex;
+  height: 36px;
+  justify-content: center;
+  padding: 0;
+  width: 36px;
+}
+
+.vela-connection-cut:hover,
+.vela-connection-cut:focus-visible {
+  background: #20201f;
+  border-color: #20201f;
+  color: #ffffff;
+  outline: none;
+}
+
+.vela-connection-cut.is-dark {
+  background: #292927;
+  border-color: #686865;
+  color: #f4f4f2;
+}
+
+.vela-connection-cut.is-dark:hover,
+.vela-connection-cut.is-dark:focus-visible {
+  background: #f4f4f2;
+  border-color: #f4f4f2;
+  color: #20201f;
 }

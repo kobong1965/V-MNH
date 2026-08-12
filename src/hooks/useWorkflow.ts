@@ -6,7 +6,7 @@
  */
 
 import React, { useState, useCallback, Dispatch, SetStateAction } from 'react';
-import { NodeData, NodeGroup, Viewport } from '../types';
+import { NodeData, NodeGroup, NodeType, Viewport } from '../types';
 import { loadVelaProject, saveVelaProject } from '../vela/services/projectService';
 
 interface UseWorkflowOptions {
@@ -74,7 +74,9 @@ export const useWorkflow = ({
                 setWorkflowId(workflow.id);
                 setCanvasTitle(workflow.name || '未命名工作区');
                 setEditingTitleValue(workflow.name || '未命名工作区');
-                setNodes(workflow.nodes || []);
+                setNodes((workflow.nodes || []).map((node) => (
+                    node.type === NodeType.TEXT ? { ...node, textMode: 'menu' as const } : node
+                )));
                 setGroups(workflow.groups || []); // Restore groups
                 setViewport(workflow.viewport || { x: 0, y: 0, zoom: 1 });
                 // Reset selection

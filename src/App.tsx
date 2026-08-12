@@ -129,6 +129,7 @@ export default function App() {
   const [isCanvasFileDragActive, setIsCanvasFileDragActive] = useState(false);
   const canvasFileDragDepthRef = useRef(0);
   const [canvasUploadFeedback, setCanvasUploadFeedback] = useState<string | null>(null);
+  const [isResizingNode, setIsResizingNode] = useState(false);
   const [isTaskCenterOpen, setIsTaskCenterOpen] = useState(false);
   const [isAssetTrayOpen, setIsAssetTrayOpen] = useState(false);
   const [isWorkflowTemplatePanelOpen, setIsWorkflowTemplatePanelOpen] = useState(false);
@@ -255,6 +256,7 @@ export default function App() {
     updateConnectionDrag,
     completeConnectionDrag,
     handleEdgeClick,
+    deleteConnection,
     deleteSelectedConnection
   } = useConnectionDragging();
 
@@ -675,7 +677,6 @@ export default function App() {
 
   // Text node handlers
   const {
-    handleWriteContent,
     handleTextToVideo,
     handleTextToImage
   } = useTextNodeHandlers({ nodes, updateNode, setNodes, setSelectedNodeIds });
@@ -1158,13 +1159,13 @@ export default function App() {
     }
 
     // Don't push to history while dragging (wait until drag ends)
-    if (isDragging) {
+    if (isDragging || isResizingNode) {
       return;
     }
 
     // Push to history when nodes or groups change
     pushHistory({ nodes, groups });
-  }, [nodes, groups, isDragging]);
+  }, [nodes, groups, isDragging, isResizingNode]);
 
   // Apply the complete canvas snapshot when undo/redo is triggered.
   useEffect(() => {
@@ -1614,6 +1615,7 @@ export default function App() {
               tempConnectionEnd={tempConnectionEnd}
               selectedConnection={selectedConnection}
               onEdgeClick={handleEdgeClick}
+              onDeleteConnection={(parentId, childId) => deleteConnection(parentId, childId, setNodes)}
             />
           </svg>
 
@@ -1682,6 +1684,8 @@ export default function App() {
                   if (!selectedNodeIds.includes(id)) setSelectedNodeIds([id]);
                   handleNodeContextMenu(event, id);
                 }}
+                onResizeStart={() => setIsResizingNode(true)}
+                onResizeEnd={() => setIsResizingNode(false)}
                 onSelect={(id) => setSelectedNodeIds([id])}
                 onConnectorDown={handleConnectorPointerDown}
                 isHoveredForConnection={connectionHoveredNodeId === node.id}
@@ -1692,7 +1696,6 @@ export default function App() {
                 onExpand={handleExpandImage}
                 onDragStart={handleNodeDragStart}
                 onDragEnd={handleNodeDragEnd}
-                onWriteContent={handleWriteContent}
                 onTextToVideo={handleTextToVideo}
                 onTextToImage={handleTextToImage}
                 onImageToImage={handleImageToImage}
