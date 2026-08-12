@@ -6,12 +6,14 @@ export interface VelaWorkflowTemplateSummary {
   createdAt: string;
   updatedAt: string;
   nodeCount: number;
+  assetCount: number;
 }
 
-export interface VelaWorkflowTemplate extends Omit<VelaWorkflowTemplateSummary, 'nodeCount'> {
+export interface VelaWorkflowTemplate extends Omit<VelaWorkflowTemplateSummary, 'nodeCount' | 'assetCount'> {
   schemaVersion: number;
   nodes: NodeData[];
   groups: NodeGroup[];
+  assets?: Array<{ id: string; kind: 'image' | 'video'; mime: string; bytes: number }>;
 }
 
 const parseResponse = async <T>(response: Response): Promise<T> => {
@@ -26,11 +28,18 @@ export const listVelaWorkflowTemplates = async () =>
 export const getVelaWorkflowTemplate = async (id: string) =>
   parseResponse<VelaWorkflowTemplate>(await fetch(`/api/vela/workflows/${id}`));
 
-export const saveVelaWorkflowTemplate = async (input: { name: string; nodes: NodeData[]; groups: NodeGroup[] }) =>
+export const saveVelaWorkflowTemplate = async (input: { name: string; projectId: string; nodes: NodeData[]; groups: NodeGroup[] }) =>
   parseResponse<VelaWorkflowTemplate>(await fetch('/api/vela/workflows', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input)
+  }));
+
+export const instantiateVelaWorkflowTemplate = async (id: string, projectId: string) =>
+  parseResponse<VelaWorkflowTemplate>(await fetch(`/api/vela/workflows/${id}/instantiate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ projectId })
   }));
 
 export const deleteVelaWorkflowTemplate = async (id: string) => {

@@ -1535,6 +1535,8 @@ export default function App() {
         isOpen={isWorkflowTemplatePanelOpen}
         nodes={nodes}
         groups={groups}
+        currentProjectId={workflowId || undefined}
+        onEnsureProjectId={handleSaveWorkflow}
         onClose={() => setIsWorkflowTemplatePanelOpen(false)}
         onUse={handleUseWorkflowTemplate}
       />

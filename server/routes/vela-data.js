@@ -131,6 +131,16 @@ router.get('/vela/workflows/:id', (req, res) => {
   } catch (error) { handleError(res, error); }
 });
 
+router.post('/vela/workflows/:id/instantiate', (req, res) => {
+  try {
+    const template = runtime(req).workflowTemplates.instantiate(req.params.id, {
+      projectId: req.body?.projectId
+    });
+    if (!template) return res.status(404).json({ error: 'Workflow does not exist' });
+    res.status(201).json(template);
+  } catch (error) { handleError(res, error); }
+});
+
 router.delete('/vela/workflows/:id', (req, res) => {
   try {
     if (!runtime(req).workflowTemplates.delete(req.params.id)) return res.status(404).json({ error: '工作流不存在' });

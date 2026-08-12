@@ -737,7 +737,6 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
           <>
             <div
               className="vela-image-node-quick-actions"
-              style={{ transform: `scale(${localScale})`, transformOrigin: 'top right' }}
               role="toolbar"
               aria-label="图片节点操作"
               onPointerDown={(event) => event.stopPropagation()}
@@ -785,9 +784,7 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
                 className="vela-node-annotation"
                 style={{
                   color: data.annotationColor || defaultAnnotationColor,
-                  fontSize: `${Math.max(12, Math.min(72, data.annotationFontSize || 20))}px`,
-                  transform: `scale(${localScale})`,
-                  transformOrigin: 'top left'
+                  fontSize: `${Math.max(12, Math.min(72, data.annotationFontSize || 20))}px`
                 }}
                 onDoubleClick={(event) => {
                   event.stopPropagation();

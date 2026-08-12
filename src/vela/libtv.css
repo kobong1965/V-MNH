@@ -1058,13 +1058,13 @@
 
 .vela-node-annotation {
   font-weight: 650;
-  left: 18px;
+  bottom: calc(100% + 8px);
+  left: 0;
   line-height: 1.25;
   max-width: 100%;
   overflow-wrap: anywhere;
   pointer-events: auto;
   position: absolute;
-  top: 31px;
   white-space: pre-wrap;
   z-index: 114;
 }

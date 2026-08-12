@@ -50,7 +50,11 @@ export class VelaRuntime {
     this.dataDirectory = path.resolve(dataDirectory);
     this.eventHub = new EventHub();
     this.projectStore = new ProjectStore({ dataDirectory: this.dataDirectory, projectsDirectory });
-    this.workflowTemplates = new WorkflowTemplateStore({ dataDirectory: this.dataDirectory });
+    this.media = new ProjectMediaStore(this.projectStore, { fetchImpl: mediaFetch });
+    this.workflowTemplates = new WorkflowTemplateStore({
+      dataDirectory: this.dataDirectory,
+      projectMediaStore: this.media
+    });
     this.database = new VelaDatabase(path.join(this.dataDirectory, 'database', 'vela.sqlite'));
     this.secretProtector = secretProtector || new SecretProtector({
       keyPath: path.join(this.dataDirectory, 'secrets', 'profile-master.key')
@@ -59,7 +63,6 @@ export class VelaRuntime {
     this.gptProvider = gptProvider || new OpenAiCompatibleProvider();
     this.gptModelCache = new Map();
     this.comfyProvider = comfyProvider || new ComfyUiProvider();
-    this.media = new ProjectMediaStore(this.projectStore, { fetchImpl: mediaFetch });
     this.jobs = new JobRepository(this.database, {
       onEvent: (event) => this.eventHub.publish(redactSecrets(event))
     });

@@ -137,6 +137,67 @@ test('project media API persists canvas uploads inside the current project', asy
   }
 });
 
+test('workflow API bundles project media and clones it into the target project', async () => {
+  const fixture = await createServer();
+  try {
+    const sourceProject = await requestJson(`${fixture.baseUrl}/projects`, {
+      method: 'POST',
+      body: JSON.stringify({ name: 'Workflow source', nodes: [], groups: [], viewport: { x: 0, y: 0, zoom: 1 } })
+    });
+    const targetProject = await requestJson(`${fixture.baseUrl}/projects`, {
+      method: 'POST',
+      body: JSON.stringify({ name: 'Workflow target', nodes: [], groups: [], viewport: { x: 0, y: 0, zoom: 1 } })
+    });
+    const raw = Buffer.from('workflow-bundled-image');
+    const uploaded = await requestJson(`${fixture.baseUrl}/projects/${sourceProject.data.id}/media`, {
+      method: 'POST',
+      body: JSON.stringify({
+        data: `data:image/png;base64,${raw.toString('base64')}`,
+        fileName: 'reference.png'
+      })
+    });
+    const saved = await requestJson(`${fixture.baseUrl}/workflows`, {
+      method: 'POST',
+      body: JSON.stringify({
+        name: 'Bundled buyer-show workflow',
+        projectId: sourceProject.data.id,
+        nodes: [{
+          id: 'source', type: 'Image', kind: 'image-input', x: 0, y: 0,
+          status: 'success', resultUrl: uploaded.data.url, resultUrls: [uploaded.data.url]
+        }],
+        groups: []
+      })
+    });
+    assert.equal(saved.response.status, 201);
+    assert.equal(saved.data.assets.length, 1);
+    assert.equal(saved.data.nodes[0].status, 'success');
+    assert.match(saved.data.nodes[0].resultUrl, /^vela-workflow-media:/);
+    assert.equal(saved.data.nodes[0].resultUrl, saved.data.nodes[0].resultUrls[0]);
+    assert.doesNotMatch(JSON.stringify(saved.data), new RegExp(sourceProject.data.id));
+
+    const list = await requestJson(`${fixture.baseUrl}/workflows`);
+    assert.equal(list.data[0].assetCount, 1);
+    const instantiated = await requestJson(`${fixture.baseUrl}/workflows/${saved.data.id}/instantiate`, {
+      method: 'POST',
+      body: JSON.stringify({ projectId: targetProject.data.id })
+    });
+    assert.equal(instantiated.response.status, 201);
+    assert.match(instantiated.data.nodes[0].resultUrl, new RegExp(`^/api/vela/projects/${targetProject.data.id}/media/`));
+    assert.equal(instantiated.data.nodes[0].resultUrl, instantiated.data.nodes[0].resultUrls[0]);
+    const downloaded = await fetch(new URL(instantiated.data.nodes[0].resultUrl, fixture.baseUrl));
+    assert.deepEqual(Buffer.from(await downloaded.arrayBuffer()), raw);
+    assert.equal(fixture.runtime.media.list(targetProject.data.id).length, 1);
+
+    const deleted = await fetch(`${fixture.baseUrl}/workflows/${saved.data.id}`, { method: 'DELETE' });
+    assert.equal(deleted.status, 204);
+    const retained = await fetch(new URL(instantiated.data.nodes[0].resultUrl, fixture.baseUrl));
+    assert.equal(retained.status, 200);
+    assert.deepEqual(Buffer.from(await retained.arrayBuffer()), raw);
+  } finally {
+    await fixture.close();
+  }
+});
+
 test('project media API rejects unsupported data URLs as user input errors', async () => {
   const fixture = await createServer();
   try {

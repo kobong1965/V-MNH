@@ -153,6 +153,41 @@ export class ProjectMediaStore {
     return { ...record, url: `/api/vela/projects/${projectId}/media/${id}/file` };
   }
 
+  saveCopiedMedia(projectId, { data, mime, fileName, source = {} } = {}) {
+    const directory = this.projectStore.findProjectDirectory(projectId);
+    if (!directory) throw new Error(`Project not found: ${projectId}`);
+    const normalizedMime = String(mime || '').toLowerCase();
+    const extension = extensionForMime(normalizedMime);
+    const kind = normalizedMime.startsWith('video/') ? 'video' : normalizedMime.startsWith('image/') ? 'image' : null;
+    if (!extension || !kind) throw new Error(`Unsupported workflow material format: ${normalizedMime || 'unknown'}`);
+    const buffer = Buffer.isBuffer(data) ? data : Buffer.from(data || []);
+    const maxBytes = kind === 'video' ? MAX_VIDEO_BYTES : MAX_IMAGE_BYTES;
+    if (!buffer.length || buffer.length > maxBytes) {
+      throw new Error(`Workflow ${kind} material is empty or exceeds the size limit`);
+    }
+    const id = crypto.randomUUID();
+    const relativePath = `inputs/${kind}s/${id}.${extension}`;
+    atomicWriteFile(path.join(directory, ...relativePath.split('/')), buffer);
+    const record = {
+      id,
+      projectId,
+      kind,
+      relativePath,
+      mime: normalizedMime,
+      bytes: buffer.length,
+      sha256: sha256(buffer),
+      createdAt: new Date().toISOString(),
+      source: {
+        type: 'workflow-template',
+        fileName: String(fileName || `workflow-material.${extension}`).slice(0, 255),
+        ...source
+      }
+    };
+    const indexPath = this.indexPath(projectId);
+    atomicWriteJson(indexPath, [...this.list(projectId), record]);
+    return { ...record, url: `/api/vela/projects/${projectId}/media/${id}/file` };
+  }
+
   async saveProviderImage(projectId, result, metadata = {}, downloadOptions = {}) {
     const directory = this.projectStore.findProjectDirectory(projectId);
     if (!directory) throw new Error(`Project not found: ${projectId}`);
