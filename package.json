@@ -1,7 +1,7 @@
 {
   "name": "vela-ai-canvas",
   "private": true,
-  "version": "0.5.25",
+  "version": "0.5.39",
   "repository": {
     "type": "git",
     "url": "https://github.com/kobong1965/V-MNH.git"
@@ -59,7 +59,7 @@
     "appId": "cc.yman.vela",
     "productName": "Vela AI视频画布",
     "artifactName": "Vela-Setup-${version}-${arch}.${ext}",
-    "asar": true,
+    "asar": false,
     "asarUnpack": [
       "node_modules/sharp/**/*",
       "node_modules/@img/**/*"

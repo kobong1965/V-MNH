@@ -73,7 +73,7 @@ export const useContextMenuHandlers = ({
         const sourceNode = nodes.find(n => n.id === nodeId);
         if (!sourceNode) return;
 
-        const sourceWidth = sourceNode.kind && ['prompt', 'gpt-prompt-optimizer'].includes(sourceNode.kind) ? 370 : 656;
+        const sourceWidth = sourceNode.kind && ['prompt', 'gpt-prompt-optimizer', 'video-director', 'competitor-script-analyzer'].includes(sourceNode.kind) ? 520 : 656;
         const anchor = point || {
             x: (sourceNode.x + (direction === 'right' ? sourceWidth : 0)) * viewport.zoom + viewport.x,
             y: (sourceNode.y + 185) * viewport.zoom + viewport.y

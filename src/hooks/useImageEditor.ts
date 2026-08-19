@@ -99,14 +99,28 @@ export const useImageEditor = ({ nodes, updateNode }: UseImageEditorOptions) => 
      * Handler for image upload in Image nodes
      * Detects the actual aspect ratio of the uploaded image
      */
-    const handleUpload = useCallback((nodeId: string, imageDataUrl: string) => {
+    const handleUpload = useCallback((nodeId: string, mediaDataUrl: string) => {
+        if (mediaDataUrl.startsWith('data:video/')) {
+            const video = document.createElement('video');
+            video.preload = 'metadata';
+            video.onloadedmetadata = () => {
+                updateNode(nodeId, {
+                    resultUrl: mediaDataUrl,
+                    resultAspectRatio: video.videoWidth && video.videoHeight ? `${video.videoWidth}/${video.videoHeight}` : undefined,
+                    status: NodeStatus.SUCCESS
+                });
+            };
+            video.onerror = () => updateNode(nodeId, { resultUrl: mediaDataUrl, status: NodeStatus.SUCCESS });
+            video.src = mediaDataUrl;
+            return;
+        }
         // Detect image dimensions and calculate aspect ratio
         const img = new Image();
         img.onload = () => {
             const resultAspectRatio = `${img.naturalWidth}/${img.naturalHeight}`;
             const aspectRatio = getClosestAspectRatio(img.naturalWidth, img.naturalHeight);
             updateNode(nodeId, {
-                resultUrl: imageDataUrl,
+                resultUrl: mediaDataUrl,
                 resultAspectRatio,
                 aspectRatio,
                 status: NodeStatus.SUCCESS
@@ -115,11 +129,11 @@ export const useImageEditor = ({ nodes, updateNode }: UseImageEditorOptions) => 
         img.onerror = () => {
             // Fallback without aspect ratio
             updateNode(nodeId, {
-                resultUrl: imageDataUrl,
+                resultUrl: mediaDataUrl,
                 status: NodeStatus.SUCCESS
             });
         };
-        img.src = imageDataUrl;
+        img.src = mediaDataUrl;
     }, [updateNode]);
 
     return {

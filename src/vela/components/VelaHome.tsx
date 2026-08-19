@@ -1,7 +1,6 @@
 import {
-  Clock3,
+  BarChart3,
   Download,
-  FolderKanban,
   Home,
   ImageIcon,
   Loader2,
@@ -26,17 +25,20 @@ import {
 import type { VelaProfile } from '../services/profileService';
 import type { AppearanceMode, CanvasColorMode } from '../services/settingsService';
 import { VelaApiSettings } from './VelaApiSettings';
+import { VelaDataDashboard } from './VelaDataDashboard';
+import { VelaEcommerceWorkflows } from './VelaEcommerceWorkflows';
 import { VelaSettings } from './VelaSettings';
 import './VelaHome.css';
 
 interface VelaHomeProps {
-  page: 'home' | 'api' | 'settings';
+  page: 'home' | 'dashboard' | 'api' | 'settings';
   theme: 'light' | 'dark';
   currentProjectId?: string;
   onCreate: () => Promise<void>;
+  onCreateWorkflow: (workflowId: string) => Promise<void>;
   onOpen: (projectId: string) => Promise<void>;
   onProjectDeleted: (projectId: string) => void;
-  onNavigate: (page: 'home' | 'api' | 'settings') => void;
+  onNavigate: (page: 'home' | 'dashboard' | 'api' | 'settings') => void;
   profiles: VelaProfile[];
   profilesError?: string | null;
   onProfilesChanged: () => void | Promise<unknown>;
@@ -45,18 +47,6 @@ interface VelaHomeProps {
   onAppearanceChange: (value: AppearanceMode) => void;
   onCanvasChange: (value: CanvasColorMode) => void;
 }
-
-const formatUpdatedAt = (value: string) => {
-  const updatedAt = new Date(value);
-  const elapsed = Date.now() - updatedAt.getTime();
-  const minutes = Math.max(1, Math.round(elapsed / 60_000));
-  if (minutes < 60) return `${minutes} 分钟前`;
-  const hours = Math.round(minutes / 60);
-  if (hours < 24) return `${hours} 小时前`;
-  const days = Math.round(hours / 24);
-  if (days < 7) return `${days} 天前`;
-  return updatedAt.toLocaleDateString('zh-CN', { month: 'long', day: 'numeric' });
-};
 
 function ProjectThumbnail({ project, compact = false }: { project: VelaProjectSummary; compact?: boolean }) {
   const [failed, setFailed] = useState(false);
@@ -83,6 +73,7 @@ export function VelaHome({
   theme,
   currentProjectId,
   onCreate,
+  onCreateWorkflow,
   onOpen,
   onProjectDeleted,
   onNavigate,
@@ -95,26 +86,23 @@ export function VelaHome({
   onCanvasChange
 }: VelaHomeProps) {
   const [projects, setProjects] = useState<VelaProjectSummary[]>([]);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [menuKey, setMenuKey] = useState<string | null>(null);
   const [renameTarget, setRenameTarget] = useState<VelaProjectSummary | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<VelaProjectSummary | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const [busy, setBusy] = useState(false);
+  const [creatingWorkflowId, setCreatingWorkflowId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
   const packageInputRef = useRef<HTMLInputElement>(null);
 
   const refresh = useCallback(async () => {
     try {
-      setLoading(true);
       setProjects(await listVelaProjects());
       setError(null);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : '无法读取本地项目');
-    } finally {
-      setLoading(false);
     }
   }, []);
 
@@ -150,6 +138,21 @@ export function VelaHome({
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : '打开项目失败');
     } finally {
+      setBusy(false);
+    }
+  };
+
+  const runCreateWorkflow = async (workflowId: string) => {
+    try {
+      setBusy(true);
+      setCreatingWorkflowId(workflowId);
+      setError(null);
+      setNotice(null);
+      await onCreateWorkflow(workflowId);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : '创建电商工作流失败');
+    } finally {
+      setCreatingWorkflowId(null);
       setBusy(false);
     }
   };
@@ -256,6 +259,7 @@ export function VelaHome({
 
         <nav className="vela-home-nav" aria-label="项目导航">
           <button type="button" data-active={page === 'home' || undefined} onClick={() => onNavigate('home')}><Home size={18} aria-hidden="true" />首页</button>
+          <button type="button" data-active={page === 'dashboard' || undefined} onClick={() => onNavigate('dashboard')}><BarChart3 size={18} aria-hidden="true" />数据台</button>
         </nav>
 
         <section className="vela-home-recent-list" aria-labelledby="vela-recent-sidebar-title">
@@ -295,67 +299,19 @@ export function VelaHome({
       </aside>
 
       {page === 'home' ? <main className="vela-home-main">
-        <header className="vela-home-heading">
-          <div>
-            <span className="vela-home-eyebrow">V-MNH 创作工作台</span>
-            <h1>首页</h1>
-            <p>从一个新项目开始，每个项目都拥有独立的画布与生成记录。</p>
-          </div>
-        </header>
-
         {error && <div className="vela-home-error" role="alert">{error}<button type="button" onClick={() => void refresh()}>重试</button></div>}
         {notice && <div className="vela-home-notice" role="status">{notice}</div>}
 
-        <section className="vela-home-projects" aria-labelledby="vela-recent-title">
-          <div className="vela-home-section-title">
-            <div><Clock3 size={18} aria-hidden="true" /><h2 id="vela-recent-title">最近项目</h2></div>
-            <span>{projects.length} 个本地项目</span>
-          </div>
-
-          {loading ? (
-            <div className="vela-home-loading" role="status"><Loader2 className="vela-spin" size={24} />正在读取项目…</div>
-          ) : projects.length === 0 ? (
-            <div className="vela-home-empty">
-              <FolderKanban size={36} strokeWidth={1.4} aria-hidden="true" />
-              <h2>还没有项目</h2>
-              <p>新建第一个项目，进入一张干净的无限画布。</p>
-              <button type="button" onClick={() => void runCreate()}><Plus size={18} />新建项目</button>
-            </div>
-          ) : (
-            <div className="vela-home-project-grid">
-              {projects.map((project) => (
-                <article className="vela-home-project-tile" data-current={project.id === currentProjectId || undefined} key={project.id}>
-                  <button className="vela-home-project-open" type="button" onClick={() => void runOpen(project.id)}>
-                    <ProjectThumbnail project={project} />
-                    <span className="vela-home-project-copy">
-                      <strong>{project.name}</strong>
-                      <small>{project.nodeCount} 个节点 · {formatUpdatedAt(project.updatedAt)}</small>
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    className="vela-home-tile-menu-trigger"
-                    aria-label={`${project.name} 项目菜单`}
-                    aria-expanded={menuKey === `tile:${project.id}`}
-                    onClick={(event) => openProjectMenu(event, `tile:${project.id}`)}
-                  >
-                    <MoreHorizontal size={19} aria-hidden="true" />
-                  </button>
-                  {menuKey === `tile:${project.id}` && (
-                    <ProjectMenu
-                      project={project}
-                      onOpen={() => void runOpen(project.id)}
-                      onExport={() => void shareProject(project)}
-                      onRename={() => { setRenameTarget(project); setMenuKey(null); }}
-                      onDelete={() => { setDeleteTarget(project); setMenuKey(null); }}
-                    />
-                  )}
-                </article>
-              ))}
-            </div>
-          )}
-        </section>
-      </main> : page === 'api' ? (
+        <VelaEcommerceWorkflows
+          busyWorkflowId={creatingWorkflowId}
+          disabled={busy}
+          onCreate={runCreateWorkflow}
+        />
+      </main> : page === 'dashboard' ? (
+        <main className="vela-home-main vela-home-main--settings">
+          <VelaDataDashboard />
+        </main>
+      ) : page === 'api' ? (
         <main className="vela-home-main vela-home-main--settings">
           <VelaApiSettings profiles={profiles} profilesError={profilesError} onProfilesChanged={onProfilesChanged} />
         </main>

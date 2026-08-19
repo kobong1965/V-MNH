@@ -34,7 +34,7 @@ import { useContextMenuHandlers } from './hooks/useContextMenuHandlers';
 import { useAutoSave } from './hooks/useAutoSave';
 import { useGenerationRecovery } from './hooks/useGenerationRecovery';
 import { useVideoFrameExtraction } from './hooks/useVideoFrameExtraction';
-import { extractVideoLastFrame } from './utils/videoHelpers';
+import { extractVideoFrames, extractVideoLastFrame } from './utils/videoHelpers';
 import { SelectionBoundingBox } from './components/canvas/SelectionBoundingBox';
 import { HistoryPanel } from './components/HistoryPanel';
 import { ChatPanel, ChatBubble } from './components/ChatPanel';
@@ -59,6 +59,7 @@ import { VelaMiniMap } from './vela/components/VelaMiniMap';
 import { createVelaPerformanceFixture } from './vela/performanceFixture';
 import { VelaProjectPanel } from './vela/components/VelaProjectPanel';
 import { VelaHome } from './vela/components/VelaHome';
+import { VelaDesktopHeader } from './vela/components/VelaDesktopHeader';
 import { useVelaJobs } from './vela/hooks/useVelaJobs';
 import { useVelaProfiles } from './vela/hooks/useVelaProfiles';
 import { createVelaJobGroup, getVelaJobErrorMessage } from './vela/services/jobService';
@@ -73,6 +74,8 @@ import {
 import { isFakeProviderEnabled } from './services/generationService';
 import { composeGenerationPrompt } from './vela/generationOptions';
 import { instantiateWorkflowTemplate, type VelaWorkflowTemplate } from './vela/services/workflowTemplateService';
+import { createEcommerceWorkflowProject } from './vela/services/ecommerceWorkflowService';
+import { resolveVideoDirectorPersona } from './vela/videoDirectorPresets';
 
 // ============================================================================
 // MAIN COMPONENT
@@ -107,6 +110,9 @@ const getProjectMediaPath = (url: string, projectId: string): string | null => {
 };
 
 const VELA_P1_UI = true;
+const VELA_SCRIPT_NODE_KINDS = new Set(['video-director', 'competitor-script-analyzer']);
+const VELA_TEXT_OUTPUT_NODE_KINDS = new Set(['gpt-prompt-optimizer', ...VELA_SCRIPT_NODE_KINDS]);
+const VELA_GENERATION_NODE_KINDS = new Set(['gpt-prompt-optimizer', ...VELA_SCRIPT_NODE_KINDS, 'gpt-image', 'gpt-video', 'h3-video', 'wan-video-process']);
 
 export default function App() {
   // ============================================================================
@@ -114,7 +120,7 @@ export default function App() {
   // ============================================================================
 
   const [hasApiKey] = useState(true); // Backend handles API key
-  const [appView, setAppView] = useState<'home' | 'canvas' | 'api' | 'settings'>('home');
+  const [appView, setAppView] = useState<'home' | 'canvas' | 'dashboard' | 'api' | 'settings'>('home');
   const [contextMenu, setContextMenu] = useState<ContextMenuState>({
     isOpen: false,
     x: 0,
@@ -390,39 +396,77 @@ export default function App() {
 
   const handleVelaGenerate = React.useCallback(async (id: string) => {
     const node = nodes.find((candidate) => candidate.id === id);
-    if (!node?.kind || !['gpt-prompt-optimizer', 'gpt-image', 'gpt-video', 'h3-video'].includes(node.kind)) {
+    if (!node?.kind || !VELA_GENERATION_NODE_KINDS.has(node.kind)) {
       await handleGenerate(id);
       return;
     }
     try {
       const projectId = workflowId || await handleSaveWorkflow();
       if (!projectId) throw new Error('无法保存当前项目，请保存后重试');
-      const isGptNode = node.kind.startsWith('gpt-');
-      const fakeGptEnabled = node.kind !== 'gpt-video' && isFakeProviderEnabled();
+      const isScriptNode = VELA_SCRIPT_NODE_KINDS.has(node.kind);
+      const isCompetitorAnalyzer = node.kind === 'competitor-script-analyzer';
+      const isGptNode = node.kind.startsWith('gpt-') || isScriptNode;
+      const isH3Node = node.kind === 'h3-video';
+      const isWanNode = node.kind === 'wan-video-process';
+      const isComfyNode = isH3Node || isWanNode;
+      const fakeGptEnabled = !isScriptNode && node.kind !== 'gpt-video' && isFakeProviderEnabled();
       if (isGptNode && !node.profileId && !fakeGptEnabled) {
         throw new Error(node.kind === 'gpt-video' ? '请先在 API 页面添加视频账户，并在节点中选择账户' : '请先添加 GPT 账户，并在节点属性中选择账户');
       }
-      const useFake = !isGptNode || fakeGptEnabled;
+      if (isComfyNode && !node.profileId) {
+        throw new Error(isWanNode ? '请先在 API 页面添加 Wan ComfyUI 算力，并在处理节点中选择该算力' : '请先在 API 页面添加 AutoDL ComfyUI 算力，并在 H3 节点中选择该算力');
+      }
+      const selectedGptProfile = velaProfiles.find((profile) => profile.id === node.profileId && profile.type === 'gpt');
+      if (isCompetitorAnalyzer && selectedGptProfile?.type === 'gpt' && !selectedGptProfile.models.analysis) {
+        throw new Error(`账户“${selectedGptProfile.name}”尚未配置 Qwen 分析模型，请先到 API 设置填写并测试`);
+      }
+      const useFake = !isComfyNode && fakeGptEnabled;
       updateNode(id, {
         status: NodeStatus.LOADING,
         generationProgress: 0,
         errorMessage: undefined
       });
-      const videoGenerationMode = node.kind === 'gpt-video'
+      const videoGenerationMode = ['gpt-video', 'h3-video'].includes(node.kind)
         ? node.videoGenerationMode || ((node.parentIds || []).length > 0 ? 'image-to-video' : 'text-to-video')
         : undefined;
-      const referenceNodes = (videoGenerationMode === 'text-to-video' ? [] : node.parentIds || [])
+      const connectedParents = (node.parentIds || [])
         .map((parentId) => nodes.find((candidate) => candidate.id === parentId))
-        .filter((parent): parent is NodeData => Boolean(parent?.resultUrl));
-      if (node.kind === 'gpt-video' && videoGenerationMode === 'image-to-video' && referenceNodes.length === 0) {
+        .filter((parent): parent is NodeData => Boolean(parent));
+      const connectedPrompt = connectedParents
+        .filter((parent) => parent.kind === 'prompt' && parent.prompt?.trim())
+        .map((parent) => parent.prompt.trim())
+        .join('\n\n');
+      const referenceNodes = (isScriptNode
+        ? connectedParents.filter((parent) => parent.type === NodeType.IMAGE && Boolean(parent.resultUrl))
+        : isWanNode || videoGenerationMode === 'text-to-video'
+          ? []
+          : connectedParents.filter((parent) => parent.type === NodeType.IMAGE && Boolean(parent.resultUrl))) as NodeData[];
+      const competitorVideoNode = isCompetitorAnalyzer
+        ? connectedParents.find((parent) => parent.type === NodeType.VIDEO && Boolean(parent.resultUrl))
+        : undefined;
+      if (['gpt-video', 'h3-video'].includes(node.kind) && videoGenerationMode === 'image-to-video' && referenceNodes.length === 0) {
         throw new Error('图生视频需要先连接至少一张可用的参考图片');
+      }
+      if (isScriptNode && referenceNodes.length === 0) {
+        throw new Error(isCompetitorAnalyzer ? '竞品视频分析需要至少连接一张当前产品图' : '视频编导需要至少连接一张产品图');
+      }
+      if (isCompetitorAnalyzer && !competitorVideoNode?.resultUrl) {
+        throw new Error('竞品视频分析需要连接一条可播放的对标视频');
+      }
+      const wanInputNodes = isWanNode
+        ? connectedParents.filter((parent) => Boolean(parent.workflowInputRole) && Boolean(parent.resultUrl))
+        : [];
+      if (isWanNode) {
+        if (!node.backendWorkflowId) throw new Error('当前 Wan 处理节点缺少后端工作流标识，请从首页重新创建');
+        const sourceVideo = wanInputNodes.find((parent) => parent.workflowInputRole === 'source-video' && parent.type === NodeType.VIDEO);
+        const characterImage = wanInputNodes.find((parent) => parent.workflowInputRole === 'character-image' && parent.type === NodeType.IMAGE);
+        if (!sourceVideo) throw new Error('请上传并连接源动作视频');
+        if (!characterImage) throw new Error('请上传并连接角色参考图');
       }
       const referenceUrls = await Promise.all(referenceNodes.map(async (parent, index) => {
         const sourceUrl = parent.resultUrl!;
         const currentProjectPath = getProjectMediaPath(sourceUrl, projectId);
         if (currentProjectPath) return currentProjectPath;
-        if (!isGptNode) return sourceUrl;
-
         const data = await urlToBase64(sourceUrl);
         if (!data.startsWith('data:image/')) {
           throw new Error(`参考图“${parent.title || index + 1}”无法读取，请重新拖入画布`);
@@ -434,33 +478,87 @@ export default function App() {
         updateNode(parent.id, { resultUrl: media.url, uploadSource: 'canvas-drop' });
         return media.url;
       }));
-      const generationPrompt = composeGenerationPrompt(node.prompt || '未填写描述', node.stylePreset, {
+      const workflowInputs = await Promise.all(wanInputNodes.map(async (parent, index) => {
+        const expectedKind = parent.workflowInputRole === 'source-video' ? 'video' : 'image';
+        if ((expectedKind === 'video' && parent.type !== NodeType.VIDEO) || (expectedKind === 'image' && parent.type !== NodeType.IMAGE)) {
+          throw new Error(`输入“${parent.title || index + 1}”的素材类型不正确`);
+        }
+        const sourceUrl = parent.resultUrl!;
+        let mediaUrl = getProjectMediaPath(sourceUrl, projectId);
+        if (!mediaUrl) {
+          const data = await urlToBase64(sourceUrl);
+          if (!data.startsWith(`data:${expectedKind}/`)) {
+            throw new Error(`输入“${parent.title || index + 1}”无法读取，请重新上传`);
+          }
+          const media = await saveVelaProjectMedia(projectId, {
+            data,
+            fileName: parent.title || (expectedKind === 'video' ? `动作视频-${index + 1}.mp4` : `角色参考图-${index + 1}.png`)
+          });
+          mediaUrl = media.url;
+          updateNode(parent.id, { resultUrl: media.url, uploadSource: 'canvas-drop' });
+        }
+        return { role: parent.workflowInputRole!, kind: expectedKind, url: mediaUrl };
+      }));
+      let competitorFrameUrls: string[] = [];
+      if (isCompetitorAnalyzer && competitorVideoNode?.resultUrl) {
+        updateNode(id, { generationProgress: 5 });
+        const frames = await extractVideoFrames(competitorVideoNode.resultUrl, {
+          count: node.analysisFrameCount || 8,
+          maxEdge: 960,
+          quality: 0.72
+        });
+        competitorFrameUrls = await Promise.all(frames.map(async (data, index) => {
+          const media = await saveVelaProjectMedia(projectId, {
+            data,
+            fileName: `对标视频抽帧-${String(index + 1).padStart(2, '0')}.jpg`
+          });
+          updateNode(id, { generationProgress: 5 + Math.round(((index + 1) / frames.length) * 20) });
+          return media.url;
+        }));
+      }
+      const generationPrompt = isScriptNode
+        ? node.sourceBrief || ''
+        : composeGenerationPrompt([node.prompt, connectedPrompt].filter(Boolean).join('\n\n') || '未填写描述', node.stylePreset, {
         aspectRatio: node.aspectRatio,
         resolution: node.resolution
       });
       const requestedPayload = {
         prompt: generationPrompt,
+        sourceBrief: isScriptNode ? node.sourceBrief || '' : undefined,
         nodeKind: node.kind,
+        ecommerceWorkflowId: isWanNode ? node.backendWorkflowId : undefined,
+        workflowInputs: isWanNode ? workflowInputs : undefined,
         referenceUrls,
+        competitorFrameUrls: isCompetitorAnalyzer ? competitorFrameUrls : undefined,
+        directorPersona: node.kind === 'video-director' ? resolveVideoDirectorPersona(node) : undefined,
         aspectRatio: node.aspectRatio || '16:9',
         resolution: node.resolution || 'Auto',
         stylePreset: node.stylePreset,
         imageBatchMode: node.imageBatchMode,
-        duration: node.kind === 'gpt-video' ? Math.max(4, Math.min(180, Math.round(node.videoDuration || 5))) : undefined,
-        videoGenerationMode
+        duration: ['gpt-video', 'h3-video'].includes(node.kind) ? Math.max(4, Math.min(180, Math.round(node.videoDuration || 5))) : undefined,
+        videoGenerationMode,
+        h3Acceleration: isH3Node ? node.h3Acceleration || 'turbo-8' : undefined,
+        h3Upscale: isH3Node ? node.h3Upscale || 'auto' : undefined,
+        h3UpscaleQuality: isH3Node ? node.h3UpscaleQuality || 'HIGH' : undefined,
+        h3FrameFit: isH3Node ? node.h3FrameFit || 'ai-expand' : undefined,
+        h3OutpaintProfileId: isH3Node ? node.h3OutpaintProfileId : undefined
       };
 
       // A remote video task may briefly report an unrecognized state even though it is
       // still running. Reuse its saved task id instead of creating another paid task.
       const resumableVideoErrorCodes = new Set([
         'BAD_RESPONSE',
+        'PROMPT_TIMEOUT',
         'VIDEO_POLL_TIMEOUT',
         'NETWORK_ERROR',
         'TIMEOUT',
         'RESULT_DOWNLOAD_FAILED',
-        'PROVIDER_UNAVAILABLE'
+        'PROVIDER_UNAVAILABLE',
+        'COMFY_UNAVAILABLE',
+        'WEBSOCKET_FAILED',
+        'OUTPUT_NOT_FOUND'
       ]);
-      const resumableVideoJob = node.kind === 'gpt-video'
+      const resumableVideoJob = ['gpt-video', 'h3-video', 'wan-video-process'].includes(node.kind)
         ? [...velaJobs]
           .sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt))
           .find((job) => {
@@ -479,6 +577,13 @@ export default function App() {
               resolution?: unknown;
               duration?: unknown;
               videoGenerationMode?: unknown;
+              h3Acceleration?: unknown;
+              h3Upscale?: unknown;
+              h3UpscaleQuality?: unknown;
+              h3FrameFit?: unknown;
+              h3OutpaintProfileId?: unknown;
+              ecommerceWorkflowId?: unknown;
+              workflowInputs?: unknown;
             };
             return payload.prompt === requestedPayload.prompt
               && payload.nodeKind === requestedPayload.nodeKind
@@ -486,6 +591,13 @@ export default function App() {
               && payload.resolution === requestedPayload.resolution
               && payload.duration === requestedPayload.duration
               && payload.videoGenerationMode === requestedPayload.videoGenerationMode
+              && payload.h3Acceleration === requestedPayload.h3Acceleration
+              && payload.h3Upscale === requestedPayload.h3Upscale
+              && payload.h3UpscaleQuality === requestedPayload.h3UpscaleQuality
+              && payload.h3FrameFit === requestedPayload.h3FrameFit
+              && payload.h3OutpaintProfileId === requestedPayload.h3OutpaintProfileId
+              && payload.ecommerceWorkflowId === requestedPayload.ecommerceWorkflowId
+              && JSON.stringify(payload.workflowInputs || []) === JSON.stringify(requestedPayload.workflowInputs || [])
               && JSON.stringify(payload.referenceUrls || []) === JSON.stringify(requestedPayload.referenceUrls);
           })
         : undefined;
@@ -498,9 +610,9 @@ export default function App() {
         projectId,
         nodeId: node.id,
         profileId: useFake ? 'fake-local' : node.profileId!,
-        providerType: useFake ? 'fake' : 'gpt',
+        providerType: useFake ? 'fake' : isComfyNode ? 'comfy' : 'gpt',
         payload: requestedPayload,
-        count: node.kind === 'gpt-prompt-optimizer' ? 1 : Math.max(1, Math.min(['gpt-video', 'h3-video'].includes(node.kind) ? 4 : 10, node.outputCount || 1)),
+        count: isWanNode || VELA_TEXT_OUTPUT_NODE_KINDS.has(node.kind) ? 1 : Math.max(1, Math.min(['gpt-video', 'h3-video'].includes(node.kind) ? 4 : 10, node.outputCount || 1)),
         seedMode: 'increment',
         seed: Date.now() % 2147483647
       });
@@ -514,7 +626,7 @@ export default function App() {
         errorMessage: error instanceof Error ? error.message : '任务创建失败'
       });
     }
-  }, [nodes, workflowId, handleSaveWorkflow, updateNode, refreshVelaJobs, retryVelaJob, velaJobs, handleGenerate]);
+  }, [nodes, workflowId, handleSaveWorkflow, updateNode, refreshVelaJobs, retryVelaJob, velaJobs, handleGenerate, velaProfiles]);
 
   React.useEffect(() => {
     setNodes((currentNodes) => {
@@ -522,7 +634,7 @@ export default function App() {
       const nextNodes = currentNodes.map((node) => {
         const nodeJobs = velaJobs.filter((job) => (
           job.nodeId === node.id
-          && (!node.kind?.startsWith('gpt-') || !node.profileId || job.profileId === node.profileId)
+          && (!VELA_GENERATION_NODE_KINDS.has(node.kind || '') || !node.profileId || job.profileId === node.profileId)
         ));
         if (nodeJobs.length === 0) return node;
 
@@ -548,7 +660,7 @@ export default function App() {
           : succeededJobs.length > 0
             ? NodeStatus.SUCCESS
             : NodeStatus.ERROR;
-        const output = job.output as { media?: { url?: string }; text?: string } | null;
+        const output = job.output as { media?: { url?: string }; text?: string; source?: { model?: string } } | null;
         const progressValues = groupJobs
           .map((candidate) => candidate.progress)
           .filter((value): value is number => typeof value === 'number');
@@ -565,9 +677,12 @@ export default function App() {
           .filter((url): url is string => Boolean(url));
         const uniqueResultUrls = [...new Set(resultUrls)];
         const resultUrl = uniqueResultUrls[0] || node.resultUrl;
-        const prompt = job.status === 'succeeded' && output?.text && node.kind === 'gpt-prompt-optimizer'
+        const prompt = job.status === 'succeeded' && output?.text && VELA_TEXT_OUTPUT_NODE_KINDS.has(node.kind || '')
           ? output.text
           : node.prompt;
+        const lastDirectorModel = node.kind === 'video-director' && job.status === 'succeeded'
+          ? output?.source?.model || node.lastDirectorModel
+          : node.lastDirectorModel;
 
         if (
           node.status === nextStatus
@@ -576,6 +691,7 @@ export default function App() {
           && node.resultUrl === resultUrl
           && JSON.stringify(node.resultUrls || []) === JSON.stringify(uniqueResultUrls)
           && node.prompt === prompt
+          && node.lastDirectorModel === lastDirectorModel
         ) return node;
 
         changed = true;
@@ -586,7 +702,8 @@ export default function App() {
           errorMessage,
           resultUrl,
           resultUrls: uniqueResultUrls,
-          prompt
+          prompt,
+          lastDirectorModel
         };
       });
       return changed ? nextNodes : currentNodes;
@@ -608,6 +725,12 @@ export default function App() {
       groups: [],
       viewport: { x: 0, y: 0, zoom: 1 }
     });
+    await handleLoadWithTracking(project.id);
+  };
+
+  const handleCreateEcommerceWorkflow = async (workflowTemplateId: string) => {
+    if (isDirty && workflowId) await handleSaveWithTracking();
+    const project = await createEcommerceWorkflowProject(workflowTemplateId);
     await handleLoadWithTracking(project.id);
   };
 
@@ -1358,6 +1481,7 @@ export default function App() {
           || node?.type === NodeType.VIDEO
           || node?.kind === 'gpt-video'
           || node?.kind === 'h3-video'
+          || node?.kind === 'wan-video-process'
           || node?.kind === 'video-result';
         addAsset({
           id: job.id,
@@ -1371,10 +1495,10 @@ export default function App() {
 
     nodes.forEach((node) => {
       if (node.status !== NodeStatus.SUCCESS || !node.resultUrl) return;
-      if (!node.kind || !['gpt-image', 'gpt-video', 'h3-video', 'image-result', 'video-result'].includes(node.kind)) return;
+      if (!node.kind || !['gpt-image', 'gpt-video', 'h3-video', 'wan-video-process', 'image-result', 'video-result'].includes(node.kind)) return;
       addAsset({
         id: node.id,
-        type: node.type === NodeType.VIDEO || node.kind === 'gpt-video' || node.kind === 'h3-video' || node.kind === 'video-result' ? 'video' : 'image',
+        type: node.type === NodeType.VIDEO || node.kind === 'gpt-video' || node.kind === 'h3-video' || node.kind === 'wan-video-process' || node.kind === 'video-result' ? 'video' : 'image',
         url: node.resultUrl,
         title: node.title || (node.type === NodeType.VIDEO ? '生成视频' : '生成图片'),
         prompt: node.prompt,
@@ -1386,27 +1510,36 @@ export default function App() {
 
   if (appView !== 'canvas') {
     return (
-      <VelaHome
-        page={appView}
-        theme={resolvedAppearance}
-        currentProjectId={workflowId || undefined}
-        onCreate={handleNewCanvas}
-        onOpen={handleLoadWithTracking}
-        onProjectDeleted={handleProjectDeleted}
-        onNavigate={setAppView}
-        profiles={velaProfiles}
-        profilesError={velaProfilesError}
-        onProfilesChanged={refreshVelaProfiles}
-        appearance={preferences.appearance}
-        canvas={preferences.canvas}
-        onAppearanceChange={handleAppearanceChange}
-        onCanvasChange={handleCanvasThemeChange}
-      />
+      <div className="vela-desktop-frame" data-theme={resolvedAppearance}>
+        <VelaDesktopHeader theme={resolvedAppearance} onOpenConnections={() => setAppView('api')} />
+        <div className="vela-desktop-content">
+          <VelaHome
+            page={appView}
+            theme={resolvedAppearance}
+            currentProjectId={workflowId || undefined}
+            onCreate={handleNewCanvas}
+            onCreateWorkflow={handleCreateEcommerceWorkflow}
+            onOpen={handleLoadWithTracking}
+            onProjectDeleted={handleProjectDeleted}
+            onNavigate={setAppView}
+            profiles={velaProfiles}
+            profilesError={velaProfilesError}
+            onProfilesChanged={refreshVelaProfiles}
+            appearance={preferences.appearance}
+            canvas={preferences.canvas}
+            onAppearanceChange={handleAppearanceChange}
+            onCanvasChange={handleCanvasThemeChange}
+          />
+        </div>
+      </div>
     );
   }
 
   return (
-    <div data-theme={canvasTheme} className={`vela-app w-screen h-screen ${canvasTheme === 'dark' ? 'text-white' : 'text-neutral-900'} overflow-hidden select-none font-sans`}>
+    <div className="vela-desktop-frame" data-theme={resolvedAppearance}>
+      <VelaDesktopHeader theme={resolvedAppearance} onOpenConnections={() => setAppView('api')} />
+      <div className="vela-desktop-content">
+    <div data-theme={canvasTheme} className={`vela-app w-full h-full ${canvasTheme === 'dark' ? 'text-white' : 'text-neutral-900'} overflow-hidden select-none font-sans`}>
       {!storyboardGenerator.isModalOpen && !isTikTokModalOpen && (
         <VelaNodeRail
           onAddClick={handleToolbarAdd}
@@ -1949,5 +2082,7 @@ export default function App() {
         onClose={handleCloseExpand}
       />
     </div >
+      </div>
+    </div>
   );
 }

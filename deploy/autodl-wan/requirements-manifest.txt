@@ -1,0 +1,19 @@
+# Models referenced by the two bundled Wan UI workflows
+Wan2_2-Animate-14B_fp8_e4m3fn_scaled_KJ.safetensors
+Wan2_1_VAE_bf16.safetensors
+umt5-xxl-enc-fp8_e4m3fn.safetensors
+umt5_xxl_fp8_e4m3fn_scaled.safetensors
+dw-ll_ucoco_384_bs5.torchscript.pt
+yolox_l.torchscript.pt
+
+# Core custom-node families used by the workflows
+ComfyUI-VideoHelperSuite
+ComfyUI-WanVideoWrapper
+comfyui_controlnet_aux
+ComfyUI-KJNodes
+rgthree-comfy
+ComfyUI_LayerStyle
+ComfyUI-Easy-Use
+
+# Required UI-to-API converter, pinned by install-converter.sh
+https://github.com/SethRobinson/comfyui-workflow-to-api-converter-endpoint.git@bc8538278f82053b3ca10a44d62d02596f8e1a37

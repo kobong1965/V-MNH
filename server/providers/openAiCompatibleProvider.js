@@ -14,6 +14,33 @@ const SAFE_CONNECT_RETRY_CODES = new Set([
   'UND_ERR_CONNECT_TIMEOUT'
 ]);
 
+const FLAGSHIP_GPT_MODEL = /^gpt-(\d+)(?:\.(\d+))?(?:-(sol))?$/i;
+
+export const selectLatestFlagshipGptModel = (models = []) => {
+  const candidates = [...new Set((Array.isArray(models) ? models : [])
+    .filter((model) => typeof model === 'string')
+    .map((model) => {
+      const match = FLAGSHIP_GPT_MODEL.exec(model.trim());
+      if (!match) return null;
+      return {
+        model: model.trim(),
+        major: Number(match[1]),
+        minor: Number(match[2] || 0),
+        // Prefer a family alias over its explicit Sol target when both exist so
+        // provider-side rolling upgrades inside the family remain effective.
+        aliasPriority: match[3] ? 0 : 1
+      };
+    })
+    .filter(Boolean))];
+  candidates.sort((left, right) => (
+    right.major - left.major
+    || right.minor - left.minor
+    || right.aliasPriority - left.aliasPriority
+    || left.model.localeCompare(right.model)
+  ));
+  return candidates[0]?.model || null;
+};
+
 const getNetworkCause = (error) => {
   let current = error;
   for (let depth = 0; current && depth < 5; depth += 1) {
@@ -81,6 +108,15 @@ const toImageContent = (text, imageDataUrl) => imageDataUrl ? [{
 }, {
   type: 'image_url', image_url: { url: imageDataUrl }
 }] : text;
+
+const toMultiImageContent = (text, imageDataUrls = []) => {
+  const images = Array.isArray(imageDataUrls) ? imageDataUrls.filter(Boolean) : [];
+  if (images.length === 0) return text;
+  return [
+    { type: 'text', text },
+    ...images.map((url) => ({ type: 'image_url', image_url: { url } }))
+  ];
+};
 
 const taskBody = (body) => body?.data && !Array.isArray(body.data) ? body.data : body;
 const taskIdFromBody = (body) => {
@@ -193,7 +229,7 @@ export class OpenAiCompatibleProvider {
 
   async testConnection(profile, apiKey) {
     const models = await this.listModels(profile, apiKey);
-    const configured = [profile.models?.prompt, profile.models?.image, profile.models?.video].filter(Boolean);
+    const configured = [profile.models?.prompt, profile.models?.image, profile.models?.video, profile.models?.analysis].filter(Boolean);
     const missingModels = configured.filter((model) => !models.includes(model));
     if (missingModels.length) {
       throw new ProviderError(`模型不存在：${missingModels.join('、')}`, {
@@ -225,6 +261,113 @@ export class OpenAiCompatibleProvider {
     };
   }
 
+  async generateDirectorScript(profile, apiKey, {
+    brief,
+    persona,
+    productImageDataUrls = [],
+    model = profile.models?.prompt
+  } = {}) {
+    if (!model) throw new ProviderError('尚未找到可用的 GPT 编导模型', { code: 'MODEL_NOT_CONFIGURED' });
+    if (!Array.isArray(productImageDataUrls) || productImageDataUrls.length === 0) {
+      throw new ProviderError('视频编导至少需要一张产品图片', { code: 'INVALID_INPUT' });
+    }
+    const identity = {
+      name: String(persona?.name || '视频编导'),
+      market: String(persona?.market || '目标市场待补充'),
+      category: String(persona?.category || '通用电商产品'),
+      style: String(persona?.style || '真实、自然、可信'),
+      language: String(persona?.language || '简体中文')
+    };
+    const userText = [
+      `编导身份：${identity.name}`,
+      `目标市场：${identity.market}`,
+      `擅长品类：${identity.category}`,
+      `表达风格：${identity.style}`,
+      `输出语言：${identity.language}`,
+      `产品补充要求：${String(brief || '请从产品图识别可见卖点，并避免臆造无法确认的参数。')}`,
+      '请根据后附产品图完成任务。'
+    ].join('\n');
+    const body = await this.request(profile, apiKey, profile.endpoints?.chat || '/chat/completions', {
+      method: 'POST',
+      safeToRetry: false,
+      body: {
+        model,
+        messages: [
+          {
+            role: 'system',
+            content: [
+              '你是一名资深短视频带货编导。根据产品图片、目标市场和人设，创作可拍摄、可执行、真实自然的 10–15 秒短视频方案。',
+              '不要杜撰产品参数、认证、价格或功效；不确定的信息要写成待确认项。',
+              '输出必须依次包含：创意方向、分秒脚本、镜头表、口播或字幕、声音与光影、最终视频模型提示词、负面限制。',
+              '最终视频提示词要明确主体、动作、机位、构图、环境、光线、节奏和连续性，可直接交给视频生成模型。'
+            ].join('\n')
+          },
+          { role: 'user', content: toMultiImageContent(userText, productImageDataUrls) }
+        ]
+      }
+    });
+    return {
+      text: extractText(body),
+      source: { provider: 'openai-compatible', profileId: profile.id, model, modelSelection: 'latest-flagship-gpt' }
+    };
+  }
+
+  async analyzeCompetitorScript(profile, apiKey, {
+    brief,
+    competitorFrameDataUrls = [],
+    productImageDataUrls = []
+  } = {}) {
+    if (!profile.models?.analysis) throw new ProviderError('尚未配置 Qwen 分析模型', { code: 'MODEL_NOT_CONFIGURED' });
+    if (!Array.isArray(competitorFrameDataUrls) || competitorFrameDataUrls.length === 0) {
+      throw new ProviderError('竞品视频分析至少需要一帧对标视频画面', { code: 'INVALID_INPUT' });
+    }
+    if (!Array.isArray(productImageDataUrls) || productImageDataUrls.length === 0) {
+      throw new ProviderError('竞品视频分析至少需要一张当前产品图片', { code: 'INVALID_INPUT' });
+    }
+    const labeledImages = [
+      ...competitorFrameDataUrls.map((url, index) => ({ label: `对标视频帧 ${index + 1}/${competitorFrameDataUrls.length}`, url })),
+      ...productImageDataUrls.map((url, index) => ({ label: `当前产品图 ${index + 1}/${productImageDataUrls.length}`, url }))
+    ];
+    const content = [
+      {
+        type: 'text',
+        text: [
+          `用户补充要求：${String(brief || '无')}`,
+          `前 ${competitorFrameDataUrls.length} 张图是按时间顺序抽取的对标视频帧，后 ${productImageDataUrls.length} 张图是当前产品图。`,
+          '请严格按照图片顺序分析，不要把对标商品误认为当前产品。'
+        ].join('\n')
+      },
+      ...labeledImages.flatMap(({ label, url }) => [
+        { type: 'text', text: label },
+        { type: 'image_url', image_url: { url } }
+      ])
+    ];
+    const body = await this.request(profile, apiKey, profile.endpoints?.chat || '/chat/completions', {
+      method: 'POST',
+      safeToRetry: false,
+      timeoutMs: Math.max(180_000, Number(profile.timeoutMs) || 0),
+      body: {
+        model: profile.models.analysis,
+        messages: [
+          {
+            role: 'system',
+            content: [
+              '你是电商短视频竞品研究员和视频编导。你会收到按时间排序的对标视频抽帧，以及用户自己的产品图。',
+              '只学习对标视频的开场钩子、镜头顺序、构图、节奏、卖点表达、光影和转场方法；不得复制竞品人物、品牌、商标、水印、原句或独特画面。',
+              '为当前产品重新创作 10–15 秒方案。人物动作自然，镜头可执行，卖点必须来自产品图或用户说明；不确定的参数标为待确认。',
+              '输出必须依次包含：对标结构拆解、可借鉴方法、原创创意、分秒脚本、镜头表、口播或字幕、声音与光影、最终视频模型提示词、负面限制。'
+            ].join('\n')
+          },
+          { role: 'user', content }
+        ]
+      }
+    });
+    return {
+      text: extractText(body),
+      source: { provider: 'openai-compatible', profileId: profile.id, model: profile.models.analysis }
+    };
+  }
+
   async generateImages(profile, apiKey, { prompt, count = 1, size, quality, idempotencyKey } = {}) {
     if (!prompt?.trim()) throw new ProviderError('提示词不能为空', { code: 'INVALID_INPUT' });
     if (!profile.models?.image) throw new ProviderError('尚未配置图片模型', { code: 'MODEL_NOT_CONFIGURED' });
@@ -251,7 +394,7 @@ export class OpenAiCompatibleProvider {
     });
   }
 
-  async editImages(profile, apiKey, { prompt, referenceImages, count = 1, size, quality, idempotencyKey } = {}) {
+  async editImages(profile, apiKey, { prompt, referenceImages, mask, count = 1, size, quality, idempotencyKey } = {}) {
     if (!prompt?.trim()) throw new ProviderError('提示词不能为空', { code: 'INVALID_INPUT' });
     if (!profile.models?.image) throw new ProviderError('尚未配置图片模型', { code: 'MODEL_NOT_CONFIGURED' });
     if (!Array.isArray(referenceImages) || referenceImages.length === 0) {
@@ -265,6 +408,9 @@ export class OpenAiCompatibleProvider {
     if (quality) form.set('quality', quality);
     for (const [index, image] of referenceImages.entries()) {
       form.append('image', new Blob([image.data], { type: image.mime || 'image/png' }), image.filename || `reference-${index + 1}.png`);
+    }
+    if (mask?.data) {
+      form.append('mask', new Blob([mask.data], { type: mask.mime || 'image/png' }), mask.filename || 'mask.png');
     }
     const body = await this.request(profile, apiKey, profile.endpoints?.imageEdit || '/images/edits', {
       method: 'POST',

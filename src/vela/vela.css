@@ -838,6 +838,63 @@ textarea {
   line-height: 1.45;
 }
 
+.vela-auto-power-panel {
+  background: color-mix(in srgb, var(--vela-blue) 5%, var(--vela-carbon-deep));
+  border: 1px solid color-mix(in srgb, var(--vela-blue) 18%, var(--vela-border));
+  border-radius: var(--vela-radius-sm);
+  display: flex;
+  flex-direction: column;
+  gap: var(--vela-space-3);
+  padding: var(--vela-space-3);
+}
+
+.vela-auto-power-heading,
+.vela-auto-power-heading > span,
+.vela-switch-label,
+.vela-auto-power-status {
+  align-items: center;
+  display: flex;
+}
+
+.vela-auto-power-heading {
+  justify-content: space-between;
+}
+
+.vela-auto-power-heading > span {
+  color: var(--vela-mist);
+  font-size: var(--vela-font-control);
+  font-weight: 700;
+  gap: 6px;
+}
+
+.vela-switch-label {
+  color: var(--vela-muted);
+  cursor: pointer;
+  font-size: var(--vela-font-helper);
+  gap: 6px;
+}
+
+.vela-switch-label input {
+  accent-color: var(--vela-blue);
+  height: 16px;
+  width: 16px;
+}
+
+.vela-auto-power-panel .vela-form-grid--two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.vela-auto-power-panel .vela-field-help {
+  line-height: 1.55;
+  margin: 0;
+}
+
+.vela-auto-power-status {
+  color: var(--vela-success);
+  font-size: var(--vela-font-helper);
+  gap: 5px;
+}
+
 .vela-form-grid {
   display: grid;
   gap: var(--vela-space-2);

@@ -13,10 +13,14 @@ test('Vela catalog exposes only the first-version canvas nodes', () => {
     [
       'prompt',
       'image-input',
+      'video-input',
       'gpt-prompt-optimizer',
+      'video-director',
+      'competitor-script-analyzer',
       'gpt-image',
       'gpt-video',
       'h3-video',
+      'wan-video-process',
       'image-result',
       'video-result'
     ]
@@ -38,6 +42,12 @@ test('typed ports allow the approved GPT to H3 workflow', () => {
   assert.equal(canConnectNodeKinds('gpt-image', 'gpt-video'), true);
   assert.equal(canConnectNodeKinds('image-input', 'h3-video'), true);
   assert.equal(canConnectNodeKinds('image-input', 'gpt-video'), true);
+  assert.equal(canConnectNodeKinds('image-input', 'video-director'), true);
+  assert.equal(canConnectNodeKinds('image-input', 'competitor-script-analyzer'), true);
+  assert.equal(canConnectNodeKinds('video-result', 'competitor-script-analyzer'), true);
+  assert.equal(canConnectNodeKinds('video-input', 'wan-video-process'), true);
+  assert.equal(canConnectNodeKinds('image-input', 'wan-video-process'), true);
+  assert.equal(canConnectNodeKinds('video-director', 'gpt-video'), true);
 });
 
 test('typed ports reject backwards and unsupported connections', () => {

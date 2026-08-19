@@ -19,7 +19,8 @@ const STATUS_LABELS: Record<NodeStatus, string> = {
 
 export function VelaInspector({ node, profiles = [], onUpdate }: VelaInspectorProps) {
   if (!node) return null;
-  const availableProfiles = node?.kind?.startsWith('gpt-')
+  const isGptSemanticNode = node?.kind?.startsWith('gpt-') || ['video-director', 'competitor-script-analyzer'].includes(node?.kind || '');
+  const availableProfiles = isGptSemanticNode
     ? profiles.filter((profile) => profile.type === 'gpt')
     : profiles.filter((profile) => profile.type === 'comfy');
 
@@ -39,7 +40,7 @@ export function VelaInspector({ node, profiles = [], onUpdate }: VelaInspectorPr
             <span className="vela-field-label">状态</span>
             <span className="vela-state-label" data-status={node.status}>{STATUS_LABELS[node.status]}</span>
           </div>
-          {node.kind && ['gpt-prompt-optimizer', 'gpt-image', 'gpt-video', 'h3-video'].includes(node.kind) && (
+          {node.kind && ['gpt-prompt-optimizer', 'video-director', 'competitor-script-analyzer', 'gpt-image', 'gpt-video', 'h3-video'].includes(node.kind) && (
             <label className="vela-field-stack">
               <span className="vela-field-label">账户或算力</span>
               <select className="vela-input" value={node.profileId ?? ''} onChange={(event) => onUpdate(node.id, { profileId: event.target.value || undefined })}>

@@ -9,6 +9,8 @@ import {
 
 const DEFAULT_GPT_TIMEOUT_MS = 60_000;
 const DEFAULT_COMFY_TIMEOUT_MS = 15_000;
+const DEFAULT_AUTODL_IDLE_SHUTDOWN_MINUTES = 5;
+const DEFAULT_AUTODL_POWER_ON_TIMEOUT_MS = 10 * 60_000;
 const COMFY_AUTH_TYPES = new Set(['none', 'bearer', 'basic', 'custom']);
 const DEFAULT_GPT_ENDPOINTS = Object.freeze({
   models: '/models',
@@ -50,7 +52,8 @@ const sanitizeGptConfig = (input = {}) => {
     models: {
       prompt: typeof models.prompt === 'string' ? models.prompt.trim() : '',
       image: typeof models.image === 'string' ? models.image.trim() : '',
-      video: typeof models.video === 'string' ? models.video.trim() : ''
+      video: typeof models.video === 'string' ? models.video.trim() : '',
+      analysis: typeof models.analysis === 'string' ? models.analysis.trim() : ''
     },
     endpoints: Object.fromEntries(Object.entries(DEFAULT_GPT_ENDPOINTS).map(([key, fallback]) => [
       key,
@@ -77,10 +80,39 @@ const sanitizeComfyConfig = (input = {}) => {
   const baseUrl = normalizeComfyBaseUrl(input.baseUrl);
   const authType = cleanText(input.authType || 'none', 16).toLowerCase();
   if (!COMFY_AUTH_TYPES.has(authType)) throw new Error(`不支持的 ComfyUI 鉴权方式：${authType}`);
+  const transport = input.transport === 'ssh' ? 'ssh' : 'direct';
+  if (transport === 'ssh' && (!cleanText(input.sshHost, 255) || !cleanText(input.sshPrivateKeyPath, 1024))) {
+    throw new Error('SSH 连接必须填写主机和私钥路径');
+  }
+  const platform = ['generic', 'autodl', 'runpod'].includes(input.platform) ? input.platform : 'generic';
+  const autoPowerEnabled = platform === 'autodl' && Boolean(input.autoPowerEnabled);
+  const autodlInstanceUuid = platform === 'autodl' ? cleanText(input.autodlInstanceUuid, 80) : '';
+  if (autodlInstanceUuid && !/^pro-[a-z0-9]+$/i.test(autodlInstanceUuid)) {
+    throw new Error('AutoDL 容器实例 Pro UUID 无效，应以 pro- 开头');
+  }
+  if (autoPowerEnabled && !autodlInstanceUuid) {
+    throw new Error('启用自动开关机前必须填写 AutoDL 容器实例 Pro UUID');
+  }
   return {
-    platform: ['generic', 'autodl', 'runpod'].includes(input.platform) ? input.platform : 'generic',
+    platform,
     baseUrl,
     websocketUrl: normalizeComfyWebsocketUrl(input.websocketUrl, baseUrl),
+    transport,
+    sshHost: transport === 'ssh' ? cleanText(input.sshHost, 255) : '',
+    sshPort: transport === 'ssh' ? clampInteger(input.sshPort, 22, 1, 65535) : 22,
+    sshUsername: transport === 'ssh' ? cleanText(input.sshUsername || 'root', 80) : '',
+    sshPrivateKeyPath: transport === 'ssh' ? cleanText(input.sshPrivateKeyPath, 1024) : '',
+    sshLocalPort: transport === 'ssh' ? clampInteger(input.sshLocalPort, 18188, 1, 65535) : 18188,
+    sshRemoteHost: transport === 'ssh' ? cleanText(input.sshRemoteHost || '127.0.0.1', 255) : '',
+    sshRemotePort: transport === 'ssh' ? clampInteger(input.sshRemotePort, 8188, 1, 65535) : 8188,
+    sshStartScript: transport === 'ssh' && /^\/[a-z0-9._/-]+$/i.test(cleanText(input.sshStartScript, 1024))
+      ? cleanText(input.sshStartScript, 1024)
+      : '',
+    autoPowerEnabled,
+    autoPowerProvider: platform === 'autodl' ? 'autodl-pro' : '',
+    autodlInstanceUuid,
+    idleShutdownMinutes: clampInteger(input.idleShutdownMinutes, DEFAULT_AUTODL_IDLE_SHUTDOWN_MINUTES, 1, 60),
+    powerOnTimeoutMs: clampInteger(input.powerOnTimeoutMs, DEFAULT_AUTODL_POWER_ON_TIMEOUT_MS, 60_000, 30 * 60_000),
     authType,
     customHeaderNames: authType === 'custom' ? normalizeHeaderNames(input.customHeaderNames) : [],
     timeoutMs: clampInteger(input.timeoutMs, DEFAULT_COMFY_TIMEOUT_MS, 1_000, 60_000),
@@ -129,8 +161,19 @@ const comfySecretFromDraft = (draft = {}) => {
   return null;
 };
 
-const hasComfySecretPatch = (patch = {}) => ['token', 'username', 'password', 'customHeaders', 'clearSecret']
+const hasComfyAuthSecretPatch = (patch = {}) => ['token', 'username', 'password', 'customHeaders', 'clearSecret']
   .some((key) => Object.prototype.hasOwnProperty.call(patch, key));
+
+const clearComfyAuthSecret = (secret = {}) => {
+  const next = { ...secret };
+  delete next.token;
+  delete next.username;
+  delete next.password;
+  delete next.customHeaders;
+  return next;
+};
+
+const hasSecretValues = (secret) => Boolean(secret && Object.keys(secret).length > 0);
 
 const readCredential = (row, secretProtector) => {
   if (!row.encrypted_secret) return { status: 'missing', secret: null };
@@ -151,6 +194,12 @@ const toPublicProfile = (row, secretProtector) => {
     ...publicConfig,
     secretConfigured: Boolean(row.encrypted_secret),
     credentialStatus: credential.status,
+    ...(row.type === 'comfy' ? {
+      autoPowerCredentialConfigured: Boolean(credential.secret?.autodlDeveloperToken),
+      autoPowerCredentialStatus: credential.status === 'unreadable'
+        ? 'unreadable'
+        : credential.secret?.autodlDeveloperToken ? 'ready' : 'missing'
+    } : {}),
     createdAt: row.created_at,
     updatedAt: row.updated_at
   });
@@ -197,12 +246,20 @@ export class ProfileRepository {
       if (!apiKey) throw new Error('API Key 不能为空');
       secret = { apiKey };
     } else {
-      secret = comfySecretFromDraft({ ...draft, authType: publicConfig.authType });
+      const authSecret = comfySecretFromDraft({ ...draft, authType: publicConfig.authType }) || {};
+      const autodlDeveloperToken = String(draft.autodlDeveloperToken || '').trim();
+      secret = {
+        ...authSecret,
+        ...(autodlDeveloperToken ? { autodlDeveloperToken } : {})
+      };
+      if (publicConfig.autoPowerEnabled && !autodlDeveloperToken) {
+        throw new Error('启用自动开关机前必须填写 AutoDL Developer Token');
+      }
       if (publicConfig.authType === 'custom') {
         publicConfig.customHeaderNames = Object.keys(secret?.customHeaders || {});
       }
     }
-    const encrypted = secret ? this.secretProtector.encrypt(secret) : null;
+    const encrypted = hasSecretValues(secret) ? this.secretProtector.encrypt(secret) : null;
     this.database.connection.prepare(`
       INSERT INTO profiles(id, type, name, public_json, encrypted_secret, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -231,17 +288,36 @@ export class ProfileRepository {
       if (apiKey) encrypted = this.secretProtector.encrypt({ apiKey });
     } else {
       const authChanged = publicConfig.authType !== current.authType;
-      if (patch.clearSecret || publicConfig.authType === 'none') {
-        encrypted = null;
-      } else if (hasComfySecretPatch(patch)) {
-        const secret = comfySecretFromDraft({ ...patch, authType: publicConfig.authType });
-        encrypted = secret ? this.secretProtector.encrypt(secret) : null;
-        if (publicConfig.authType === 'custom') {
-          publicConfig.customHeaderNames = Object.keys(secret?.customHeaders || {});
-        }
-      } else if (authChanged) {
-        encrypted = null;
+      const existingCredential = readCredential(row, this.secretProtector);
+      const modifiesSecret = hasComfyAuthSecretPatch(patch)
+        || Object.prototype.hasOwnProperty.call(patch, 'autodlDeveloperToken')
+        || Boolean(patch.clearAutoPowerCredential)
+        || authChanged;
+      if (existingCredential.status === 'unreadable' && modifiesSecret) {
+        throw new Error('当前连接凭据无法解密，请清除旧凭据后重新配置');
       }
+      let nextSecret = { ...(existingCredential.secret || {}) };
+      if (patch.clearSecret || publicConfig.authType === 'none' || authChanged || hasComfyAuthSecretPatch(patch)) {
+        nextSecret = clearComfyAuthSecret(nextSecret);
+      }
+      if (publicConfig.authType !== 'none' && (authChanged || hasComfyAuthSecretPatch(patch))) {
+        nextSecret = {
+          ...nextSecret,
+          ...(comfySecretFromDraft({ ...patch, authType: publicConfig.authType }) || {})
+        };
+      }
+      if (patch.clearAutoPowerCredential) delete nextSecret.autodlDeveloperToken;
+      if (Object.prototype.hasOwnProperty.call(patch, 'autodlDeveloperToken')) {
+        const token = String(patch.autodlDeveloperToken || '').trim();
+        if (token) nextSecret.autodlDeveloperToken = token;
+      }
+      if (publicConfig.autoPowerEnabled && !nextSecret.autodlDeveloperToken) {
+        throw new Error('启用自动开关机前必须填写 AutoDL Developer Token');
+      }
+      if (publicConfig.authType === 'custom') {
+        publicConfig.customHeaderNames = Object.keys(nextSecret.customHeaders || {});
+      }
+      encrypted = hasSecretValues(nextSecret) ? this.secretProtector.encrypt(nextSecret) : null;
     }
     this.database.connection.prepare(`
       UPDATE profiles SET name = ?, public_json = ?, encrypted_secret = ?, updated_at = ? WHERE id = ?

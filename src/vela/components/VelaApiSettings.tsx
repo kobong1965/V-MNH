@@ -41,6 +41,7 @@ interface ApiFormState {
   promptModel: string;
   imageModel: string;
   videoModel: string;
+  analysisModel: string;
   endpoints: {
     models: string;
     chat: string;
@@ -60,6 +61,7 @@ const INITIAL_FORM: ApiFormState = {
   promptModel: '',
   imageModel: '',
   videoModel: '',
+  analysisModel: '',
   endpoints: {
     models: '/models',
     chat: '/chat/completions',
@@ -90,6 +92,7 @@ export function VelaApiSettings({ profiles, profilesError, onProfilesChanged }: 
       promptModel: '',
       imageModel: '',
       videoModel: 'videoModel' in values ? values.videoModel : '',
+      analysisModel: '',
       timeoutSeconds: 'timeoutSeconds' in values ? values.timeoutSeconds : 60,
       endpoints: {
         ...INITIAL_FORM.endpoints,
@@ -108,7 +111,12 @@ export function VelaApiSettings({ profiles, profilesError, onProfilesChanged }: 
         provider: form.provider,
         baseUrl: form.baseUrl,
         apiKey: form.apiKey,
-        models: { prompt: form.promptModel, image: form.imageModel, video: form.videoModel },
+        models: {
+          prompt: form.promptModel,
+          image: form.imageModel,
+          video: form.videoModel,
+          analysis: form.analysisModel
+        },
         endpoints: form.endpoints,
         maxConcurrency: form.maxConcurrency,
         timeoutMs: form.timeoutSeconds * 1000
@@ -149,6 +157,7 @@ export function VelaApiSettings({ profiles, profilesError, onProfilesChanged }: 
               <label className="vela-settings-field"><span>提示词模型</span><input placeholder="可留空" value={form.promptModel} onChange={(event) => setForm({ ...form, promptModel: event.target.value })} /></label>
               <label className="vela-settings-field"><span>图片模型</span><input placeholder="可留空" value={form.imageModel} onChange={(event) => setForm({ ...form, imageModel: event.target.value })} /></label>
               <label className="vela-settings-field"><span>视频模型</span><input placeholder="可留空" value={form.videoModel} onChange={(event) => setForm({ ...form, videoModel: event.target.value })} /></label>
+              <label className="vela-settings-field"><span>Qwen 分析模型</span><input placeholder="例如 qwen3-vl-plus，以中转站为准" value={form.analysisModel} onChange={(event) => setForm({ ...form, analysisModel: event.target.value })} /></label>
             </div>
             <div className="vela-settings-grid vela-settings-grid--three">
               <label className="vela-settings-field"><span>API Key</span><input type="password" autoComplete="new-password" value={form.apiKey} onChange={(event) => setForm({ ...form, apiKey: event.target.value })} /></label>

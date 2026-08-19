@@ -2,7 +2,9 @@ import {
   Check,
   Download,
   ExternalLink,
+  FileUp,
   Github,
+  KeyRound,
   LoaderCircle,
   Monitor,
   Moon,
@@ -11,9 +13,10 @@ import {
   Sun,
   SunMoon
 } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import type { AppearanceMode, CanvasColorMode } from '../services/settingsService';
+import { exportPortableBackup, importPortableBackup } from '../services/portableBackupService';
 
 interface VelaSettingsProps {
   appearance: AppearanceMode;
@@ -46,6 +49,11 @@ export function VelaSettings({ appearance, canvas, resolvedAppearance, onAppeara
   });
   const [updateForm, setUpdateForm] = useState({ owner: 'kobong1965', repo: 'V-MNH', privateRepository: false, token: '' });
   const [savingUpdateConfig, setSavingUpdateConfig] = useState(false);
+  const [backupPassword, setBackupPassword] = useState('');
+  const [backupPasswordConfirm, setBackupPasswordConfirm] = useState('');
+  const [backupBusy, setBackupBusy] = useState(false);
+  const [backupMessage, setBackupMessage] = useState<string | null>(null);
+  const backupInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!bridge) return;
@@ -76,6 +84,42 @@ export function VelaSettings({ appearance, canvas, resolvedAppearance, onAppeara
     }
   };
 
+  const createPortableBackup = async () => {
+    if (backupPassword.length < 8) return setBackupMessage('迁移密码至少需要 8 个字符。');
+    if (backupPassword !== backupPasswordConfirm) return setBackupMessage('两次输入的迁移密码不一致。');
+    try {
+      setBackupBusy(true);
+      setBackupMessage(null);
+      await exportPortableBackup(backupPassword);
+      setBackupPassword('');
+      setBackupPasswordConfirm('');
+      setBackupMessage('加密迁移包已下载。请把文件和密码分别保存。');
+    } catch (error) {
+      setBackupMessage(error instanceof Error ? error.message : '迁移包导出失败');
+    } finally {
+      setBackupBusy(false);
+    }
+  };
+
+  const restorePortableBackup = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    if (backupPassword.length < 8) return setBackupMessage('请先输入该迁移包的密码（至少 8 个字符）。');
+    try {
+      setBackupBusy(true);
+      setBackupMessage(null);
+      const restored = await importPortableBackup(file, backupPassword);
+      setBackupPassword('');
+      setBackupPasswordConfirm('');
+      setBackupMessage(`迁移完成：恢复 ${restored.profiles} 个账户 / 算力配置、${restored.projects} 个项目。重新打开页面后即可使用。`);
+    } catch (error) {
+      setBackupMessage(error instanceof Error ? error.message : '迁移包导入失败');
+    } finally {
+      setBackupBusy(false);
+    }
+  };
+
   return (
     <div className="vela-settings-page">
       <header className="vela-settings-heading">
@@ -98,6 +142,21 @@ export function VelaSettings({ appearance, canvas, resolvedAppearance, onAppeara
             <button type="button" data-selected={canvas === 'dark' || undefined} onClick={() => onCanvasChange('dark')}><Moon size={15} /> 黑色画布</button>
           </div>
         </div>
+      </section>
+
+      <section className="vela-settings-section" aria-labelledby="portable-backup-title">
+        <div className="vela-settings-section-heading"><div><KeyRound size={19} /><div><h2 id="portable-backup-title">跨电脑加密迁移</h2><p>打包项目、素材、API/AutoDL 配置和 SSH 私钥；密码不会保存，也不会上传 GitHub。</p></div></div><span>AES-256-GCM</span></div>
+        <div className="vela-settings-grid vela-settings-grid--two">
+          <label className="vela-settings-field"><span>迁移密码</span><input type="password" autoComplete="new-password" value={backupPassword} placeholder="至少 8 个字符" onChange={(event) => setBackupPassword(event.target.value)} /></label>
+          <label className="vela-settings-field"><span>再次输入（导出时）</span><input type="password" autoComplete="new-password" value={backupPasswordConfirm} placeholder="导入时可留空" onChange={(event) => setBackupPasswordConfirm(event.target.value)} /></label>
+        </div>
+        <input ref={backupInputRef} className="vela-home-file-input" type="file" accept=".vela-backup,application/vnd.vela.backup" onChange={(event) => void restorePortableBackup(event)} />
+        <div className="vela-update-actions">
+          <button type="button" disabled={backupBusy} onClick={() => void createPortableBackup()}>{backupBusy ? <LoaderCircle className="vela-spin" size={15} /> : <Download size={15} />} 导出加密迁移包</button>
+          <button type="button" data-primary="true" disabled={backupBusy} onClick={() => backupInputRef.current?.click()}><FileUp size={15} /> 选择迁移包并导入</button>
+        </div>
+        {backupMessage && <p className="vela-settings-note" role="status">{backupMessage}</p>}
+        <p className="vela-settings-note">请在另一台电脑安装同版或更新版 Vela，再在此处导入。若忘记密码，迁移包无法恢复。</p>
       </section>
 
       <section className="vela-settings-section" aria-labelledby="update-title">

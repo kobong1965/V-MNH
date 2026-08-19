@@ -1,0 +1,2108 @@
+{
+  "id": "034e0097-7102-4ecd-aa4a-b525d156462b",
+  "revision": 0,
+  "last_node_id": 59,
+  "last_link_id": 65,
+  "nodes": [
+    {
+      "id": 35,
+      "type": "ConstrainImage|pysssss",
+      "pos": {
+        "0": -2150,
+        "1": 60
+      },
+      "size": {
+        "0": 315,
+        "1": 154
+      },
+      "flags": {},
+      "order": 17,
+      "mode": 0,
+      "inputs": [
+        {
+          "label": "图像",
+          "name": "images",
+          "type": "IMAGE",
+          "link": 40
+        }
+      ],
+      "outputs": [
+        {
+          "label": "图像",
+          "name": "IMAGE",
+          "shape": 6,
+          "type": "IMAGE",
+          "links": [
+            41
+          ]
+        }
+      ],
+      "properties": {
+        "enableTabs": false,
+        "tabWidth": 65,
+        "tabXOffset": 10,
+        "hasSecondTab": false,
+        "secondTabText": "Send Back",
+        "secondTabOffset": 80,
+        "secondTabWidth": 65,
+        "Node name for S&R": "ConstrainImage|pysssss"
+      },
+      "widgets_values": [
+        1024,
+        1025,
+        0,
+        0,
+        "no"
+      ]
+    },
+    {
+      "id": 11,
+      "type": "ConstrainImage|pysssss",
+      "pos": {
+        "0": -2151.978759765625,
+        "1": 808.7069091796875
+      },
+      "size": {
+        "0": 315,
+        "1": 154
+      },
+      "flags": {},
+      "order": 18,
+      "mode": 0,
+      "inputs": [
+        {
+          "label": "图像",
+          "name": "images",
+          "type": "IMAGE",
+          "link": 10
+        }
+      ],
+      "outputs": [
+        {
+          "label": "图像",
+          "name": "IMAGE",
+          "shape": 6,
+          "type": "IMAGE",
+          "links": [
+            14
+          ]
+        }
+      ],
+      "properties": {
+        "enableTabs": false,
+        "tabWidth": 65,
+        "tabXOffset": 10,
+        "hasSecondTab": false,
+        "secondTabText": "Send Back",
+        "secondTabOffset": 80,
+        "secondTabWidth": 65,
+        "Node name for S&R": "ConstrainImage|pysssss"
+      },
+      "widgets_values": [
+        1024,
+        1024,
+        0,
+        0,
+        "no"
+      ]
+    },
+    {
+      "id": 16,
+      "type": "LibLibVisionV2Qwen",
+      "pos": {
+        "0": -1781.9781494140625,
+        "1": 798.7069091796875
+      },
+      "size": {
+        "0": 400,
+        "1": 200
+      },
+      "flags": {},
+      "order": 20,
+      "mode": 0,
+      "inputs": [
+        {
+          "label": "images",
+          "name": "images",
+          "type": "IMAGE",
+          "link": 14
+        },
+        {
+          "label": "options",
+          "name": "options",
+          "shape": 7,
+          "type": "LIBLIB_OPTIONS",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "label": "description",
+          "name": "description",
+          "type": "STRING",
+          "links": [
+            42
+          ]
+        }
+      ],
+      "properties": {
+        "enableTabs": false,
+        "tabWidth": 65,
+        "tabXOffset": 10,
+        "hasSecondTab": false,
+        "secondTabText": "Send Back",
+        "secondTabOffset": 80,
+        "secondTabWidth": 65,
+        "Node name for S&R": "LibLibVisionV2Qwen"
+      },
+      "widgets_values": [
+        "Describe the color tone, style, layout structure, and the relationship between the text and the main subject of this image",
+        "qwen-vl-plus-latest",
+        "text"
+      ]
+    },
+    {
+      "id": 29,
+      "type": "ShowText|pysssss",
+      "pos": {
+        "0": 2670,
+        "1": 60
+      },
+      "size": {
+        "0": 633.2965087890625,
+        "1": 833.8115844726562
+      },
+      "flags": {},
+      "order": 30,
+      "mode": 0,
+      "inputs": [
+        {
+          "label": "文本",
+          "name": "text",
+          "type": "STRING",
+          "widget": {
+            "name": "text"
+          },
+          "link": 50
+        }
+      ],
+      "outputs": [
+        {
+          "label": "字符串",
+          "name": "STRING",
+          "shape": 6,
+          "type": "STRING",
+          "links": [
+            60
+          ]
+        }
+      ],
+      "properties": {
+        "enableTabs": false,
+        "tabWidth": 65,
+        "tabXOffset": 10,
+        "hasSecondTab": false,
+        "secondTabText": "Send Back",
+        "secondTabOffset": 80,
+        "secondTabWidth": 65,
+        "Node name for S&R": "ShowText|pysssss"
+      },
+      "widgets_values": [
+        "This image is a visually appealing advertisement or promotional graphic designed to showcase the versatility and elegance of a particular line of luggage. The layout is clean, modern, and well-organized with a focus on highlighting the product in various travel scenarios. Below is a detailed breakdown of the color tone, style, layout structure, and the relationship between the text and the main subject.\n**Color Tone**  \nThe color palette is cool, sleek, and contemporary, creating a sense of modern sophistication and durability. The dominant colors are:  \n- **Gray Metallic (Deep Silver Tone)**: Used for the luggage itself, giving it a futuristic, high-tech appearance that reflects light subtly and conveys resilience and style.  \n- **Black**: Applied as accents on functional elements such as wheels, zippers, and handle components, adding contrast and a premium, engineered look.  \n- **Cool Blue**: Seen in the woman’s shirt in the *Outdoor Activities* section, which complements the metallic gray of the suitcase and evokes feelings of clarity, trust, and adventure.  \n- **White**: Used for the background and text to ensure maximum clarity, minimalism, and visual breathing space.  \n- **Slate Gray**: Subtly used in shadow areas and textures to enhance depth without disrupting the clean aesthetic.  \nThe overall color tone is refined and tech-inspired, making the luggage appear both highly functional and fashion-forward.\n**Style**  \nThe style of the image is modern, minimalist, and aspirational, emphasizing innovation, mobility, and urban elegance. It appeals to travelers who value smart design, security, and effortless movement across diverse environments. High-resolution photography and precise lighting highlight the structural details of the product, while clean typography reinforces its premium identity.\n- **Photography**: Professionally shot with sharp focus and soft directional lighting that accentuates the textured surface of the hard-shell exterior and the reflective quality of the metallic finish. Scenes include a car trunk, city sidewalks, beachside settings, and airport terminals—each chosen to reflect real-world use cases.\n- **Typography**: A sleek, sans-serif font is used for all text—modern, legible, and understated—complementing the tech-luxury vibe without competing with the visuals.\n- **Composition**: Balanced and spatially aware, using generous negative space to draw attention directly to the luggage. Each scene centers the product while integrating human interaction naturally to suggest usability and lifestyle alignment.\n**Layout Structure**  \nThe image is divided into four horizontal sections, each depicting a distinct travel scenario. This symmetrical, segmented layout allows for a clear narrative progression while maintaining visual harmony.\n1. **Self-Driving Travel**  \n   Located on the far left, this section shows the gray metallic suitcase securely positioned in the trunk of a modern SUV. The textured hard-shell surface catches the ambient light, emphasizing its rugged build. A small pocket on the side is slightly open, revealing a folded document or travel adapter, highlighting practical organization. Personal items like a backpack and jacket surround it, suggesting readiness for extended trips. The top-mounted retractable handle is partially extended, indicating ease of access.\n2. **Traveling For School/Work**  \n   Positioned in the center-left, this scene features a close-up of the suitcase being rolled smoothly through an urban plaza or terminal. The viewer sees the top handle fully extended and gripped by a hand, emphasizing comfort and control. The four silent 360° spinner wheels glide effortlessly over polished concrete, underscoring maneuverability. The lock mechanism near the front zipper is subtly visible—sleek, integrated, and secure—hinting at peace of mind during transit.\n3. **Outdoor Activities**  \n   In the center-right section, a traveler relaxes on a beach chair under soft sunlight, with the open suitcase placed nearby on sand-resistant matting. Inside, outdoor essentials like sunglasses, sunscreen, and a towel are neatly arranged. The dual-zipper closure is pulled apart smoothly, showing smooth operation, while the side zippered compartment holds smaller items like keys or earbuds. The metallic finish contrasts elegantly against the natural environment, blending performance with style.\n4. **Traveling Abroad**  \n   On the far right, the suitcase appears on a busy airport baggage carousel, symbolizing international journeys. Shot from a low side angle, the image highlights the robust construction—the rigid plastic shell resists impact, and the recessed wheel housing protects against wear. The locking system is engaged, reinforcing protection against tampering. Reflections on the textured surface catch motion blur from passing travelers, adding dynamism and realism.\nEach section is separated by thin bands of white space, ensuring clarity and flow. The consistent placement of the product across contexts builds a cohesive story of reliability and adaptability.\n**Relationship Between Text and Main Subject**  \nThe text in each section directly contextualizes the luggage within specific lifestyles and travel needs, forming a seamless bridge between function and aspiration.\n- **Text Placement**: Positioned beneath each image in uniform alignment, the text remains secondary to the visual but clearly defines the scenario.\n- **Descriptive Language**: Phrases like *Self-Driving Travel*, *Traveling For School/Work*, *Outdoor Activities*, and *Traveling Abroad* succinctly communicate utility while inviting emotional connection.\n- **Visual Reinforcement**: Every image mirrors its caption—the suitcase isn’t just shown; it’s actively used. Whether packed in a trunk, rolled through a city, opened at a beach, or circling an airport belt, its design features are demonstrated in action.\n- **Consistency**: Uniform font, spacing, and tonal language create a professional, trustworthy brand presence. The metallic gray hue of the product becomes a visual anchor across all scenes.\n**Conclusion**  \nThis image effectively combines a cool-toned, contemporary palette with a crisp, minimalist style and a logically structured layout to highlight the advanced functionality and sleek aesthetics of the gray metallic hard-shell suitcase. Key features—textured durable shell, 360° spinner wheels, top-mounted telescoping handle, side organizational pocket, and secure front lock—are seamlessly integrated into realistic travel moments. The result is a compelling narrative of intelligent design, mobility, and confidence—positioning the luggage as an ideal companion for modern explorers who demand both form and function.",
+        "This image is a visually appealing advertisement or promotional graphic designed to showcase the versatility and elegance of a particular line of luggage. The layout is clean, modern, and well-organized with a focus on highlighting the product in various travel scenarios. Below is a detailed breakdown of the color tone, style, layout structure, and the relationship between the text and the main subject.\n**Color Tone**  \nThe color palette is cool, sleek, and contemporary, creating a sense of modern sophistication and durability. The dominant colors are:  \n- **Gray Metallic (Deep Silver Tone)**: Used for the luggage itself, giving it a futuristic, high-tech appearance that reflects light subtly and conveys resilience and style.  \n- **Black**: Applied as accents on functional elements such as wheels, zippers, and handle components, adding contrast and a premium, engineered look.  \n- **Cool Blue**: Seen in the woman’s shirt in the *Outdoor Activities* section, which complements the metallic gray of the suitcase and evokes feelings of clarity, trust, and adventure.  \n- **White**: Used for the background and text to ensure maximum clarity, minimalism, and visual breathing space.  \n- **Slate Gray**: Subtly used in shadow areas and textures to enhance depth without disrupting the clean aesthetic.  \nThe overall color tone is refined and tech-inspired, making the luggage appear both highly functional and fashion-forward.\n**Style**  \nThe style of the image is modern, minimalist, and aspirational, emphasizing innovation, mobility, and urban elegance. It appeals to travelers who value smart design, security, and effortless movement across diverse environments. High-resolution photography and precise lighting highlight the structural details of the product, while clean typography reinforces its premium identity.\n- **Photography**: Professionally shot with sharp focus and soft directional lighting that accentuates the textured surface of the hard-shell exterior and the reflective quality of the metallic finish. Scenes include a car trunk, city sidewalks, beachside settings, and airport terminals—each chosen to reflect real-world use cases.\n- **Typography**: A sleek, sans-serif font is used for all text—modern, legible, and understated—complementing the tech-luxury vibe without competing with the visuals.\n- **Composition**: Balanced and spatially aware, using generous negative space to draw attention directly to the luggage. Each scene centers the product while integrating human interaction naturally to suggest usability and lifestyle alignment.\n**Layout Structure**  \nThe image is divided into four horizontal sections, each depicting a distinct travel scenario. This symmetrical, segmented layout allows for a clear narrative progression while maintaining visual harmony.\n1. **Self-Driving Travel**  \n   Located on the far left, this section shows the gray metallic suitcase securely positioned in the trunk of a modern SUV. The textured hard-shell surface catches the ambient light, emphasizing its rugged build. A small pocket on the side is slightly open, revealing a folded document or travel adapter, highlighting practical organization. Personal items like a backpack and jacket surround it, suggesting readiness for extended trips. The top-mounted retractable handle is partially extended, indicating ease of access.\n2. **Traveling For School/Work**  \n   Positioned in the center-left, this scene features a close-up of the suitcase being rolled smoothly through an urban plaza or terminal. The viewer sees the top handle fully extended and gripped by a hand, emphasizing comfort and control. The four silent 360° spinner wheels glide effortlessly over polished concrete, underscoring maneuverability. The lock mechanism near the front zipper is subtly visible—sleek, integrated, and secure—hinting at peace of mind during transit.\n3. **Outdoor Activities**  \n   In the center-right section, a traveler relaxes on a beach chair under soft sunlight, with the open suitcase placed nearby on sand-resistant matting. Inside, outdoor essentials like sunglasses, sunscreen, and a towel are neatly arranged. The dual-zipper closure is pulled apart smoothly, showing smooth operation, while the side zippered compartment holds smaller items like keys or earbuds. The metallic finish contrasts elegantly against the natural environment, blending performance with style.\n4. **Traveling Abroad**  \n   On the far right, the suitcase appears on a busy airport baggage carousel, symbolizing international journeys. Shot from a low side angle, the image highlights the robust construction—the rigid plastic shell resists impact, and the recessed wheel housing protects against wear. The locking system is engaged, reinforcing protection against tampering. Reflections on the textured surface catch motion blur from passing travelers, adding dynamism and realism.\nEach section is separated by thin bands of white space, ensuring clarity and flow. The consistent placement of the product across contexts builds a cohesive story of reliability and adaptability.\n**Relationship Between Text and Main Subject**  \nThe text in each section directly contextualizes the luggage within specific lifestyles and travel needs, forming a seamless bridge between function and aspiration.\n- **Text Placement**: Positioned beneath each image in uniform alignment, the text remains secondary to the visual but clearly defines the scenario.\n- **Descriptive Language**: Phrases like *Self-Driving Travel*, *Traveling For School/Work*, *Outdoor Activities*, and *Traveling Abroad* succinctly communicate utility while inviting emotional connection.\n- **Visual Reinforcement**: Every image mirrors its caption—the suitcase isn’t just shown; it’s actively used. Whether packed in a trunk, rolled through a city, opened at a beach, or circling an airport belt, its design features are demonstrated in action.\n- **Consistency**: Uniform font, spacing, and tonal language create a professional, trustworthy brand presence. The metallic gray hue of the product becomes a visual anchor across all scenes.\n**Conclusion**  \nThis image effectively combines a cool-toned, contemporary palette with a crisp, minimalist style and a logically structured layout to highlight the advanced functionality and sleek aesthetics of the gray metallic hard-shell suitcase. Key features—textured durable shell, 360° spinner wheels, top-mounted telescoping handle, side organizational pocket, and secure front lock—are seamlessly integrated into realistic travel moments. The result is a compelling narrative of intelligent design, mobility, and confidence—positioning the luggage as an ideal companion for modern explorers who demand both form and function."
+      ]
+    },
+    {
+      "id": 36,
+      "type": "ProcessString",
+      "pos": {
+        "0": -1292.473388671875,
+        "1": 670.083251953125
+      },
+      "size": {
+        "0": 236.61485290527344,
+        "1": 82
+      },
+      "flags": {},
+      "order": 22,
+      "mode": 0,
+      "inputs": [
+        {
+          "label": "input_string",
+          "name": "input_string",
+          "type": "STRING",
+          "widget": {
+            "name": "input_string"
+          },
+          "link": 42
+        }
+      ],
+      "outputs": [
+        {
+          "label": "STRING",
+          "name": "STRING",
+          "type": "STRING",
+          "links": [
+            43
+          ]
+        }
+      ],
+      "properties": {
+        "enableTabs": false,
+        "tabWidth": 65,
+        "tabXOffset": 10,
+        "hasSecondTab": false,
+        "secondTabText": "Send Back",
+        "secondTabOffset": 80,
+        "secondTabWidth": 65,
+        "Node name for S&R": "ProcessString"
+      },
+      "widgets_values": [
+        "",
+        "去标点"
+      ]
+    },
+    {
+      "id": 27,
+      "type": "ShowText|pysssss",
+      "pos": {
+        "0": -1023.3917846679688,
+        "1": 667.734619140625
+      },
+      "size": {
+        "0": 560.6513061523438,
+        "1": 862.4701538085938
+      },
+      "flags": {},
+      "order": 23,
+      "mode": 0,
+      "inputs": [
+        {
+          "label": "文本",
+          "name": "text",
+          "type": "STRING",
+          "widget": {
+            "name": "text"
+          },
+          "link": 43
+        }
+      ],
+      "outputs": [
+        {
+          "label": "字符串",
+          "name": "STRING",
+          "shape": 6,
+          "type": "STRING",
+          "links": [
+            48
+          ]
+        }
+      ],
+      "properties": {
+        "enableTabs": false,
+        "tabWidth": 65,
+        "tabXOffset": 10,
+        "hasSecondTab": false,
+        "secondTabText": "Send Back",
+        "secondTabOffset": 80,
+        "secondTabWidth": 65,
+        "Node name for S&R": "ShowText|pysssss"
+      },
+      "widgets_values": [
+        "This image is a visually appealing advertisement or promotional graphic designed to showcase the versatility and elegance of a particular line of luggage The layout is clean modern and wellorganized with a focus on highlighting the product in various travel scenarios Below is a detailed breakdown of the color tone style layout structure and the relationship between the text and the main subject\n\n\n\n Color Tone\nThe color palette is warm sophisticated and cohesive creating a sense of luxury and reliability The dominant colors are\n BeigeTan Used for the luggage itself giving it a classic and timeless appearance\n Brown Applied as accents on the luggage eg trim handles and wheels adding a touch of elegance and contrast\n Light Blue Seen in the womans shirt in the Outdoor Activities section which complements the beige luggage and evokes a sense of calm and relaxation\n White Used for the background and text ensuring clarity and readability\n Black Used for the text and some elements of the luggage eg wheels providing a strong contrast and a sleek finish\n\nThe overall color tone is neutral and calming making the luggage appear both stylish and practical\n\n\n\n Style\nThe style of the image is modern minimalistic and aspirational It conveys a sense of sophistication and adventure appealing to travelers who value quality design and functionality The use of highquality photography and clean typography enhances the luxurious feel of the product\n\n Photography The images are professionally shot with soft lighting and a focus on the details of the luggage The settings car trunk airport beach are carefully chosen to evoke specific travel experiences\n Typography The font used for the text is clean sansserif and easy to read It complements the modern aesthetic of the image without overpowering the visuals\n Composition The layout is balanced with each section clearly defined and visually distinct The use of negative space ensures that the viewers attention is drawn to the main subjectthe luggagewhile the text provides context\n\n\n\n Layout Structure\nThe image is divided into four sections each representing a different travel scenario The layout is horizontal with each section occupying approximately equal space This structure allows for a clear and organized presentation of the product in various contexts\n\n1 SelfDriving Travel\n    Located on the far left this section shows the luggage packed in the trunk of a car suggesting convenience and ease of transport for road trips\n    The beige suitcase is neatly arranged with personal items like a laptop and clothing visible emphasizing practicality\n\n2 Traveling For SchoolWork\n    Positioned in the centerleft this section features a closeup of the luggage being carried by someone walking likely in an airport or urban setting\n    The focus is on the suitcases design and portability with the persons legs and shoes visible adding a human element to the scene\n\n3 Outdoor Activities\n    Located in the centerright this section shows a woman relaxing on a beach chair with the luggage placed nearby The open suitcase reveals items like sunscreen a hat and other essentials for outdoor adventures\n    The setting is bright and sunny evoking a sense of leisure and freedom\n\n4 Traveling Abroad\n    Positioned on the far right this section depicts the luggage on a conveyor belt at an airport symbolizing international travel\n    The suitcase is shown from a side angle highlighting its durability and suitability for long journeys\n\nEach section is separated by subtle white space ensuring that the viewer can easily distinguish between the different travel scenarios The overall layout is symmetrical and harmonious creating a cohesive visual narrative\n\n\n\n Relationship Between Text and Main Subject\nThe text in each section serves to contextualize the main subjectthe luggageby associating it with specific travel experiences The relationship between the text and the main subject is direct and complementary\n\n Text Placement The text is placed below each image in a consistent location ensuring that it does not distract from the visual focus on the luggage\n Descriptive Language The text is concise and descriptive using phrases like SelfDriving Travel Traveling For SchoolWork Outdoor Activities and Traveling Abroad to clearly communicate the intended use of the luggage\n Visual Reinforcement Each image reinforces the message of the text For example the Outdoor Activities section shows the luggage being used in a beach setting while the Traveling Abroad section depicts the suitcase on a conveyor belt emphasizing its suitability for international travel\n Consistency The text style and font are consistent across all sections maintaining a unified look and feel This consistency helps to reinforce the brand identity and makes the overall message more impactful\n\n\n\n Conclusion\nThis image effectively combines a warm and sophisticated color palette a modern and minimalist style and a wellstructured layout to showcase the versatility and elegance of the luggage The relationship between the text and the main subject is seamless with each section clearly communicating a specific travel scenario while reinforcing the products appeal The overall effect is one of luxury practicality and adventure making the luggage an attractive choice for a wide range of travelers",
+        "This image is a visually appealing advertisement or promotional graphic designed to showcase the versatility and elegance of a particular line of luggage The layout is clean modern and wellorganized with a focus on highlighting the product in various travel scenarios Below is a detailed breakdown of the color tone style layout structure and the relationship between the text and the main subject\n\n\n\n Color Tone\nThe color palette is warm sophisticated and cohesive creating a sense of luxury and reliability The dominant colors are\n BeigeTan Used for the luggage itself giving it a classic and timeless appearance\n Brown Applied as accents on the luggage eg trim handles and wheels adding a touch of elegance and contrast\n Light Blue Seen in the womans shirt in the Outdoor Activities section which complements the beige luggage and evokes a sense of calm and relaxation\n White Used for the background and text ensuring clarity and readability\n Black Used for the text and some elements of the luggage eg wheels providing a strong contrast and a sleek finish\n\nThe overall color tone is neutral and calming making the luggage appear both stylish and practical\n\n\n\n Style\nThe style of the image is modern minimalistic and aspirational It conveys a sense of sophistication and adventure appealing to travelers who value quality design and functionality The use of highquality photography and clean typography enhances the luxurious feel of the product\n\n Photography The images are professionally shot with soft lighting and a focus on the details of the luggage The settings car trunk airport beach are carefully chosen to evoke specific travel experiences\n Typography The font used for the text is clean sansserif and easy to read It complements the modern aesthetic of the image without overpowering the visuals\n Composition The layout is balanced with each section clearly defined and visually distinct The use of negative space ensures that the viewers attention is drawn to the main subjectthe luggagewhile the text provides context\n\n\n\n Layout Structure\nThe image is divided into four sections each representing a different travel scenario The layout is horizontal with each section occupying approximately equal space This structure allows for a clear and organized presentation of the product in various contexts\n\n1 SelfDriving Travel\n    Located on the far left this section shows the luggage packed in the trunk of a car suggesting convenience and ease of transport for road trips\n    The beige suitcase is neatly arranged with personal items like a laptop and clothing visible emphasizing practicality\n\n2 Traveling For SchoolWork\n    Positioned in the centerleft this section features a closeup of the luggage being carried by someone walking likely in an airport or urban setting\n    The focus is on the suitcases design and portability with the persons legs and shoes visible adding a human element to the scene\n\n3 Outdoor Activities\n    Located in the centerright this section shows a woman relaxing on a beach chair with the luggage placed nearby The open suitcase reveals items like sunscreen a hat and other essentials for outdoor adventures\n    The setting is bright and sunny evoking a sense of leisure and freedom\n\n4 Traveling Abroad\n    Positioned on the far right this section depicts the luggage on a conveyor belt at an airport symbolizing international travel\n    The suitcase is shown from a side angle highlighting its durability and suitability for long journeys\n\nEach section is separated by subtle white space ensuring that the viewer can easily distinguish between the different travel scenarios The overall layout is symmetrical and harmonious creating a cohesive visual narrative\n\n\n\n Relationship Between Text and Main Subject\nThe text in each section serves to contextualize the main subjectthe luggageby associating it with specific travel experiences The relationship between the text and the main subject is direct and complementary\n\n Text Placement The text is placed below each image in a consistent location ensuring that it does not distract from the visual focus on the luggage\n Descriptive Language The text is concise and descriptive using phrases like SelfDriving Travel Traveling For SchoolWork Outdoor Activities and Traveling Abroad to clearly communicate the intended use of the luggage\n Visual Reinforcement Each image reinforces the message of the text For example the Outdoor Activities section shows the luggage being used in a beach setting while the Traveling Abroad section depicts the suitcase on a conveyor belt emphasizing its suitability for international travel\n Consistency The text style and font are consistent across all sections maintaining a unified look and feel This consistency helps to reinforce the brand identity and makes the overall message more impactful\n\n\n\n Conclusion\nThis image effectively combines a warm and sophisticated color palette a modern and minimalist style and a wellstructured layout to showcase the versatility and elegance of the luggage The relationship between the text and the main subject is seamless with each section clearly communicating a specific travel scenario while reinforcing the products appeal The overall effect is one of luxury practicality and adventure making the luggage an attractive choice for a wide range of travelers"
+      ]
+    },
+    {
+      "id": 37,
+      "type": "ProcessString",
+      "pos": {
+        "0": -428.52081298828125,
+        "1": 670.7335815429688
+      },
+      "size": {
+        "0": 226.3157196044922,
+        "1": 82
+      },
+      "flags": {},
+      "order": 24,
+      "mode": 0,
+      "inputs": [
+        {
+          "label": "input_string",
+          "name": "input_string",
+          "type": "STRING",
+          "widget": {
+            "name": "input_string"
+          },
+          "link": 48
+        }
+      ],
+      "outputs": [
+        {
+          "label": "STRING",
+          "name": "STRING",
+          "type": "STRING",
+          "links": [
+            44
+          ]
+        }
+      ],
+      "properties": {
+        "enableTabs": false,
+        "tabWidth": 65,
+        "tabXOffset": 10,
+        "hasSecondTab": false,
+        "secondTabText": "Send Back",
+        "secondTabOffset": 80,
+        "secondTabWidth": 65,
+        "Node name for S&R": "ProcessString"
+      },
+      "widgets_values": [
+        "",
+        "去空行"
+      ]
+    },
+    {
+      "id": 28,
+      "type": "ShowText|pysssss",
+      "pos": {
+        "0": 1274.7119140625,
+        "1": 14.894939422607422
+      },
+      "size": {
+        "0": 615.0023193359375,
+        "1": 1035.0548095703125
+      },
+      "flags": {},
+      "order": 27,
+      "mode": 0,
+      "inputs": [
+        {
+          "label": "文本",
+          "name": "text",
+          "type": "STRING",
+          "widget": {
+            "name": "text"
+          },
+          "link": 27
+        }
+      ],
+      "outputs": [
+        {
+          "label": "字符串",
+          "name": "STRING",
+          "shape": 6,
+          "type": "STRING",
+          "links": [
+            28
+          ]
+        }
+      ],
+      "properties": {
+        "enableTabs": false,
+        "tabWidth": 65,
+        "tabXOffset": 10,
+        "hasSecondTab": false,
+        "secondTabText": "Send Back",
+        "secondTabOffset": 80,
+        "secondTabWidth": 65,
+        "Node name for S&R": "ShowText|pysssss"
+      },
+      "widgets_values": [
+        "请根据下方提供的【新产品描述】，完全替换掉【参考广告描述】中关于产品主体、特性和卖点的部分，生成一个新的、用于图像生成模型的指令。\n\n核心要求：\n1.  严格保留【参考广告描述】的整体结构、场景设定、构图、动态感、镜头语言和输出格式。\n2.  只替换与产品本身相关的描述，包括：产品名称、类别、颜色、材质、设计细节、功能卖点等。\n3.  根据新产品特性，自然地对相关文案进行微调，确保新产品与广告场景融合得当。\n\n【新产品描述】\n这是一款旅行箱，属于行李箱类。它的颜色是灰色金属色（可能为深灰或银色调）。材质看起来像是硬质塑料外壳，并且表面有明显的纹理线条装饰。\n\n设计上有一些独特的特点：\n1. 箱体侧面有一个小口袋和拉链门。\n2. 顶部有一根伸缩式手柄便于携带移动。\n3. 底部装有四个万向轮以便于在地面上轻松滚动。\n4. 前面还有一个锁扣装置用于固定箱子的开启状态以防止丢失物品或者被盗取内容物等安全问题发生；\n\n整体外观简洁大方又不失时尚感，在保证实用性的同时也兼顾了美观性需求！\n\n【参考广告描述】\nThis image is a visually appealing advertisement or promotional graphic designed to showcase the versatility and elegance of a particular line of luggage The layout is clean modern and wellorganized with a focus on highlighting the product in various travel scenarios Below is a detailed breakdown of the color tone style layout structure and the relationship between the text and the main subject\n Color Tone\nThe color palette is warm sophisticated and cohesive creating a sense of luxury and reliability The dominant colors are\n BeigeTan Used for the luggage itself giving it a classic and timeless appearance\n Brown Applied as accents on the luggage eg trim handles and wheels adding a touch of elegance and contrast\n Light Blue Seen in the womans shirt in the Outdoor Activities section which complements the beige luggage and evokes a sense of calm and relaxation\n White Used for the background and text ensuring clarity and readability\n Black Used for the text and some elements of the luggage eg wheels providing a strong contrast and a sleek finish\nThe overall color tone is neutral and calming making the luggage appear both stylish and practical\n Style\nThe style of the image is modern minimalistic and aspirational It conveys a sense of sophistication and adventure appealing to travelers who value quality design and functionality The use of highquality photography and clean typography enhances the luxurious feel of the product\n Photography The images are professionally shot with soft lighting and a focus on the details of the luggage The settings car trunk airport beach are carefully chosen to evoke specific travel experiences\n Typography The font used for the text is clean sansserif and easy to read It complements the modern aesthetic of the image without overpowering the visuals\n Composition The layout is balanced with each section clearly defined and visually distinct The use of negative space ensures that the viewers attention is drawn to the main subjectthe luggagewhile the text provides context\n Layout Structure\nThe image is divided into four sections each representing a different travel scenario The layout is horizontal with each section occupying approximately equal space This structure allows for a clear and organized presentation of the product in various contexts\n1 SelfDriving Travel\n    Located on the far left this section shows the luggage packed in the trunk of a car suggesting convenience and ease of transport for road trips\n    The beige suitcase is neatly arranged with personal items like a laptop and clothing visible emphasizing practicality\n2 Traveling For SchoolWork\n    Positioned in the centerleft this section features a closeup of the luggage being carried by someone walking likely in an airport or urban setting\n    The focus is on the suitcases design and portability with the persons legs and shoes visible adding a human element to the scene\n3 Outdoor Activities\n    Located in the centerright this section shows a woman relaxing on a beach chair with the luggage placed nearby The open suitcase reveals items like sunscreen a hat and other essentials for outdoor adventures\n    The setting is bright and sunny evoking a sense of leisure and freedom\n4 Traveling Abroad\n    Positioned on the far right this section depicts the luggage on a conveyor belt at an airport symbolizing international travel\n    The suitcase is shown from a side angle highlighting its durability and suitability for long journeys\nEach section is separated by subtle white space ensuring that the viewer can easily distinguish between the different travel scenarios The overall layout is symmetrical and harmonious creating a cohesive visual narrative\n Relationship Between Text and Main Subject\nThe text in each section serves to contextualize the main subjectthe luggageby associating it with specific travel experiences The relationship between the text and the main subject is direct and complementary\n Text Placement The text is placed below each image in a consistent location ensuring that it does not distract from the visual focus on the luggage\n Descriptive Language The text is concise and descriptive using phrases like SelfDriving Travel Traveling For SchoolWork Outdoor Activities and Traveling Abroad to clearly communicate the intended use of the luggage\n Visual Reinforcement Each image reinforces the message of the text For example the Outdoor Activities section shows the luggage being used in a beach setting while the Traveling Abroad section depicts the suitcase on a conveyor belt emphasizing its suitability for international travel\n Consistency The text style and font are consistent across all sections maintaining a unified look and feel This consistency helps to reinforce the brand identity and makes the overall message more impactful\n Conclusion\nThis image effectively combines a warm and sophisticated color palette a modern and minimalist style and a wellstructured layout to showcase the versatility and elegance of the luggage The relationship between the text and the main subject is seamless with each section clearly communicating a specific travel scenario while reinforcing the products appeal The overall effect is one of luxury practicality and adventure making the luggage an attractive choice for a wide range of travelers\n\n请根据以上要求，输出修改后的完整新指令。",
+        "请根据下方提供的【新产品描述】，完全替换掉【参考广告描述】中关于产品主体、特性和卖点的部分，生成一个新的、用于图像生成模型的指令。\n\n核心要求：\n1.  严格保留【参考广告描述】的整体结构、场景设定、构图、动态感、镜头语言和输出格式。\n2.  只替换与产品本身相关的描述，包括：产品名称、类别、颜色、材质、设计细节、功能卖点等。\n3.  根据新产品特性，自然地对相关文案进行微调，确保新产品与广告场景融合得当。\n\n【新产品描述】\n这是一款旅行箱，属于行李箱类。它的颜色是灰色金属色（可能为深灰或银色调）。材质看起来像是硬质塑料外壳，并且表面有明显的纹理线条装饰。\n\n设计上有一些独特的特点：\n1. 箱体侧面有一个小口袋和拉链门。\n2. 顶部有一根伸缩式手柄便于携带移动。\n3. 底部装有四个万向轮以便于在地面上轻松滚动。\n4. 前面还有一个锁扣装置用于固定箱子的开启状态以防止丢失物品或者被盗取内容物等安全问题发生；\n\n整体外观简洁大方又不失时尚感，在保证实用性的同时也兼顾了美观性需求！\n\n【参考广告描述】\nThis image is a visually appealing advertisement or promotional graphic designed to showcase the versatility and elegance of a particular line of luggage The layout is clean modern and wellorganized with a focus on highlighting the product in various travel scenarios Below is a detailed breakdown of the color tone style layout structure and the relationship between the text and the main subject\n Color Tone\nThe color palette is warm sophisticated and cohesive creating a sense of luxury and reliability The dominant colors are\n BeigeTan Used for the luggage itself giving it a classic and timeless appearance\n Brown Applied as accents on the luggage eg trim handles and wheels adding a touch of elegance and contrast\n Light Blue Seen in the womans shirt in the Outdoor Activities section which complements the beige luggage and evokes a sense of calm and relaxation\n White Used for the background and text ensuring clarity and readability\n Black Used for the text and some elements of the luggage eg wheels providing a strong contrast and a sleek finish\nThe overall color tone is neutral and calming making the luggage appear both stylish and practical\n Style\nThe style of the image is modern minimalistic and aspirational It conveys a sense of sophistication and adventure appealing to travelers who value quality design and functionality The use of highquality photography and clean typography enhances the luxurious feel of the product\n Photography The images are professionally shot with soft lighting and a focus on the details of the luggage The settings car trunk airport beach are carefully chosen to evoke specific travel experiences\n Typography The font used for the text is clean sansserif and easy to read It complements the modern aesthetic of the image without overpowering the visuals\n Composition The layout is balanced with each section clearly defined and visually distinct The use of negative space ensures that the viewers attention is drawn to the main subjectthe luggagewhile the text provides context\n Layout Structure\nThe image is divided into four sections each representing a different travel scenario The layout is horizontal with each section occupying approximately equal space This structure allows for a clear and organized presentation of the product in various contexts\n1 SelfDriving Travel\n    Located on the far left this section shows the luggage packed in the trunk of a car suggesting convenience and ease of transport for road trips\n    The beige suitcase is neatly arranged with personal items like a laptop and clothing visible emphasizing practicality\n2 Traveling For SchoolWork\n    Positioned in the centerleft this section features a closeup of the luggage being carried by someone walking likely in an airport or urban setting\n    The focus is on the suitcases design and portability with the persons legs and shoes visible adding a human element to the scene\n3 Outdoor Activities\n    Located in the centerright this section shows a woman relaxing on a beach chair with the luggage placed nearby The open suitcase reveals items like sunscreen a hat and other essentials for outdoor adventures\n    The setting is bright and sunny evoking a sense of leisure and freedom\n4 Traveling Abroad\n    Positioned on the far right this section depicts the luggage on a conveyor belt at an airport symbolizing international travel\n    The suitcase is shown from a side angle highlighting its durability and suitability for long journeys\nEach section is separated by subtle white space ensuring that the viewer can easily distinguish between the different travel scenarios The overall layout is symmetrical and harmonious creating a cohesive visual narrative\n Relationship Between Text and Main Subject\nThe text in each section serves to contextualize the main subjectthe luggageby associating it with specific travel experiences The relationship between the text and the main subject is direct and complementary\n Text Placement The text is placed below each image in a consistent location ensuring that it does not distract from the visual focus on the luggage\n Descriptive Language The text is concise and descriptive using phrases like SelfDriving Travel Traveling For SchoolWork Outdoor Activities and Traveling Abroad to clearly communicate the intended use of the luggage\n Visual Reinforcement Each image reinforces the message of the text For example the Outdoor Activities section shows the luggage being used in a beach setting while the Traveling Abroad section depicts the suitcase on a conveyor belt emphasizing its suitability for international travel\n Consistency The text style and font are consistent across all sections maintaining a unified look and feel This consistency helps to reinforce the brand identity and makes the overall message more impactful\n Conclusion\nThis image effectively combines a warm and sophisticated color palette a modern and minimalist style and a wellstructured layout to showcase the versatility and elegance of the luggage The relationship between the text and the main subject is seamless with each section clearly communicating a specific travel scenario while reinforcing the products appeal The overall effect is one of luxury practicality and adventure making the luggage an attractive choice for a wide range of travelers\n\n请根据以上要求，输出修改后的完整新指令。"
+      ]
+    },
+    {
+      "id": 39,
+      "type": "ProcessString",
+      "pos": {
+        "0": 2122.530029296875,
+        "1": 423.5616149902344
+      },
+      "size": {
+        "0": 233.86720275878906,
+        "1": 82
+      },
+      "flags": {},
+      "order": 29,
+      "mode": 0,
+      "inputs": [
+        {
+          "label": "input_string",
+          "name": "input_string",
+          "type": "STRING",
+          "widget": {
+            "name": "input_string"
+          },
+          "link": 49
+        }
+      ],
+      "outputs": [
+        {
+          "label": "STRING",
+          "name": "STRING",
+          "type": "STRING",
+          "links": [
+            50
+          ]
+        }
+      ],
+      "properties": {
+        "enableTabs": false,
+        "tabWidth": 65,
+        "tabXOffset": 10,
+        "hasSecondTab": false,
+        "secondTabText": "Send Back",
+        "secondTabOffset": 80,
+        "secondTabWidth": 65,
+        "Node name for S&R": "ProcessString"
+      },
+      "widgets_values": [
+        "",
+        "去空行"
+      ]
+    },
+    {
+      "id": 25,
+      "type": "Note",
+      "pos": {
+        "0": 2035.9918212890625,
+        "1": 569.9472045898438
+      },
+      "size": {
+        "0": 456.3806457519531,
+        "1": 352.43731689453125
+      },
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {},
+      "widgets_values": [
+        "功能描述\nLibLibGenerate 类用于生成基于给定系统提示和用户提示的文本或 JSON 格式的响应。它通过调用 API 客户端来生成响应，并支持不同的模型和响应格式。\n\n输入数据\nsystem (STRING): 系统提示，用于定义 AI 助手的角色或行为。默认值为 \"你是一个AI助手\"。\nprompt (STRING): 用户提示，即用户输入的文本。默认值为空字符串。\nmodel (LIST): 使用的模型，可选值为 ['qwen-turbo', 'qwen-plus', 'qwen-max', 'qwen-long']。\nformat (LIST): 响应格式，可选值为 [\"text\", \"json\", \"\"]，其中空字符串表示默认格式。\noptions (LIBLIB_OPTIONS, 可选): 额外的请求选项，默认为 None。\n处理过程\n初始化请求选项: 通过 get_request_options 函数获取或初始化请求选项。\n设置响应格式: 如果 format 为 \"json\"，则在请求选项中设置 response_format 为 {\"type\": \"json_object\"}。\n调用 API 生成响应: 使用 api_client.chat.completions.create 方法生成响应。传入的参数包括：\nmodel: 选择的模型。\nmessages: 包含系统提示和用户提示的消息列表。\nrequest_options: 其他请求选项。\n返回生成的响应: 返回 API 响应中的第一个选择的消息内容。\n输出结果\nresult (STRING): 生成的文本或 JSON 格式的响应内容。\n总结\nLibLibGenerate 类通过接收系统提示、用户提示、模型和格式等输入，调用 API 生成相应的文本或 JSON 响应，并返回生成的结果"
+      ],
+      "color": "#432",
+      "bgcolor": "#653"
+    },
+    {
+      "id": 23,
+      "type": "SaveImage",
+      "pos": {
+        "0": 4119.1728515625,
+        "1": 69.83476257324219
+      },
+      "size": {
+        "0": 637.2305908203125,
+        "1": 832.6890258789062
+      },
+      "flags": {},
+      "order": 32,
+      "mode": 0,
+      "inputs": [
+        {
+          "label": "图像",
+          "name": "images",
+          "type": "IMAGE",
+          "link": 62
+        }
+      ],
+      "outputs": [],
+      "properties": {
+        "enableTabs": false,
+        "tabWidth": 65,
+        "tabXOffset": 10,
+        "hasSecondTab": false,
+        "secondTabText": "Send Back",
+        "secondTabOffset": 80,
+        "secondTabWidth": 65,
+        "Node name for S&R": "SaveImage"
+      },
+      "widgets_values": [
+        "ComfyUI"
+      ]
+    },
+    {
+      "id": 38,
+      "type": "ShowText|pysssss",
+      "pos": {
+        "0": -170.91148376464844,
+        "1": 674.4186401367188
+      },
+      "size": {
+        "0": 551.4791259765625,
+        "1": 771.2802734375
+      },
+      "flags": {},
+      "order": 25,
+      "mode": 0,
+      "inputs": [
+        {
+          "label": "文本",
+          "name": "text",
+          "type": "STRING",
+          "widget": {
+            "name": "text"
+          },
+          "link": 44
+        }
+      ],
+      "outputs": [
+        {
+          "label": "字符串",
+          "name": "STRING",
+          "shape": 6,
+          "type": "STRING",
+          "links": [
+            47
+          ]
+        }
+      ],
+      "properties": {
+        "enableTabs": false,
+        "tabWidth": 65,
+        "tabXOffset": 10,
+        "hasSecondTab": false,
+        "secondTabText": "Send Back",
+        "secondTabOffset": 80,
+        "secondTabWidth": 65,
+        "Node name for S&R": "ShowText|pysssss"
+      },
+      "widgets_values": [
+        "This image is a visually appealing advertisement or promotional graphic designed to showcase the versatility and elegance of a particular line of luggage The layout is clean modern and wellorganized with a focus on highlighting the product in various travel scenarios Below is a detailed breakdown of the color tone style layout structure and the relationship between the text and the main subject\n Color Tone\nThe color palette is warm sophisticated and cohesive creating a sense of luxury and reliability The dominant colors are\n BeigeTan Used for the luggage itself giving it a classic and timeless appearance\n Brown Applied as accents on the luggage eg trim handles and wheels adding a touch of elegance and contrast\n Light Blue Seen in the womans shirt in the Outdoor Activities section which complements the beige luggage and evokes a sense of calm and relaxation\n White Used for the background and text ensuring clarity and readability\n Black Used for the text and some elements of the luggage eg wheels providing a strong contrast and a sleek finish\nThe overall color tone is neutral and calming making the luggage appear both stylish and practical\n Style\nThe style of the image is modern minimalistic and aspirational It conveys a sense of sophistication and adventure appealing to travelers who value quality design and functionality The use of highquality photography and clean typography enhances the luxurious feel of the product\n Photography The images are professionally shot with soft lighting and a focus on the details of the luggage The settings car trunk airport beach are carefully chosen to evoke specific travel experiences\n Typography The font used for the text is clean sansserif and easy to read It complements the modern aesthetic of the image without overpowering the visuals\n Composition The layout is balanced with each section clearly defined and visually distinct The use of negative space ensures that the viewers attention is drawn to the main subjectthe luggagewhile the text provides context\n Layout Structure\nThe image is divided into four sections each representing a different travel scenario The layout is horizontal with each section occupying approximately equal space This structure allows for a clear and organized presentation of the product in various contexts\n1 SelfDriving Travel\n    Located on the far left this section shows the luggage packed in the trunk of a car suggesting convenience and ease of transport for road trips\n    The beige suitcase is neatly arranged with personal items like a laptop and clothing visible emphasizing practicality\n2 Traveling For SchoolWork\n    Positioned in the centerleft this section features a closeup of the luggage being carried by someone walking likely in an airport or urban setting\n    The focus is on the suitcases design and portability with the persons legs and shoes visible adding a human element to the scene\n3 Outdoor Activities\n    Located in the centerright this section shows a woman relaxing on a beach chair with the luggage placed nearby The open suitcase reveals items like sunscreen a hat and other essentials for outdoor adventures\n    The setting is bright and sunny evoking a sense of leisure and freedom\n4 Traveling Abroad\n    Positioned on the far right this section depicts the luggage on a conveyor belt at an airport symbolizing international travel\n    The suitcase is shown from a side angle highlighting its durability and suitability for long journeys\nEach section is separated by subtle white space ensuring that the viewer can easily distinguish between the different travel scenarios The overall layout is symmetrical and harmonious creating a cohesive visual narrative\n Relationship Between Text and Main Subject\nThe text in each section serves to contextualize the main subjectthe luggageby associating it with specific travel experiences The relationship between the text and the main subject is direct and complementary\n Text Placement The text is placed below each image in a consistent location ensuring that it does not distract from the visual focus on the luggage\n Descriptive Language The text is concise and descriptive using phrases like SelfDriving Travel Traveling For SchoolWork Outdoor Activities and Traveling Abroad to clearly communicate the intended use of the luggage\n Visual Reinforcement Each image reinforces the message of the text For example the Outdoor Activities section shows the luggage being used in a beach setting while the Traveling Abroad section depicts the suitcase on a conveyor belt emphasizing its suitability for international travel\n Consistency The text style and font are consistent across all sections maintaining a unified look and feel This consistency helps to reinforce the brand identity and makes the overall message more impactful\n Conclusion\nThis image effectively combines a warm and sophisticated color palette a modern and minimalist style and a wellstructured layout to showcase the versatility and elegance of the luggage The relationship between the text and the main subject is seamless with each section clearly communicating a specific travel scenario while reinforcing the products appeal The overall effect is one of luxury practicality and adventure making the luggage an attractive choice for a wide range of travelers",
+        "This image is a visually appealing advertisement or promotional graphic designed to showcase the versatility and elegance of a particular line of luggage The layout is clean modern and wellorganized with a focus on highlighting the product in various travel scenarios Below is a detailed breakdown of the color tone style layout structure and the relationship between the text and the main subject\n Color Tone\nThe color palette is warm sophisticated and cohesive creating a sense of luxury and reliability The dominant colors are\n BeigeTan Used for the luggage itself giving it a classic and timeless appearance\n Brown Applied as accents on the luggage eg trim handles and wheels adding a touch of elegance and contrast\n Light Blue Seen in the womans shirt in the Outdoor Activities section which complements the beige luggage and evokes a sense of calm and relaxation\n White Used for the background and text ensuring clarity and readability\n Black Used for the text and some elements of the luggage eg wheels providing a strong contrast and a sleek finish\nThe overall color tone is neutral and calming making the luggage appear both stylish and practical\n Style\nThe style of the image is modern minimalistic and aspirational It conveys a sense of sophistication and adventure appealing to travelers who value quality design and functionality The use of highquality photography and clean typography enhances the luxurious feel of the product\n Photography The images are professionally shot with soft lighting and a focus on the details of the luggage The settings car trunk airport beach are carefully chosen to evoke specific travel experiences\n Typography The font used for the text is clean sansserif and easy to read It complements the modern aesthetic of the image without overpowering the visuals\n Composition The layout is balanced with each section clearly defined and visually distinct The use of negative space ensures that the viewers attention is drawn to the main subjectthe luggagewhile the text provides context\n Layout Structure\nThe image is divided into four sections each representing a different travel scenario The layout is horizontal with each section occupying approximately equal space This structure allows for a clear and organized presentation of the product in various contexts\n1 SelfDriving Travel\n    Located on the far left this section shows the luggage packed in the trunk of a car suggesting convenience and ease of transport for road trips\n    The beige suitcase is neatly arranged with personal items like a laptop and clothing visible emphasizing practicality\n2 Traveling For SchoolWork\n    Positioned in the centerleft this section features a closeup of the luggage being carried by someone walking likely in an airport or urban setting\n    The focus is on the suitcases design and portability with the persons legs and shoes visible adding a human element to the scene\n3 Outdoor Activities\n    Located in the centerright this section shows a woman relaxing on a beach chair with the luggage placed nearby The open suitcase reveals items like sunscreen a hat and other essentials for outdoor adventures\n    The setting is bright and sunny evoking a sense of leisure and freedom\n4 Traveling Abroad\n    Positioned on the far right this section depicts the luggage on a conveyor belt at an airport symbolizing international travel\n    The suitcase is shown from a side angle highlighting its durability and suitability for long journeys\nEach section is separated by subtle white space ensuring that the viewer can easily distinguish between the different travel scenarios The overall layout is symmetrical and harmonious creating a cohesive visual narrative\n Relationship Between Text and Main Subject\nThe text in each section serves to contextualize the main subjectthe luggageby associating it with specific travel experiences The relationship between the text and the main subject is direct and complementary\n Text Placement The text is placed below each image in a consistent location ensuring that it does not distract from the visual focus on the luggage\n Descriptive Language The text is concise and descriptive using phrases like SelfDriving Travel Traveling For SchoolWork Outdoor Activities and Traveling Abroad to clearly communicate the intended use of the luggage\n Visual Reinforcement Each image reinforces the message of the text For example the Outdoor Activities section shows the luggage being used in a beach setting while the Traveling Abroad section depicts the suitcase on a conveyor belt emphasizing its suitability for international travel\n Consistency The text style and font are consistent across all sections maintaining a unified look and feel This consistency helps to reinforce the brand identity and makes the overall message more impactful\n Conclusion\nThis image effectively combines a warm and sophisticated color palette a modern and minimalist style and a wellstructured layout to showcase the versatility and elegance of the luggage The relationship between the text and the main subject is seamless with each section clearly communicating a specific travel scenario while reinforcing the products appeal The overall effect is one of luxury practicality and adventure making the luggage an attractive choice for a wide range of travelers"
+      ]
+    },
+    {
+      "id": 10,
+      "type": "LoadImage",
+      "pos": {
+        "0": -2746.09033203125,
+        "1": 44.66429901123047
+      },
+      "size": {
+        "0": 480.2275695800781,
+        "1": 573.7503662109375
+      },
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "label": "图像",
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            40,
+            64,
+            65
+          ]
+        },
+        {
+          "label": "遮罩",
+          "name": "MASK",
+          "type": "MASK",
+          "links": null
+        }
+      ],
+      "properties": {
+        "enableTabs": false,
+        "tabWidth": 65,
+        "tabXOffset": 10,
+        "hasSecondTab": false,
+        "secondTabText": "Send Back",
+        "secondTabOffset": 80,
+        "secondTabWidth": 65,
+        "Node name for S&R": "LoadImage"
+      },
+      "widgets_values": [
+        "image.png",
+        "image",
+        ""
+      ],
+      "_widget_cache_map": {
+        "image.png": {
+          "value": "img/46987de339ac47e0965172f7ccd1b939/763a6c5b85eafd87ee8048fab882333b331818a263736c5ea1d8fb41344a0dc0.png",
+          "name": "image.png",
+          "url": "https://liblibai-tmp-image.liblib.cloud/img/46987de339ac47e0965172f7ccd1b939/763a6c5b85eafd87ee8048fab882333b331818a263736c5ea1d8fb41344a0dc0.png",
+          "width": 1080,
+          "height": 1800
+        },
+        "产品精修_护肤品精修_3_会修图的阿伟_来自小红书网页版.jpg": {
+          "value": "img/46987de339ac47e0965172f7ccd1b939/97d47b62ae681f6bb31db477af3135ddfd2b50c3536351a900e82938a4be2d63.jpg",
+          "name": "产品精修_护肤品精修_3_会修图的阿伟_来自小红书网页版.jpg",
+          "url": "https://liblibai-tmp-image.liblib.cloud/img/46987de339ac47e0965172f7ccd1b939/97d47b62ae681f6bb31db477af3135ddfd2b50c3536351a900e82938a4be2d63.jpg",
+          "width": 1080,
+          "height": 1440
+        }
+      }
+    },
+    {
+      "id": 15,
+      "type": "LibLibVisionV2Qwen",
+      "pos": {
+        "0": -1811.4322509765625,
+        "1": 16.854103088378906
+      },
+      "size": {
+        "0": 400,
+        "1": 200
+      },
+      "flags": {},
+      "order": 19,
+      "mode": 0,
+      "inputs": [
+        {
+          "label": "images",
+          "name": "images",
+          "type": "IMAGE",
+          "link": 41
+        },
+        {
+          "label": "options",
+          "name": "options",
+          "shape": 7,
+          "type": "LIBLIB_OPTIONS",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "label": "description",
+          "name": "description",
+          "type": "STRING",
+          "links": [
+            23
+          ]
+        }
+      ],
+      "properties": {
+        "enableTabs": false,
+        "tabWidth": 65,
+        "tabXOffset": 10,
+        "hasSecondTab": false,
+        "secondTabText": "Send Back",
+        "secondTabOffset": 80,
+        "secondTabWidth": 65,
+        "Node name for S&R": "LibLibVisionV2Qwen"
+      },
+      "widgets_values": [
+        "简单描述产品名称、类别、颜色、材质、设计细节",
+        "qwen2.5-vl-7b-instruct",
+        "text"
+      ]
+    },
+    {
+      "id": 46,
+      "type": "Image Comparer (rgthree)",
+      "pos": {
+        "0": 4843.70849609375,
+        "1": 36.571556091308594
+      },
+      "size": {
+        "0": 914.3270263671875,
+        "1": 835.7450561523438
+      },
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [
+        {
+          "dir": 3,
+          "label": "图像_A",
+          "name": "image_a",
+          "type": "IMAGE",
+          "link": null
+        },
+        {
+          "dir": 3,
+          "label": "图像_B",
+          "name": "image_b",
+          "type": "IMAGE",
+          "link": null
+        }
+      ],
+      "outputs": [],
+      "properties": {
+        "enableTabs": false,
+        "tabWidth": 65,
+        "tabXOffset": 10,
+        "hasSecondTab": false,
+        "secondTabText": "Send Back",
+        "secondTabOffset": 80,
+        "secondTabWidth": 65,
+        "comparer_mode": "Slide"
+      },
+      "widgets_values": [
+        [
+          {
+            "name": "A",
+            "selected": true,
+            "url": "https://images-tmp-wm.liblib.cloud/sd-images/e3232d21332c00171d341d4ec265914095c4c3a18c4c7aef75880441220e877a.png?filename=sd-images/e3232d21332c00171d341d4ec265914095c4c3a18c4c7aef75880441220e877a.png&type=output&rand=0.5177903773378587"
+          },
+          {
+            "name": "B",
+            "selected": true,
+            "url": "https://images-tmp-wm.liblib.cloud/sd-images/ed98302c3af7121134448bf9d532b1baf8368dfdf8ca48911d4d6953f2f93b93.png?filename=sd-images/ed98302c3af7121134448bf9d532b1baf8368dfdf8ca48911d4d6953f2f93b93.png&type=output&rand=0.5298702892548555"
+          }
+        ]
+      ]
+    },
+    {
+      "id": 47,
+      "type": "Note",
+      "pos": {
+        "0": -1766.306396484375,
+        "1": 1042.2332763671875
+      },
+      "size": {
+        "0": 379.61187744140625,
+        "1": 134.30166625976562
+      },
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {},
+      "widgets_values": [
+        "这里的提示词起到是否还原参考图的\n\n它描述的越准，那么出图就越接近。"
+      ],
+      "color": "#432",
+      "bgcolor": "#653"
+    },
+    {
+      "id": 49,
+      "type": "Note",
+      "pos": {
+        "0": -1798.7235107421875,
+        "1": 269.77911376953125
+      },
+      "size": {
+        "0": 379.61187744140625,
+        "1": 134.30166625976562
+      },
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {},
+      "widgets_values": [
+        "这里的提示词起到是否还产品一致性的\n\n它描述的越准，那么出图一致性就越高。"
+      ],
+      "color": "#432",
+      "bgcolor": "#653"
+    },
+    {
+      "id": 26,
+      "type": "ShowText|pysssss",
+      "pos": {
+        "0": -1327.080322265625,
+        "1": -14.422492027282715
+      },
+      "size": {
+        "0": 574.2293090820312,
+        "1": 356.5526123046875
+      },
+      "flags": {},
+      "order": 21,
+      "mode": 0,
+      "inputs": [
+        {
+          "label": "文本",
+          "name": "text",
+          "type": "STRING",
+          "widget": {
+            "name": "text"
+          },
+          "link": 23
+        }
+      ],
+      "outputs": [
+        {
+          "label": "字符串",
+          "name": "STRING",
+          "shape": 6,
+          "type": "STRING",
+          "links": [
+            54
+          ]
+        }
+      ],
+      "properties": {
+        "enableTabs": false,
+        "tabWidth": 65,
+        "tabXOffset": 10,
+        "hasSecondTab": false,
+        "secondTabText": "Send Back",
+        "secondTabOffset": 80,
+        "secondTabWidth": 65,
+        "Node name for S&R": "ShowText|pysssss"
+      },
+      "widgets_values": [
+        "这是一款旅行箱，属于行李箱类。它的颜色是灰色金属色（可能为深灰或银色调）。材质看起来像是硬质塑料外壳，并且表面有明显的纹理线条装饰。\n\n设计上有一些独特的特点：\n1. 箱体侧面有一个小口袋和拉链门。\n2. 顶部有一根伸缩式手柄便于携带移动。\n3. 底部装有四个万向轮以便于在地面上轻松滚动。\n4. 前面还有一个锁扣装置用于固定箱子的开启状态以防止丢失物品或者被盗取内容物等安全问题发生；\n\n整体外观简洁大方又不失时尚感，在保证实用性的同时也兼顾了美观性需求！",
+        "这是一款旅行箱，属于行李箱类。它的颜色是灰色金属色（可能为深灰或银色调）。材质看起来像是硬质塑料外壳，并且表面有明显的纹理线条装饰。\n\n设计上有一些独特的特点：\n1. 箱体侧面有一个小口袋和拉链门。\n2. 顶部有一根伸缩式手柄便于携带移动。\n3. 底部装有四个万向轮以便于在地面上轻松滚动。\n4. 前面还有一个锁扣装置用于固定箱子的开启状态以防止丢失物品或者被盗取内容物等安全问题发生；\n\n整体外观简洁大方又不失时尚感，在保证实用性的同时也兼顾了美观性需求！"
+      ]
+    },
+    {
+      "id": 50,
+      "type": "Image Comparer (rgthree)",
+      "pos": {
+        "0": 5803.8876953125,
+        "1": 33.368263244628906
+      },
+      "size": {
+        "0": 914.3270263671875,
+        "1": 835.7450561523438
+      },
+      "flags": {},
+      "order": 5,
+      "mode": 0,
+      "inputs": [
+        {
+          "dir": 3,
+          "label": "图像_A",
+          "name": "image_a",
+          "type": "IMAGE",
+          "link": null
+        },
+        {
+          "dir": 3,
+          "label": "图像_B",
+          "name": "image_b",
+          "type": "IMAGE",
+          "link": null
+        }
+      ],
+      "outputs": [],
+      "properties": {
+        "enableTabs": false,
+        "tabWidth": 65,
+        "tabXOffset": 10,
+        "hasSecondTab": false,
+        "secondTabText": "Send Back",
+        "secondTabOffset": 80,
+        "secondTabWidth": 65,
+        "comparer_mode": "Slide"
+      },
+      "widgets_values": [
+        [
+          {
+            "name": "A",
+            "selected": true,
+            "url": "https://images-tmp-wm.liblib.cloud/sd-images/4deb6aa3de7de861b2515f2887f149a5845c3b6157f362f531bdbdc8e90c49e6.png?filename=sd-images/4deb6aa3de7de861b2515f2887f149a5845c3b6157f362f531bdbdc8e90c49e6.png&type=output&rand=0.9733892423800292"
+          },
+          {
+            "name": "B",
+            "selected": true,
+            "url": "https://images-tmp-wm.liblib.cloud/sd-images/72880403058bb2494d8f523bfdba799cfa41037120ac268563cb72140ae2ba41.png?filename=sd-images/72880403058bb2494d8f523bfdba799cfa41037120ac268563cb72140ae2ba41.png&type=output&rand=0.5204520365702201"
+          }
+        ]
+      ]
+    },
+    {
+      "id": 51,
+      "type": "Image Comparer (rgthree)",
+      "pos": {
+        "0": 6753.57373046875,
+        "1": 23.357921600341797
+      },
+      "size": {
+        "0": 914.3270263671875,
+        "1": 835.7450561523438
+      },
+      "flags": {},
+      "order": 6,
+      "mode": 0,
+      "inputs": [
+        {
+          "dir": 3,
+          "label": "图像_A",
+          "name": "image_a",
+          "type": "IMAGE",
+          "link": null
+        },
+        {
+          "dir": 3,
+          "label": "图像_B",
+          "name": "image_b",
+          "type": "IMAGE",
+          "link": null
+        }
+      ],
+      "outputs": [],
+      "properties": {
+        "enableTabs": false,
+        "tabWidth": 65,
+        "tabXOffset": 10,
+        "hasSecondTab": false,
+        "secondTabText": "Send Back",
+        "secondTabOffset": 80,
+        "secondTabWidth": 65,
+        "comparer_mode": "Slide"
+      },
+      "widgets_values": [
+        [
+          {
+            "name": "A",
+            "selected": true,
+            "url": "https://images-tmp-wm.liblib.cloud/sd-images/4563e070cb11680bbf87ec8be8d0ade51a7b3752e9442bcd9c5433e0401137ec.png?filename=sd-images/4563e070cb11680bbf87ec8be8d0ade51a7b3752e9442bcd9c5433e0401137ec.png&type=output&rand=0.4511457237205718"
+          },
+          {
+            "name": "B",
+            "selected": true,
+            "url": "https://images-tmp-wm.liblib.cloud/sd-images/753df0a7cb0980d3f25e1e148f5b0066d0405f5874ea5afd06b3fc60ecb13b13.png?filename=sd-images/753df0a7cb0980d3f25e1e148f5b0066d0405f5874ea5afd06b3fc60ecb13b13.png&type=output&rand=0.5980397873965295"
+          }
+        ]
+      ]
+    },
+    {
+      "id": 14,
+      "type": "LoadImage",
+      "pos": {
+        "0": -2740,
+        "1": 850
+      },
+      "size": {
+        "0": 481.9059753417969,
+        "1": 575.76416015625
+      },
+      "flags": {},
+      "order": 7,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "label": "图像",
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            10
+          ]
+        },
+        {
+          "label": "遮罩",
+          "name": "MASK",
+          "type": "MASK",
+          "links": null
+        }
+      ],
+      "properties": {
+        "enableTabs": false,
+        "tabWidth": 65,
+        "tabXOffset": 10,
+        "hasSecondTab": false,
+        "secondTabText": "Send Back",
+        "secondTabOffset": 80,
+        "secondTabWidth": 65,
+        "Node name for S&R": "LoadImage"
+      },
+      "widgets_values": [
+        "image.png",
+        "image",
+        ""
+      ],
+      "_widget_cache_map": {
+        "image.png": {
+          "value": "img/46987de339ac47e0965172f7ccd1b939/f42a0ff0e601cd6cb96af045e5ea4ac57175811d40fe76252eb37cc5b23911dd.png",
+          "name": "image.png",
+          "url": "https://liblibai-tmp-image.liblib.cloud/img/46987de339ac47e0965172f7ccd1b939/f42a0ff0e601cd6cb96af045e5ea4ac57175811d40fe76252eb37cc5b23911dd.png",
+          "width": 1464,
+          "height": 600
+        },
+        "第1组 (1).JPG": {
+          "value": "img/46987de339ac47e0965172f7ccd1b939/56f2610ffaa12dd6227f9262f5fda97eb4c41e42b3969f24f821df1fc0c2e8dc.JPG",
+          "name": "第1组 (1).JPG",
+          "url": "https://liblibai-tmp-image.liblib.cloud/img/46987de339ac47e0965172f7ccd1b939/56f2610ffaa12dd6227f9262f5fda97eb4c41e42b3969f24f821df1fc0c2e8dc.JPG",
+          "width": 4160,
+          "height": 6240
+        },
+        "第4组 (2).JPG": {
+          "value": "img/46987de339ac47e0965172f7ccd1b939/ba1f476c38b741ae7f7377d5d78db294b5cac5184b99a83288635dab9c79b0d0.JPG",
+          "name": "第4组 (2).JPG",
+          "url": "https://liblibai-tmp-image.liblib.cloud/img/46987de339ac47e0965172f7ccd1b939/ba1f476c38b741ae7f7377d5d78db294b5cac5184b99a83288635dab9c79b0d0.JPG",
+          "width": 6240,
+          "height": 4160
+        }
+      }
+    },
+    {
+      "id": 41,
+      "type": "Image Comparer (rgthree)",
+      "pos": {
+        "0": 9640,
+        "1": 50
+      },
+      "size": {
+        "0": 914.3270263671875,
+        "1": 835.7450561523438
+      },
+      "flags": {},
+      "order": 8,
+      "mode": 0,
+      "inputs": [
+        {
+          "dir": 3,
+          "label": "图像_A",
+          "name": "image_a",
+          "type": "IMAGE",
+          "link": null
+        },
+        {
+          "dir": 3,
+          "label": "图像_B",
+          "name": "image_b",
+          "type": "IMAGE",
+          "link": null
+        }
+      ],
+      "outputs": [],
+      "properties": {
+        "enableTabs": false,
+        "tabWidth": 65,
+        "tabXOffset": 10,
+        "hasSecondTab": false,
+        "secondTabText": "Send Back",
+        "secondTabOffset": 80,
+        "secondTabWidth": 65,
+        "comparer_mode": "Slide"
+      },
+      "widgets_values": [
+        [
+          {
+            "name": "A",
+            "selected": true,
+            "url": "https://images-tmp-wm.liblib.cloud/sd-images/ff35718136f2ee866c1171741a239f43203fe95a82b612054e2331d59e1c95ea.png?filename=sd-images/ff35718136f2ee866c1171741a239f43203fe95a82b612054e2331d59e1c95ea.png&type=output&rand=0.7982570199625254"
+          },
+          {
+            "name": "B",
+            "selected": true,
+            "url": "https://images-tmp-wm.liblib.cloud/sd-images/9dad793fcd37eec702abfe031df2eebaf99bc3c86937ff7a63984b55c1c3eb55.png?filename=sd-images/9dad793fcd37eec702abfe031df2eebaf99bc3c86937ff7a63984b55c1c3eb55.png&type=output&rand=0.19523561713207882"
+          }
+        ]
+      ]
+    },
+    {
+      "id": 42,
+      "type": "Image Comparer (rgthree)",
+      "pos": {
+        "0": 10580,
+        "1": 40
+      },
+      "size": {
+        "0": 914.3270263671875,
+        "1": 835.7450561523438
+      },
+      "flags": {},
+      "order": 9,
+      "mode": 0,
+      "inputs": [
+        {
+          "dir": 3,
+          "label": "图像_A",
+          "name": "image_a",
+          "type": "IMAGE",
+          "link": null
+        },
+        {
+          "dir": 3,
+          "label": "图像_B",
+          "name": "image_b",
+          "type": "IMAGE",
+          "link": null
+        }
+      ],
+      "outputs": [],
+      "properties": {
+        "enableTabs": false,
+        "tabWidth": 65,
+        "tabXOffset": 10,
+        "hasSecondTab": false,
+        "secondTabText": "Send Back",
+        "secondTabOffset": 80,
+        "secondTabWidth": 65,
+        "comparer_mode": "Slide"
+      },
+      "widgets_values": [
+        [
+          {
+            "name": "A",
+            "selected": true,
+            "url": "https://images-tmp-wm.liblib.cloud/sd-images/fbf7ad3349b846d3d093722a7ab8474185f16cada7198abc24b0a845e84402e0.png?filename=sd-images/fbf7ad3349b846d3d093722a7ab8474185f16cada7198abc24b0a845e84402e0.png&type=output&rand=0.06096136952992204"
+          },
+          {
+            "name": "B",
+            "selected": true,
+            "url": "https://images-tmp-wm.liblib.cloud/sd-images/3b3ba609b33e278af675c0e4b1e4da2139d2cb97eb5e81d8523f3fb5ebdf3efe.png?filename=sd-images/3b3ba609b33e278af675c0e4b1e4da2139d2cb97eb5e81d8523f3fb5ebdf3efe.png&type=output&rand=0.13803805158608862"
+          }
+        ]
+      ]
+    },
+    {
+      "id": 44,
+      "type": "Image Comparer (rgthree)",
+      "pos": {
+        "0": 8700,
+        "1": 40
+      },
+      "size": {
+        "0": 914.3270263671875,
+        "1": 835.7450561523438
+      },
+      "flags": {},
+      "order": 10,
+      "mode": 0,
+      "inputs": [
+        {
+          "dir": 3,
+          "label": "图像_A",
+          "name": "image_a",
+          "type": "IMAGE",
+          "link": null
+        },
+        {
+          "dir": 3,
+          "label": "图像_B",
+          "name": "image_b",
+          "type": "IMAGE",
+          "link": null
+        }
+      ],
+      "outputs": [],
+      "properties": {
+        "enableTabs": false,
+        "tabWidth": 65,
+        "tabXOffset": 10,
+        "hasSecondTab": false,
+        "secondTabText": "Send Back",
+        "secondTabOffset": 80,
+        "secondTabWidth": 65,
+        "comparer_mode": "Slide"
+      },
+      "widgets_values": [
+        [
+          {
+            "name": "A",
+            "selected": true,
+            "url": "https://images-tmp-wm.liblib.cloud/sd-images/3057439e90117acf5cc07062ddce6855150f7149b23010fe3a50e6792369d4d1.png?filename=sd-images/3057439e90117acf5cc07062ddce6855150f7149b23010fe3a50e6792369d4d1.png&type=output&rand=0.4060013870046979"
+          },
+          {
+            "name": "B",
+            "selected": true,
+            "url": "https://images-tmp-wm.liblib.cloud/sd-images/bb18c3aeb1d1d2e7b62922be65d8ff2af9f14ef9c49d261004294522326efa24.png?filename=sd-images/bb18c3aeb1d1d2e7b62922be65d8ff2af9f14ef9c49d261004294522326efa24.png&type=output&rand=0.30524260184164786"
+          }
+        ]
+      ]
+    },
+    {
+      "id": 52,
+      "type": "Image Comparer (rgthree)",
+      "pos": {
+        "0": 7717.779296875,
+        "1": 40.11975860595703
+      },
+      "size": {
+        "0": 914.3270263671875,
+        "1": 835.7450561523438
+      },
+      "flags": {},
+      "order": 11,
+      "mode": 0,
+      "inputs": [
+        {
+          "dir": 3,
+          "label": "图像_A",
+          "name": "image_a",
+          "type": "IMAGE",
+          "link": null
+        },
+        {
+          "dir": 3,
+          "label": "图像_B",
+          "name": "image_b",
+          "type": "IMAGE",
+          "link": null
+        }
+      ],
+      "outputs": [],
+      "properties": {
+        "enableTabs": false,
+        "tabWidth": 65,
+        "tabXOffset": 10,
+        "hasSecondTab": false,
+        "secondTabText": "Send Back",
+        "secondTabOffset": 80,
+        "secondTabWidth": 65,
+        "comparer_mode": "Slide"
+      },
+      "widgets_values": [
+        [
+          {
+            "name": "A",
+            "selected": true,
+            "url": "https://images-tmp-wm.liblib.cloud/sd-images/513c8e486cb7fa0a48bf647cb2a086a532f4d8e557b382fac363754e83549436.png?filename=sd-images/513c8e486cb7fa0a48bf647cb2a086a532f4d8e557b382fac363754e83549436.png&type=output&rand=0.5774002008360031"
+          },
+          {
+            "name": "B",
+            "selected": true,
+            "url": "https://images-tmp-wm.liblib.cloud/sd-images/34fc42f9bb21134be1861b4384ae0f9c8e3f18fd1ddbd386ed9ee006d1b15950.png?filename=sd-images/34fc42f9bb21134be1861b4384ae0f9c8e3f18fd1ddbd386ed9ee006d1b15950.png&type=output&rand=0.6293277828339277"
+          }
+        ]
+      ]
+    },
+    {
+      "id": 43,
+      "type": "Image Comparer (rgthree)",
+      "pos": {
+        "0": 11520,
+        "1": 50
+      },
+      "size": {
+        "0": 914.3270263671875,
+        "1": 835.7450561523438
+      },
+      "flags": {},
+      "order": 12,
+      "mode": 0,
+      "inputs": [
+        {
+          "dir": 3,
+          "label": "图像_A",
+          "name": "image_a",
+          "type": "IMAGE",
+          "link": null
+        },
+        {
+          "dir": 3,
+          "label": "图像_B",
+          "name": "image_b",
+          "type": "IMAGE",
+          "link": null
+        }
+      ],
+      "outputs": [],
+      "properties": {
+        "enableTabs": false,
+        "tabWidth": 65,
+        "tabXOffset": 10,
+        "hasSecondTab": false,
+        "secondTabText": "Send Back",
+        "secondTabOffset": 80,
+        "secondTabWidth": 65,
+        "comparer_mode": "Slide"
+      },
+      "widgets_values": [
+        [
+          {
+            "name": "A",
+            "selected": true,
+            "url": "https://images-tmp-wm.liblib.cloud/sd-images/13f41f4d6b71d1bfaa488d5d8511058a836572184611e7015ebe33c2a7f40ae9.png?filename=sd-images/13f41f4d6b71d1bfaa488d5d8511058a836572184611e7015ebe33c2a7f40ae9.png&type=output&rand=0.09409102747023645"
+          },
+          {
+            "name": "B",
+            "selected": true,
+            "url": "https://images-tmp-wm.liblib.cloud/sd-images/2b78dbd9b0fb93c72738096915e7504dd737669016b5aa2a8dd2ae12d43477c6.png?filename=sd-images/2b78dbd9b0fb93c72738096915e7504dd737669016b5aa2a8dd2ae12d43477c6.png&type=output&rand=0.7409190088815243"
+          }
+        ]
+      ]
+    },
+    {
+      "id": 40,
+      "type": "Image Comparer (rgthree)",
+      "pos": {
+        "0": 3858.185302734375,
+        "1": 1099.03173828125
+      },
+      "size": {
+        "0": 914.3270263671875,
+        "1": 835.7450561523438
+      },
+      "flags": {},
+      "order": 33,
+      "mode": 0,
+      "inputs": [
+        {
+          "dir": 3,
+          "label": "图像_A",
+          "name": "image_a",
+          "type": "IMAGE",
+          "link": 63
+        },
+        {
+          "dir": 3,
+          "label": "图像_B",
+          "name": "image_b",
+          "type": "IMAGE",
+          "link": 64
+        }
+      ],
+      "outputs": [],
+      "properties": {
+        "enableTabs": false,
+        "tabWidth": 65,
+        "tabXOffset": 10,
+        "hasSecondTab": false,
+        "secondTabText": "Send Back",
+        "secondTabOffset": 80,
+        "secondTabWidth": 65,
+        "comparer_mode": "Slide"
+      },
+      "widgets_values": [
+        [
+          {
+            "name": "A",
+            "selected": true,
+            "url": "https://images-tmp-wm.liblib.cloud/sd-images/513c8e486cb7fa0a48bf647cb2a086a532f4d8e557b382fac363754e83549436.png?filename=sd-images/513c8e486cb7fa0a48bf647cb2a086a532f4d8e557b382fac363754e83549436.png&type=output&rand=0.5774002008360031"
+          },
+          {
+            "name": "B",
+            "selected": true,
+            "url": "https://images-tmp-wm.liblib.cloud/sd-images/34fc42f9bb21134be1861b4384ae0f9c8e3f18fd1ddbd386ed9ee006d1b15950.png?filename=sd-images/34fc42f9bb21134be1861b4384ae0f9c8e3f18fd1ddbd386ed9ee006d1b15950.png&type=output&rand=0.6293277828339277"
+          }
+        ]
+      ]
+    },
+    {
+      "id": 53,
+      "type": "LoadImage",
+      "pos": {
+        "0": 4080,
+        "1": -830
+      },
+      "size": {
+        "0": 770.20751953125,
+        "1": 647.1915893554688
+      },
+      "flags": {},
+      "order": 13,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "label": "图像",
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": null
+        },
+        {
+          "label": "遮罩",
+          "name": "MASK",
+          "type": "MASK",
+          "links": null
+        }
+      ],
+      "properties": {
+        "enableTabs": false,
+        "tabWidth": 65,
+        "tabXOffset": 10,
+        "hasSecondTab": false,
+        "secondTabText": "Send Back",
+        "secondTabOffset": 80,
+        "secondTabWidth": 65,
+        "Node name for S&R": "LoadImage"
+      },
+      "widgets_values": [
+        "ScreenShot_2025-10-27_154003_574.png",
+        "image",
+        ""
+      ],
+      "_widget_cache_map": {
+        "72be5065e944fdf51a22467f6f29e485.jpg": {
+          "value": "img/46987de339ac47e0965172f7ccd1b939/1ad777bf19d6b317fed2f139d456448770e18037e73ba1c10bd7d35432a846bc.jpg",
+          "name": "72be5065e944fdf51a22467f6f29e485.jpg",
+          "url": "https://liblibai-tmp-image.liblib.cloud/img/46987de339ac47e0965172f7ccd1b939/1ad777bf19d6b317fed2f139d456448770e18037e73ba1c10bd7d35432a846bc.jpg",
+          "width": 1125,
+          "height": 1680
+        },
+        "b7ce42c98b51b22228bba6b7959ec017.png": {
+          "value": "img/46987de339ac47e0965172f7ccd1b939/eb5dc6dc7b8a8c38e6284dc746033bc9ffb0ab28243274c5d649cc68cdc9db20.png",
+          "name": "b7ce42c98b51b22228bba6b7959ec017.png",
+          "url": "https://liblibai-tmp-image.liblib.cloud/img/46987de339ac47e0965172f7ccd1b939/eb5dc6dc7b8a8c38e6284dc746033bc9ffb0ab28243274c5d649cc68cdc9db20.png",
+          "width": 543,
+          "height": 703
+        },
+        "532c14b692ad16632e59cb4fa07518ce.png": {
+          "value": "img/46987de339ac47e0965172f7ccd1b939/06de3c665d79131b1d6131b1ae75a5d5ea43e11ebc0d560bc470dfbd5b11c10e.png",
+          "name": "532c14b692ad16632e59cb4fa07518ce.png",
+          "url": "https://liblibai-tmp-image.liblib.cloud/img/46987de339ac47e0965172f7ccd1b939/06de3c665d79131b1d6131b1ae75a5d5ea43e11ebc0d560bc470dfbd5b11c10e.png",
+          "width": 539,
+          "height": 784
+        },
+        "ScreenShot_2025-10-27_154003_574.png": {
+          "value": "img/46987de339ac47e0965172f7ccd1b939/08f0f2b4b2763991fd1cfe36b95fb9d6dd7064832dc68080987dd7ab9de260bd.png",
+          "name": "ScreenShot_2025-10-27_154003_574.png",
+          "url": "https://liblibai-tmp-image.liblib.cloud/img/46987de339ac47e0965172f7ccd1b939/08f0f2b4b2763991fd1cfe36b95fb9d6dd7064832dc68080987dd7ab9de260bd.png",
+          "width": 527,
+          "height": 759
+        }
+      }
+    },
+    {
+      "id": 54,
+      "type": "LoadImage",
+      "pos": {
+        "0": -3248.46923828125,
+        "1": 419.6937255859375
+      },
+      "size": {
+        "0": 358.5406799316406,
+        "1": 591.3143920898438
+      },
+      "flags": {},
+      "order": 14,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "label": "图像",
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": null
+        },
+        {
+          "label": "遮罩",
+          "name": "MASK",
+          "type": "MASK",
+          "links": null
+        }
+      ],
+      "properties": {
+        "enableTabs": false,
+        "tabWidth": 65,
+        "tabXOffset": 10,
+        "hasSecondTab": false,
+        "secondTabText": "Send Back",
+        "secondTabOffset": 80,
+        "secondTabWidth": 65,
+        "Node name for S&R": "LoadImage"
+      },
+      "widgets_values": [
+        "72be5065e944fdf51a22467f6f29e485.jpg",
+        "image",
+        ""
+      ],
+      "_widget_cache_map": {
+        "72be5065e944fdf51a22467f6f29e485.jpg": {
+          "value": "img/46987de339ac47e0965172f7ccd1b939/1ad777bf19d6b317fed2f139d456448770e18037e73ba1c10bd7d35432a846bc.jpg",
+          "name": "72be5065e944fdf51a22467f6f29e485.jpg",
+          "url": "https://liblibai-tmp-image.liblib.cloud/img/46987de339ac47e0965172f7ccd1b939/1ad777bf19d6b317fed2f139d456448770e18037e73ba1c10bd7d35432a846bc.jpg",
+          "width": 1125,
+          "height": 1680
+        }
+      }
+    },
+    {
+      "id": 12,
+      "type": "TTP_text_mix",
+      "pos": {
+        "0": 592.5009765625,
+        "1": 33.415626525878906
+      },
+      "size": {
+        "0": 424.3699645996094,
+        "1": 767.6694946289062
+      },
+      "flags": {},
+      "order": 26,
+      "mode": 0,
+      "inputs": [
+        {
+          "label": "text1",
+          "name": "text1",
+          "type": "STRING",
+          "widget": {
+            "name": "text1"
+          },
+          "link": 54
+        },
+        {
+          "label": "text2",
+          "name": "text2",
+          "type": "STRING",
+          "widget": {
+            "name": "text2"
+          },
+          "link": 47
+        }
+      ],
+      "outputs": [
+        {
+          "label": "text1",
+          "name": "text1",
+          "type": "STRING",
+          "links": null
+        },
+        {
+          "label": "text2",
+          "name": "text2",
+          "type": "STRING",
+          "links": null
+        },
+        {
+          "label": "text3",
+          "name": "text3",
+          "type": "STRING",
+          "links": null
+        },
+        {
+          "label": "final_text",
+          "name": "final_text",
+          "type": "STRING",
+          "links": [
+            27
+          ]
+        }
+      ],
+      "properties": {
+        "enableTabs": false,
+        "tabWidth": 65,
+        "tabXOffset": 10,
+        "hasSecondTab": false,
+        "secondTabText": "Send Back",
+        "secondTabOffset": 80,
+        "secondTabWidth": 65,
+        "Node name for S&R": "TTP_text_mix"
+      },
+      "widgets_values": [
+        "",
+        "",
+        "{text1}{text2}",
+        "请根据下方提供的【新产品描述】，完全替换掉【参考广告描述】中关于产品主体、特性和卖点的部分，生成一个新的、用于图像生成模型的指令。\n\n核心要求：\n1.  严格保留【参考广告描述】的整体结构、场景设定、构图、动态感、镜头语言和输出格式。\n2.  只替换与产品本身相关的描述，包括：产品名称、类别、颜色、材质、设计细节、功能卖点等。\n3.  根据新产品特性，自然地对相关文案进行微调，确保新产品与广告场景融合得当。\n\n【新产品描述】\n{text1}\n\n【参考广告描述】\n{text2}\n\n请根据以上要求，输出修改后的完整新指令。"
+      ]
+    },
+    {
+      "id": 24,
+      "type": "Note",
+      "pos": {
+        "0": 589.9172973632812,
+        "1": 854.1337280273438
+      },
+      "size": {
+        "0": 446.7950744628906,
+        "1": 88
+      },
+      "flags": {},
+      "order": 15,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {},
+      "widgets_values": [
+        "这个节点的原理就是通过预制的提示词模板来替换指定文本"
+      ],
+      "color": "#432",
+      "bgcolor": "#653"
+    },
+    {
+      "id": 21,
+      "type": "LibLibGenerate",
+      "pos": {
+        "0": 1960,
+        "1": 110
+      },
+      "size": {
+        "0": 633.4149780273438,
+        "1": 240.20521545410156
+      },
+      "flags": {},
+      "order": 28,
+      "mode": 0,
+      "inputs": [
+        {
+          "label": "options",
+          "name": "options",
+          "shape": 7,
+          "type": "LIBLIB_OPTIONS",
+          "link": null
+        },
+        {
+          "label": "system",
+          "name": "system",
+          "type": "STRING",
+          "widget": {
+            "name": "system"
+          },
+          "link": 28
+        }
+      ],
+      "outputs": [
+        {
+          "label": "result",
+          "name": "result",
+          "type": "STRING",
+          "links": [
+            49
+          ]
+        }
+      ],
+      "properties": {
+        "enableTabs": false,
+        "tabWidth": 65,
+        "tabXOffset": 10,
+        "hasSecondTab": false,
+        "secondTabText": "Send Back",
+        "secondTabOffset": 80,
+        "secondTabWidth": 65,
+        "Node name for S&R": "LibLibGenerate"
+      },
+      "widgets_values": [
+        "### Instruction: 1.Edit and enhance the text description of the image. \nAdd quality descriptors, like 'A high-quality photo, an 8K photo.' \n2.Add lighting descriptions based on the scene, like 'The lighting is natural and bright, casting soft shadows.' \n3.Add scene descriptions according to the context, like 'The overall mood is serene and peaceful.' \n4.If a person is in the scene, include a description of the skin, such as 'natural skin tones and ensure the skin appears realistic with clear, fine details.' \n\n5.Only output the result of the text, no others.\n### Text:",
+        "",
+        "qwen-long-latest",
+        "text"
+      ]
+    },
+    {
+      "id": 55,
+      "type": "Note",
+      "pos": {
+        "0": -3386.421142578125,
+        "1": 77.6506576538086
+      },
+      "size": {
+        "0": 604.9999389648438,
+        "1": 218.41563415527344
+      },
+      "flags": {},
+      "order": 16,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {},
+      "widgets_values": [
+        "\n使用方法：上传产品图和参考图点击生成即可。\n\n注意事项：上传的产品必须与参考图有关联（比如你的产品图是洗面奶，那么参考图也得是洗面奶类型的）\n\n工作流出图比例是按照参考图比例来出的，如果要按照原图比例出就把“获取参考图的比例”这个组件删了即可。\n\n工作流运行原理：通过千问模型反推产品提示词和参考图提示词，送到“TTP_text_mix”节点（这个节点的原理就是通过预制的提示词模板来替换指定文本），然后把组合好的提示词送到“LibLib Generate”（智能助手）让它重新修改提示词并组合，修改后的提示词给到香蕉模型放大出图。\n\n这个工作流的优势在于不用自己描述提示词，只需要上传参考图和原图产品点击生成即可。\n\n对AI感兴趣的可以进学习交流群，一起交流学习。\n（群超过200人无法分享二维码，只能手动添加进群），请添加作者微信进入，1287723024\n\n"
+      ],
+      "color": "#432",
+      "bgcolor": "#653"
+    },
+    {
+      "id": 59,
+      "type": "GeminiImage2Node",
+      "pos": {
+        "0": 3328.1923828125,
+        "1": 112.08146667480469
+      },
+      "size": {
+        "0": 590.0612182617188,
+        "1": 238.4632110595703
+      },
+      "flags": {},
+      "order": 31,
+      "mode": 0,
+      "inputs": [
+        {
+          "label": "images",
+          "name": "images",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": 65
+        },
+        {
+          "label": "files",
+          "name": "files",
+          "shape": 7,
+          "type": "GEMINI_INPUT_FILES",
+          "link": null
+        },
+        {
+          "label": "prompt",
+          "name": "prompt",
+          "type": "STRING",
+          "widget": {
+            "name": "prompt"
+          },
+          "link": 60
+        }
+      ],
+      "outputs": [
+        {
+          "label": "IMAGE",
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            62,
+            63
+          ]
+        },
+        {
+          "label": "STRING",
+          "name": "STRING",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "properties": {
+        "enableTabs": false,
+        "tabWidth": 65,
+        "tabXOffset": 10,
+        "hasSecondTab": false,
+        "secondTabText": "Send Back",
+        "secondTabOffset": 80,
+        "secondTabWidth": 65,
+        "Node name for S&R": "GeminiImage2Node"
+      },
+      "widgets_values": [
+        "",
+        "gemini-3-pro-image-preview",
+        12562375580918,
+        "randomize",
+        "3:4",
+        "2K",
+        "IMAGE+TEXT"
+      ]
+    }
+  ],
+  "links": [
+    [
+      10,
+      14,
+      0,
+      11,
+      0,
+      "IMAGE"
+    ],
+    [
+      14,
+      11,
+      0,
+      16,
+      0,
+      "IMAGE"
+    ],
+    [
+      23,
+      15,
+      0,
+      26,
+      0,
+      "STRING"
+    ],
+    [
+      27,
+      12,
+      3,
+      28,
+      0,
+      "STRING"
+    ],
+    [
+      28,
+      28,
+      0,
+      21,
+      1,
+      "STRING"
+    ],
+    [
+      40,
+      10,
+      0,
+      35,
+      0,
+      "IMAGE"
+    ],
+    [
+      41,
+      35,
+      0,
+      15,
+      0,
+      "IMAGE"
+    ],
+    [
+      42,
+      16,
+      0,
+      36,
+      0,
+      "STRING"
+    ],
+    [
+      43,
+      36,
+      0,
+      27,
+      0,
+      "STRING"
+    ],
+    [
+      44,
+      37,
+      0,
+      38,
+      0,
+      "STRING"
+    ],
+    [
+      47,
+      38,
+      0,
+      12,
+      1,
+      "STRING"
+    ],
+    [
+      48,
+      27,
+      0,
+      37,
+      0,
+      "STRING"
+    ],
+    [
+      49,
+      21,
+      0,
+      39,
+      0,
+      "STRING"
+    ],
+    [
+      50,
+      39,
+      0,
+      29,
+      0,
+      "STRING"
+    ],
+    [
+      54,
+      26,
+      0,
+      12,
+      0,
+      "STRING"
+    ],
+    [
+      60,
+      29,
+      0,
+      59,
+      2,
+      "STRING"
+    ],
+    [
+      62,
+      59,
+      0,
+      23,
+      0,
+      "IMAGE"
+    ],
+    [
+      63,
+      59,
+      0,
+      40,
+      0,
+      "IMAGE"
+    ],
+    [
+      64,
+      10,
+      0,
+      40,
+      1,
+      "IMAGE"
+    ],
+    [
+      65,
+      10,
+      0,
+      59,
+      0,
+      "IMAGE"
+    ]
+  ],
+  "groups": [
+    {
+      "id": 1,
+      "title": "产品白底图",
+      "bounding": [
+        -2760,
+        -120,
+        524.28857421875,
+        763.0318603515625
+      ],
+      "color": "#b58b2a",
+      "font_size": 80,
+      "flags": {}
+    },
+    {
+      "id": 2,
+      "title": "参考图",
+      "bounding": [
+        -2760,
+        680,
+        529.0128173828125,
+        789.4118041992188
+      ],
+      "color": "#b58b2a",
+      "font_size": 80,
+      "flags": {}
+    },
+    {
+      "id": 3,
+      "title": "反推参考图的提示词",
+      "bounding": [
+        -2171.978759765625,
+        708.7069091796875,
+        815.1049194335938,
+        482.9482116699219
+      ],
+      "color": "#3f789e",
+      "font_size": 24,
+      "flags": {}
+    },
+    {
+      "id": 4,
+      "title": "反推产品图的提示词",
+      "bounding": [
+        -2170,
+        -90,
+        798.7102661132812,
+        512.2877807617188
+      ],
+      "color": "#3f789e",
+      "font_size": 24,
+      "flags": {}
+    },
+    {
+      "id": 5,
+      "title": "把反推产品图的提示词和反推参考图的提示词输入到TTP_text_mix",
+      "bounding": [
+        463.49481201171875,
+        -60.24314498901367,
+        767.3043212890625,
+        1178.617919921875
+      ],
+      "color": "#3f789e",
+      "font_size": 24,
+      "flags": {}
+    },
+    {
+      "id": 6,
+      "title": "TTP_text_mix修改后的提示词传到LibLib Generate修改提示词",
+      "bounding": [
+        1940,
+        20,
+        687.811279296875,
+        928.4122924804688
+      ],
+      "color": "#3f789e",
+      "font_size": 24,
+      "flags": {}
+    },
+    {
+      "id": 7,
+      "title": "LibLib Generate修改后的提示词传到Google Gemini Image生成图片",
+      "bounding": [
+        3318.093994140625,
+        26.81848907470703,
+        746.1727905273438,
+        551.2189331054688
+      ],
+      "color": "#3f789e",
+      "font_size": 24,
+      "flags": {}
+    },
+    {
+      "id": 9,
+      "title": "字符串操作（去掉一些空行/标题等影响文本输出的内容）",
+      "bounding": [
+        -1312.473388671875,
+        583.734619140625,
+        1713.041015625,
+        966.4701538085938
+      ],
+      "color": "#3f789e",
+      "font_size": 24,
+      "flags": {}
+    },
+    {
+      "id": 10,
+      "title": "结果图",
+      "bounding": [
+        4099.1728515625,
+        -100.16531372070312,
+        694.0116577148438,
+        1039.0537109375
+      ],
+      "color": "#b06634",
+      "font_size": 80,
+      "flags": {}
+    },
+    {
+      "id": 11,
+      "title": "获取无水印图方法",
+      "bounding": [
+        4060,
+        -1020,
+        812.8073120117188,
+        850.8775024414062
+      ],
+      "color": "#3f789e",
+      "font_size": 100,
+      "flags": {}
+    },
+    {
+      "id": 12,
+      "title": "使用请先查看",
+      "bounding": [
+        -3403.036376953125,
+        -113.72998046875,
+        628.4317626953125,
+        459.30718994140625
+      ],
+      "color": "#b58b2a",
+      "font_size": 100,
+      "flags": {}
+    },
+    {
+      "id": 14,
+      "title": "👆aspect ratio：选择出图比例",
+      "bounding": [
+        3330,
+        480,
+        583.3013916015625,
+        84.146728515625
+      ],
+      "color": "#b58b2a",
+      "font_size": 40,
+      "flags": {}
+    },
+    {
+      "id": 15,
+      "title": "👆resolution：选择出图1K、2K、4K",
+      "bounding": [
+        3330,
+        380,
+        585.8924560546875,
+        80
+      ],
+      "color": "#b58b2a",
+      "font_size": 35,
+      "flags": {}
+    }
+  ],
+  "config": {},
+  "extra": {
+    "ds": {
+      "scale": 0.9849732675807629,
+      "offset": [
+        4163.40382398161,
+        131.8030464793957
+      ]
+    },
+    "ue_links": [],
+    "VHS_latentpreview": false,
+    "VHS_latentpreviewrate": 0,
+    "VHS_MetadataImage": true,
+    "VHS_KeepIntermediate": true
+  },
+  "version": 0.4
+}

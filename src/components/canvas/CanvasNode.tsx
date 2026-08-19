@@ -45,7 +45,7 @@ interface CanvasNodeProps {
   isHoveredForConnection?: boolean;
   connectionTargetState?: 'compatible' | 'incompatible' | null;
   onOpenEditor?: (nodeId: string) => void;
-  onUpload?: (nodeId: string, imageDataUrl: string) => void;
+  onUpload?: (nodeId: string, mediaDataUrl: string) => void;
   onReplaceImage?: (nodeId: string, file: File) => void;
   onRetryUpload?: (nodeId: string) => void;
   onExpand?: (imageUrl: string) => void;

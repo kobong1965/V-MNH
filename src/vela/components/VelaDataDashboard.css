@@ -1,0 +1,67 @@
+.vela-dashboard { margin: 0 auto; max-width: 1240px; padding-bottom: 72px; }
+.vela-dashboard-heading { align-items: flex-end; display: flex; gap: 28px; justify-content: space-between; margin-bottom: 30px; }
+.vela-dashboard-heading > div > span { color: #777b75; font-size: var(--vela-font-helper); letter-spacing: .08em; }
+.vela-dashboard-heading h1 { font-size: 38px; letter-spacing: -.045em; line-height: 1; margin: 10px 0 13px; }
+.vela-dashboard-heading p { color: #686c65; font-size: var(--vela-font-body); line-height: 1.6; margin: 0; }
+.vela-dashboard-heading button,
+.vela-dashboard-alert button { align-items: center; background: #171816; border: 1px solid #171816; border-radius: 9px; color: #fff; cursor: pointer; display: inline-flex; flex: 0 0 auto; font: inherit; font-size: var(--vela-font-control); gap: 7px; min-height: var(--vela-control-height); padding: 0 14px; }
+.vela-dashboard-heading button:disabled { cursor: wait; opacity: .58; }
+.vela-dashboard-alert { align-items: center; background: #fff8e9; border: 1px solid #ecd9aa; border-radius: 10px; color: #765a1d; display: flex; font-size: var(--vela-font-control); gap: 14px; justify-content: space-between; margin-bottom: 14px; padding: 12px 14px; }
+.vela-dashboard-alert button { min-height: 34px; padding: 0 11px; }
+.vela-dashboard-loading { background: #fff; border: 1px solid #e0e2dd; border-radius: 14px; color: #72766f; font-size: var(--vela-font-body); padding: 60px 24px; text-align: center; }
+.vela-dashboard-kpis { display: grid; gap: 14px; grid-template-columns: repeat(4, minmax(0, 1fr)); margin-bottom: 18px; }
+.vela-dashboard-metric { align-items: flex-start; background: #fff; border: 1px solid #dfe2dc; border-radius: 14px; display: grid; gap: 13px; grid-template-columns: 42px minmax(0, 1fr); min-width: 0; padding: 18px; }
+.vela-dashboard-metric[data-accent="true"] { background: #f0fafc; border-color: #b8e1e8; }
+.vela-dashboard-metric__icon { align-items: center; background: #f0f1ee; border-radius: 10px; color: #444943; display: flex; height: 42px; justify-content: center; width: 42px; }
+.vela-dashboard-metric[data-accent="true"] .vela-dashboard-metric__icon { background: #d9f1f5; color: #087f96; }
+.vela-dashboard-metric > div { display: grid; gap: 6px; min-width: 0; }
+.vela-dashboard-metric > div > span { color: #747872; font-size: var(--vela-font-helper); }
+.vela-dashboard-metric strong { font-size: 25px; letter-spacing: -.025em; line-height: 1.2; }
+.vela-dashboard-metric small { color: #7f837c; font-size: var(--vela-font-caption); line-height: 1.45; }
+.vela-dashboard-card { background: #fff; border: 1px solid #dfe2dc; border-radius: 14px; margin-bottom: 18px; overflow: hidden; }
+.vela-dashboard-card > header { align-items: center; border-bottom: 1px solid #e8eae5; display: flex; gap: 20px; justify-content: space-between; padding: 19px 20px; }
+.vela-dashboard-card h2 { font-size: 19px; margin: 0 0 5px; }
+.vela-dashboard-card header p { color: #7b7f78; font-size: var(--vela-font-helper); line-height: 1.5; margin: 0; }
+.vela-dashboard-card header > span { color: #6e726b; flex: 0 0 auto; font-size: var(--vela-font-helper); }
+.vela-dashboard-table-wrap { overflow-x: auto; }
+.vela-dashboard-table { border-collapse: collapse; min-width: 720px; width: 100%; }
+.vela-dashboard-table th,
+.vela-dashboard-table td { border-bottom: 1px solid #eceee9; font-size: var(--vela-font-control); padding: 14px 20px; text-align: right; }
+.vela-dashboard-table th:first-child,
+.vela-dashboard-table td:first-child { text-align: left; }
+.vela-dashboard-table thead th { background: #f7f8f5; color: #6f736c; font-size: var(--vela-font-helper); font-weight: 600; }
+.vela-dashboard-table tbody th { font-weight: 700; }
+.vela-dashboard-table tbody tr:last-child th,
+.vela-dashboard-table tbody tr:last-child td { border-bottom: 0; }
+.vela-dashboard-presets { display: grid; gap: 12px; grid-template-columns: repeat(3, minmax(0, 1fr)); padding: 18px 20px 20px; }
+.vela-dashboard-presets > div { background: #f8f9f6; border: 1px solid #e3e5df; border-radius: 11px; display: grid; gap: 6px; padding: 15px; }
+.vela-dashboard-presets span { color: #71756e; font-size: var(--vela-font-helper); }
+.vela-dashboard-presets strong { font-size: 20px; }
+.vela-dashboard-presets small { color: #7f837c; font-size: var(--vela-font-caption); }
+.vela-dashboard-note { color: #787c75; font-size: var(--vela-font-helper); line-height: 1.65; padding: 0 3px; }
+
+.vela-home-shell[data-theme="dark"] .vela-dashboard-heading p,
+.vela-home-shell[data-theme="dark"] .vela-dashboard-heading > div > span,
+.vela-home-shell[data-theme="dark"] .vela-dashboard-card header p,
+.vela-home-shell[data-theme="dark"] .vela-dashboard-note { color: #999e96; }
+.vela-home-shell[data-theme="dark"] .vela-dashboard-metric,
+.vela-home-shell[data-theme="dark"] .vela-dashboard-card,
+.vela-home-shell[data-theme="dark"] .vela-dashboard-loading { background: #191b19; border-color: #343833; }
+.vela-home-shell[data-theme="dark"] .vela-dashboard-metric[data-accent="true"] { background: #142a2e; border-color: #28525a; }
+.vela-home-shell[data-theme="dark"] .vela-dashboard-metric__icon,
+.vela-home-shell[data-theme="dark"] .vela-dashboard-presets > div { background: #252824; border-color: #3b3f39; color: #eff1ec; }
+.vela-home-shell[data-theme="dark"] .vela-dashboard-card > header,
+.vela-home-shell[data-theme="dark"] .vela-dashboard-table th,
+.vela-home-shell[data-theme="dark"] .vela-dashboard-table td { border-color: #343833; }
+.vela-home-shell[data-theme="dark"] .vela-dashboard-table thead th { background: #20231f; color: #a9aea6; }
+.vela-home-shell[data-theme="dark"] .vela-dashboard-heading button { background: #f0f2ed; border-color: #f0f2ed; color: #171917; }
+.vela-home-shell[data-theme="dark"] .vela-dashboard-alert { background: #2b2518; border-color: #594923; color: #ead392; }
+
+@media (max-width: 1150px) { .vela-dashboard-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 700px) {
+  .vela-dashboard-heading { align-items: stretch; flex-direction: column; }
+  .vela-dashboard-heading button { justify-content: center; }
+  .vela-dashboard-kpis,
+  .vela-dashboard-presets { grid-template-columns: 1fr; }
+  .vela-dashboard-card > header { align-items: flex-start; }
+}

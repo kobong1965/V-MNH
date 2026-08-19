@@ -21,11 +21,15 @@ const extensionFromRecord = (record) => path.extname(String(record?.relativePath
 
 export const sanitizeWorkflowTemplateNodes = (nodes = [], { preserveMedia = false } = {}) => nodes.map((source) => {
   const node = clonePlain(source);
+  const hasBundleableMedia = preserveMedia && [...MEDIA_KEYS].some((key) => {
+    const values = Array.isArray(node[key]) ? node[key] : [node[key]];
+    return values.some((value) => typeof value === 'string' && PROJECT_MEDIA_PATTERN.test(value));
+  });
   for (const key of RUNTIME_NODE_KEYS) delete node[key];
   if (!preserveMedia) {
     for (const key of MEDIA_KEYS) delete node[key];
   }
-  node.status = preserveMedia && (node.resultUrl || node.inputUrl) ? 'success' : 'idle';
+  node.status = hasBundleableMedia ? 'success' : 'idle';
   if (Array.isArray(node.frameInputs)) {
     node.frameInputs = node.frameInputs.map(({ nodeId, order }) => ({ nodeId, order }));
   }

@@ -21,13 +21,14 @@ test('GPT profile stores only encrypted secret and returns a secret-free public 
       baseUrl: 'https://api.yman.cc/V1/',
       apiKey,
       provider: 'YMAN',
-      models: { prompt: 'text-model', image: 'image-model', video: 'seedance-model' },
+      models: { prompt: 'text-model', image: 'image-model', video: 'seedance-model', analysis: 'qwen-vl-model' },
       endpoints: { videoGeneration: '/videos/tasks', videoStatus: '/videos/tasks/{id}' }
     });
     assert.equal(created.baseUrl, 'https://api.yman.cc/v1');
     assert.equal(created.secretConfigured, true);
     assert.equal(created.provider, 'YMAN');
     assert.equal(created.models.video, 'seedance-model');
+    assert.equal(created.models.analysis, 'qwen-vl-model');
     assert.equal(created.endpoints.chat, '/chat/completions');
     assert.equal(created.endpoints.videoGeneration, '/videos/tasks');
     assert.equal(created.endpoints.videoStatus, '/videos/tasks/{id}');
@@ -43,6 +44,7 @@ test('GPT profile stores only encrypted secret and returns a secret-free public 
     assert.equal(updated.models.prompt, 'text-model');
     assert.equal(updated.models.image, 'image-v2');
     assert.equal(updated.models.video, 'seedance-model');
+    assert.equal(updated.models.analysis, 'qwen-vl-model');
     assert.equal(repository.getWithSecret(created.id).secret.apiKey, apiKey);
   } finally {
     database.close();
@@ -91,6 +93,7 @@ test('legacy GPT profile rows receive current model and endpoint defaults when r
 
     const profile = repository.get('legacy-gpt');
     assert.equal(profile.models.video, '');
+    assert.equal(profile.models.analysis, '');
     assert.equal(profile.endpoints.models, '/models');
     assert.equal(profile.endpoints.chat, '/chat/completions');
     assert.equal(profile.endpoints.videoGeneration, '/videos/generations');
@@ -152,6 +155,76 @@ test('profile list marks credentials unreadable instead of crashing after a key 
     assert.equal(listed[0].credentialStatus, 'unreadable');
     assert.equal(reader.getWithSecret(created.id).secret, null);
     assert.doesNotMatch(JSON.stringify(listed), /sk-never-return/);
+  } finally {
+    database.close();
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test('AutoDL Pro power settings keep the developer token encrypted and separate from Comfy auth', () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'vela-autodl-power-profile-'));
+  const database = new VelaDatabase(path.join(directory, 'vela.sqlite'));
+  const repository = new ProfileRepository(database, new SecretProtector({ key: Buffer.alloc(32, 4) }));
+  const developerToken = 'autodl-developer-token-plaintext';
+  try {
+    const created = repository.create({
+      type: 'comfy',
+      name: 'AutoDL Pro H3',
+      platform: 'autodl',
+      baseUrl: 'http://127.0.0.1:18188',
+      transport: 'ssh',
+      sshHost: 'connect.example.autodl.com',
+      sshPrivateKeyPath: 'C:\\Users\\Tester\\.ssh\\vela-autodl',
+      authType: 'none',
+      autoPowerEnabled: true,
+      autodlInstanceUuid: 'pro-76576c61fdf1',
+      autodlDeveloperToken: developerToken,
+      idleShutdownMinutes: 7,
+      powerOnTimeoutMs: 720_000
+    });
+
+    assert.equal(created.autoPowerEnabled, true);
+    assert.equal(created.autoPowerProvider, 'autodl-pro');
+    assert.equal(created.autodlInstanceUuid, 'pro-76576c61fdf1');
+    assert.equal(created.idleShutdownMinutes, 7);
+    assert.equal(created.powerOnTimeoutMs, 720_000);
+    assert.equal(created.autoPowerCredentialConfigured, true);
+    assert.equal(created.autoPowerCredentialStatus, 'ready');
+    assert.doesNotMatch(JSON.stringify(created), /developer-token|autodlDeveloperToken/);
+    assert.equal(repository.getWithSecret(created.id).secret.autodlDeveloperToken, developerToken);
+
+    const updated = repository.update(created.id, { notes: 'keep power token', idleShutdownMinutes: 9 });
+    assert.equal(updated.idleShutdownMinutes, 9);
+    assert.equal(repository.getWithSecret(created.id).secret.autodlDeveloperToken, developerToken);
+
+    const row = database.connection.prepare('SELECT public_json, encrypted_secret FROM profiles WHERE id = ?').get(created.id);
+    assert.doesNotMatch(row.public_json, /developer-token|autodlDeveloperToken/);
+    assert.doesNotMatch(Buffer.from(row.encrypted_secret).toString('utf8'), /developer-token/);
+  } finally {
+    database.close();
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test('AutoDL automatic power rejects ordinary instance IDs and missing developer tokens', () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'vela-autodl-power-invalid-'));
+  const database = new VelaDatabase(path.join(directory, 'vela.sqlite'));
+  const repository = new ProfileRepository(database, new SecretProtector({ key: Buffer.alloc(32, 3) }));
+  const base = {
+    type: 'comfy', name: 'AutoDL', platform: 'autodl', baseUrl: 'http://127.0.0.1:18188',
+    transport: 'ssh', sshHost: 'connect.example.autodl.com', sshPrivateKeyPath: 'C:\\key', authType: 'none',
+    autoPowerEnabled: true
+  };
+  try {
+    assert.throws(() => repository.create({
+      ...base,
+      autodlInstanceUuid: '14ff4b9f2b-74ac3ead',
+      autodlDeveloperToken: 'token'
+    }), /Pro UUID/);
+    assert.throws(() => repository.create({
+      ...base,
+      autodlInstanceUuid: 'pro-76576c61fdf1'
+    }), /Developer Token/);
   } finally {
     database.close();
     fs.rmSync(directory, { recursive: true, force: true });

@@ -107,6 +107,7 @@ export function VelaApiProfileCard({ profile, onChanged, onMessage }: VelaApiPro
         {modelInput('提示词模型', 'prompt', '例如 gpt-5.4')}
         {modelInput('图片模型', 'image', '例如 gpt-image-2')}
         {modelInput('视频模型', 'video', '例如 seedance-2.0')}
+        {modelInput('Qwen 分析模型', 'analysis', '例如 qwen3-vl-plus，以中转站为准')}
       </div>
       {models.length > 0 && <datalist id={`models-${profile.id}`}>{models.map((model) => <option key={model} value={model} />)}</datalist>}
 

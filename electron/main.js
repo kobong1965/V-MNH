@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 
 import { findAvailablePort, startControlService, stopControlService, waitForHealth } from './serverRuntime.js';
 import { VelaUpdater } from './updater.js';
+import { bindWindowStateEvents, registerWindowControlHandlers } from './windowControls.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
@@ -73,6 +74,7 @@ const createWindow = async () => {
     minWidth: 1050,
     minHeight: 700,
     show: false,
+    frame: false,
     backgroundColor: '#111318',
     icon: iconPath(),
     autoHideMenuBar: true,
@@ -84,6 +86,8 @@ const createWindow = async () => {
       sandbox: true
     }
   });
+  mainWindow.setMenu(null);
+  bindWindowStateEvents(mainWindow);
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https?:\/\//i.test(url)) void shell.openExternal(url);
@@ -119,6 +123,7 @@ const boot = async () => {
   });
   const exitedEarly = new Promise((_, reject) => controlService.once('exit', (code) => reject(new Error(`本机服务提前退出（代码 ${code}）`))));
   await Promise.race([waitForHealth(serviceBaseUrl), exitedEarly]);
+  registerWindowControlHandlers({ ipcMain, getWindow: () => mainWindow });
   createTray();
   await createWindow();
   updateController = new VelaUpdater({

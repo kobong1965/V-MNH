@@ -18,7 +18,7 @@ interface NodeContentProps {
     isLoading: boolean;
     isSuccess: boolean;
     getAspectRatioStyle: () => { aspectRatio: string };
-    onUpload?: (nodeId: string, imageDataUrl: string) => void;
+    onUpload?: (nodeId: string, mediaDataUrl: string) => void;
     onRetryUpload?: (nodeId: string) => void;
     onExpand?: (imageUrl: string) => void;
     onDragStart?: (nodeId: string, hasContent: boolean) => void;
@@ -82,6 +82,7 @@ export const NodeContent: React.FC<NodeContentProps> = ({
     const isResultCollectionExpanded = hasResultCollection && Boolean(data.resultCollectionExpanded);
     const resizableTextHeight = isResizableTextNode(data) ? getCanvasNodeHeight(data) : undefined;
     const isTextEditing = isResizableTextNode(data) && data.textMode === 'editing';
+    const isGeneratedTextKind = ['gpt-prompt-optimizer', 'video-director', 'competitor-script-analyzer'].includes(data.kind || '');
 
     // Sync local state ONLY when data.prompt changes externally (not from our own update)
     useEffect(() => {
@@ -126,12 +127,12 @@ export const NodeContent: React.FC<NodeContentProps> = ({
 
     return (
         <div className={`vela-node-content-frame vela-node-elevation ${selected ? 'is-selected' : ''} relative transition-all duration-200 ${data.kind ? 'p-0 rounded-2xl overflow-visible' : !selected ? 'p-0 rounded-2xl overflow-hidden' : 'p-1'}`}>
-            {/* Hidden File Input - Always rendered for upload functionality (image types only) */}
-            {isImageType && onUpload && (
+            {/* Hidden File Input - rendered for explicit image/video material nodes. */}
+            {['image-input', 'video-input'].includes(data.kind || '') && onUpload && (
                 <input
                     ref={fileInputRef}
                     type="file"
-                    accept="image/*"
+                    accept={data.kind === 'video-input' ? 'video/*' : 'image/*'}
                     className="hidden"
                     onChange={handleFileChange}
                 />
@@ -240,7 +241,7 @@ export const NodeContent: React.FC<NodeContentProps> = ({
                     className={`vela-node-content ${selected ? 'is-selected' : ''}`}
                     style={resizableTextHeight ? { height: `${resizableTextHeight}px`, minHeight: `${resizableTextHeight}px` } : undefined}
                 >
-                    {(data.kind === 'prompt' || data.kind === 'gpt-prompt-optimizer') ? (
+                    {(data.kind === 'prompt' || isGeneratedTextKind) ? (
                         <div
                             className={`vela-prompt-content ${isTextEditing ? 'is-editing' : 'is-viewing'}`}
                             onDoubleClick={(event) => {
@@ -271,33 +272,35 @@ export const NodeContent: React.FC<NodeContentProps> = ({
                                             event.currentTarget.blur();
                                         }
                                     }}
-                                    placeholder={data.kind === 'prompt' ? '写下你想生成的画面、动作和镜头…' : '连接提示词后，在这里查看或修改优化结果…'}
-                                    aria-label={data.kind === 'prompt' ? '提示词内容' : '优化后的提示词'}
+                                    placeholder={data.kind === 'prompt' ? '写下你想生成的画面、动作和镜头…' : data.kind === 'video-director' ? '生成后在这里查看或修改编导脚本…' : data.kind === 'competitor-script-analyzer' ? '生成后在这里查看竞品拆解与原创脚本…' : '连接提示词后，在这里查看或修改优化结果…'}
+                                    aria-label={data.kind === 'prompt' ? '提示词内容' : data.kind === 'video-director' ? '视频编导脚本' : data.kind === 'competitor-script-analyzer' ? '竞品视频分析结果' : '优化后的提示词'}
                                     autoFocus
                                 />
                             ) : localPrompt ? (
-                                <div className="vela-prompt-content__view" aria-label={data.kind === 'prompt' ? '提示词内容' : '优化后的提示词'}>
+                                <div className="vela-prompt-content__view" aria-label={data.kind === 'prompt' ? '提示词内容' : data.kind === 'video-director' ? '视频编导脚本' : data.kind === 'competitor-script-analyzer' ? '竞品视频分析结果' : '优化后的提示词'}>
                                     {localPrompt}
                                 </div>
                             ) : (
                                 <>
                                     <FileText className="vela-node-hero-icon" size={54} strokeWidth={1.5} aria-hidden="true" />
                                     <div className="vela-node-suggestions">
-                                        <span>双击节点输入文字，或尝试：</span>
-                                        <button type="button" onClick={() => onTextToVideo?.(data.id)}><Video size={16} />文生视频</button>
-                                        <button type="button" onClick={() => onTextToImage?.(data.id)}><ImageIcon size={16} />图片反推提示词</button>
-                                        <button type="button"><Music2 size={16} />文字生音乐</button>
+                                        <span>{data.kind === 'video-director' ? '连接产品图，在下方选择编导人设并生成脚本。' : data.kind === 'competitor-script-analyzer' ? '连接一条对标视频和产品图，使用 Qwen 生成原创方案。' : '双击节点输入文字，或尝试：'}</span>
+                                        {data.kind !== 'video-director' && data.kind !== 'competitor-script-analyzer' && <>
+                                            <button type="button" onClick={() => onTextToVideo?.(data.id)}><Video size={16} />文生视频</button>
+                                            <button type="button" onClick={() => onTextToImage?.(data.id)}><ImageIcon size={16} />图片反推提示词</button>
+                                            <button type="button"><Music2 size={16} />文字生音乐</button>
+                                        </>}
                                     </div>
                                 </>
                             )}
                         </div>
-                    ) : data.kind === 'image-input' ? (
+                    ) : data.kind === 'image-input' || data.kind === 'video-input' ? (
                         <div
                             className="vela-node-content__upload"
                             role="button"
                             tabIndex={0}
-                            aria-label="双击选择参考图片"
-                            title="单击拖动节点，双击选择参考图片"
+                            aria-label={data.kind === 'video-input' ? '双击选择参考视频' : '双击选择参考图片'}
+                            title={data.kind === 'video-input' ? '单击拖动节点，双击选择参考视频' : '单击拖动节点，双击选择参考图片'}
                             onDoubleClick={(event) => {
                                 event.preventDefault();
                                 event.stopPropagation();
@@ -312,16 +315,16 @@ export const NodeContent: React.FC<NodeContentProps> = ({
                         >
                             {isLoading ? <Loader2 className="vela-spin" size={24} aria-hidden="true" /> : <Upload size={22} aria-hidden="true" />}
                             {isLoading && <span>上传进度 {data.uploadProgress ?? 0}%</span>}
-                            <strong>双击选择参考图片</strong>
-                            <span>单击拖动节点 · 支持 JPG、PNG、WebP</span>
+                            <strong>{data.kind === 'video-input' ? '双击选择参考视频' : '双击选择参考图片'}</strong>
+                            <span>{data.kind === 'video-input' ? '单击拖动节点 · 支持 MP4、WebM、MOV' : '单击拖动节点 · 支持 JPG、PNG、WebP'}</span>
                         </div>
                     ) : (
                         <div className="vela-node-content__placeholder">
-                            {['gpt-video', 'h3-video'].includes(data.kind) ? <Film className="vela-node-hero-icon" size={56} strokeWidth={1.5} aria-hidden="true" /> : <ImageIcon className="vela-node-hero-icon" size={56} strokeWidth={1.5} aria-hidden="true" />}
+                            {['gpt-video', 'h3-video', 'wan-video-process'].includes(data.kind) ? <Film className="vela-node-hero-icon" size={56} strokeWidth={1.5} aria-hidden="true" /> : <ImageIcon className="vela-node-hero-icon" size={56} strokeWidth={1.5} aria-hidden="true" />}
                             <div className="vela-node-suggestions">
                                 <span>尝试：</span>
-                                <button type="button"><WandSparkles size={16} />{['gpt-video', 'h3-video'].includes(data.kind) ? '图生视频' : '图生图'}</button>
-                                <button type="button"><Maximize2 size={16} />{data.kind === 'gpt-video' ? '文生视频' : data.kind === 'h3-video' ? '首尾帧视频' : '图片高清'}</button>
+                                <button type="button"><WandSparkles size={16} />{data.kind === 'wan-video-process' ? '保留动作替换' : ['gpt-video', 'h3-video'].includes(data.kind) ? '图生视频' : '图生图'}</button>
+                                <button type="button"><Maximize2 size={16} />{data.kind === 'wan-video-process' ? 'Wan 后端工作流' : data.kind === 'gpt-video' ? '文生视频' : data.kind === 'h3-video' ? '首尾帧视频' : '图片高清'}</button>
                             </div>
                         </div>
                     )}
