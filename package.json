@@ -1,7 +1,7 @@
 {
   "name": "vela-ai-canvas",
   "private": true,
-  "version": "0.5.39",
+  "version": "0.5.40",
   "repository": {
     "type": "git",
     "url": "https://github.com/kobong1965/V-MNH.git"
@@ -73,6 +73,8 @@
       "electron/**/*",
       "server/**/*",
       "shared/**/*",
+      "deploy/**/*",
+      "docs/CLOUD_COMFYUI_WAN_SETUP.md",
       "build/icon.png",
       "package.json",
       "!server/**/*.test.js",

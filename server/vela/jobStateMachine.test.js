@@ -70,3 +70,26 @@ test('progress updates do not change the durable job state', () => {
     fs.rmSync(directory, { recursive: true, force: true });
   }
 });
+
+test('retrying a completed failed Comfy prompt clears its remote id and resubmits', () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'vela-job-comfy-retry-'));
+  const database = new VelaDatabase(path.join(directory, 'vela.sqlite'));
+  try {
+    const repository = new JobRepository(database);
+    repository.createGroup({
+      id: 'group-1', projectId: 'project-1', nodeId: 'node-1', providerType: 'comfy', profileId: 'cloud-1', seedMode: 'fixed', baseSeed: 7
+    }, [{ id: 'job-1', payload: { nodeKind: 'wan-video-process' }, seed: 7 }]);
+    repository.transition('job-1', 'submitting');
+    repository.transition('job-1', 'running', { promptId: 'completed-without-output', progress: 0.1 });
+    repository.transition('job-1', 'failed', { error: { code: 'OUTPUT_NOT_FOUND' } });
+
+    const retried = repository.retry('job-1');
+    assert.equal(retried.status, 'queued');
+    assert.equal(retried.promptId, null);
+    assert.equal(retried.progress, 0);
+    assert.equal(retried.retryCount, 1);
+  } finally {
+    database.close();
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});

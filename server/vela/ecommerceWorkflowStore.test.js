@@ -88,3 +88,16 @@ test('Wan workflows map only the required frontend media roles to fixed backend 
     ]
   );
 });
+
+test('Wan workflows use portable public model filenames instead of machine-local aliases', () => {
+  const catalog = new EcommerceWorkflowCatalog();
+  const animate = catalog.loadBackendWorkflow('wan22-animate-face-outfit');
+  const replace = catalog.loadBackendWorkflow('wan22-character-replace');
+  const widget = (workflow, nodeId) => workflow.nodes.find((node) => String(node.id) === nodeId)?.widgets_values?.[0];
+
+  assert.equal(widget(animate, '41'), 'clip_vision_h.safetensors');
+  assert.equal(widget(animate, '57'), 'lightx2v_I2V_14B_480p_cfg_step_distill_rank64_bf16.safetensors');
+  assert.equal(widget(replace, '589'), 'clip_vision_h.safetensors');
+  assert.equal(widget(replace, '595'), 'lightx2v_I2V_14B_480p_cfg_step_distill_rank64_bf16.safetensors');
+  assert.equal(widget(replace, '596'), 'WanAnimate_relight_lora_fp16.safetensors');
+});

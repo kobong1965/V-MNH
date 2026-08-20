@@ -118,7 +118,7 @@ export class JobRepository {
     const now = new Date().toISOString();
     const updated = {
       progress: patch.progress ?? current.progress,
-      promptId: patch.promptId ?? current.promptId,
+      promptId: patch.promptId === undefined ? current.promptId : patch.promptId,
       error: patch.error === undefined ? current.error : patch.error,
       output: patch.output === undefined ? current.output : patch.output,
       retryCount: patch.retryCount ?? current.retryCount
@@ -166,7 +166,14 @@ export class JobRepository {
   retry(jobId) {
     const current = this.getJob(jobId);
     if (!current) throw new Error(`Job not found: ${jobId}`);
-    return this.transition(jobId, 'queued', { retryCount: current.retryCount + 1, error: null, progress: null });
+    const completedComfyPrompt = current.providerType === 'comfy'
+      && ['EXECUTION_FAILED', 'OUTPUT_NOT_FOUND'].includes(current.error?.code);
+    return this.transition(jobId, 'queued', {
+      retryCount: current.retryCount + 1,
+      error: null,
+      progress: 0,
+      ...(completedComfyPrompt ? { promptId: null } : {})
+    });
   }
 
   recoverAfterRestart() {

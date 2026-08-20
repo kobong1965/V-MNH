@@ -8,7 +8,7 @@ GitHub 中包含两份 UI 工作流、无密钥部署脚本、固定转换器版
 
 ## 已有 AutoDL 环境（推荐）
 
-如果原 Wan 工作流已经能在云端 ComfyUI 手动运行，只需安装转换端点并同步工作流：
+如果原 Wan 工作流已经能在云端 ComfyUI 手动运行，只需安装转换端点、同步工作流并验证：
 
 ```bash
 cd /root/autodl-tmp
@@ -21,11 +21,25 @@ bash vela-app/deploy/autodl-wan/verify.sh
 
 若仓库目录已存在，先 `git pull --ff-only`，不要把 Token 写进克隆命令、shell 历史或配置文件。
 
+若是新环境或验证提示缺少节点/模型，按下面的完整顺序执行。节点和转换器都固定到已验证提交；模型从 ModelScope 上的 Kijai / Comfy-Org 镜像下载，并按官方文件 SHA-256 校验：
+
+```bash
+cd /root/autodl-tmp/vela-app
+bash deploy/autodl-wan/install-nodes.sh
+bash deploy/autodl-wan/install-converter.sh
+bash deploy/autodl-wan/install-models.sh
+bash /root/autodl-tmp/vela-h3/deploy/start-comfy.sh
+bash deploy/autodl-wan/sync-workflows.sh server/ecommerce-workflows
+bash deploy/autodl-wan/verify.sh
+```
+
+模型下载支持断点续传。若运行地区能直接高速访问其他合法镜像，可用 `MODEL_ENDPOINT` 覆盖默认的 `https://modelscope.cn/models`。
+
 ## 新 AutoDL 环境
 
 1. 先按 `deploy/autodl-h3/` 安装 ComfyUI、Python 环境和安全启动脚本。
-2. 按 `deploy/autodl-wan/requirements-manifest.txt` 安装原工作流依赖的自定义节点与模型；模型文件必须使用其合法来源，仓库不重新分发权重。
-3. 运行上面的转换器安装、工作流同步和验证命令。
+2. 运行 `install-nodes.sh`、`install-converter.sh` 和 `install-models.sh`；仓库只保存来源与校验值，不重新分发权重。
+3. 运行上面的工作流同步和验证命令。
 4. ComfyUI 只监听 `127.0.0.1:6006`；Windows Vela 通过 SSH 隧道映射到 `127.0.0.1:18188`，不要把 6006/8188 裸露到公网。
 
 两份工作流引用的关键模型：
@@ -33,8 +47,13 @@ bash vela-app/deploy/autodl-wan/verify.sh
 - `Wan2_2-Animate-14B_fp8_e4m3fn_scaled_KJ.safetensors`
 - `Wan2_1_VAE_bf16.safetensors`
 - `umt5-xxl-enc-fp8_e4m3fn.safetensors` / `umt5_xxl_fp8_e4m3fn_scaled.safetensors`
+- `clip_vision_h.safetensors`
+- `lightx2v_I2V_14B_480p_cfg_step_distill_rank64_bf16.safetensors`
+- `WanAnimate_relight_lora_fp16.safetensors`
 - `dw-ll_ucoco_384_bs5.torchscript.pt`
-- `yolox_l.torchscript.pt`
+- `yolox_l.onnx`
+- `segformer_b2_clothes/{config.json,preprocessor_config.json,model.safetensors}`
+- `vitmatte/{config.json,preprocessor_config.json,model.safetensors}`
 
 ## Vela ComfyUI Profile
 

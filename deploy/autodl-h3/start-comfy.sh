@@ -7,6 +7,7 @@ VENV_DIR="$ROOT_DIR/venv"
 LOG_DIR="$ROOT_DIR/logs"
 SESSION_NAME="vela-comfy"
 PORT="${COMFY_PORT:-6006}"
+HF_ENDPOINT="${HF_ENDPOINT:-https://hf-mirror.com}"
 
 mkdir -p "$LOG_DIR"
 
@@ -25,7 +26,7 @@ if "$VENV_DIR/bin/python" -c "import sageattention" >/dev/null 2>&1; then
 fi
 
 tmux new-session -d -s "$SESSION_NAME" \
-  "cd '$COMFY_DIR' && exec '$VENV_DIR/bin/python' main.py --listen 127.0.0.1 --port '$PORT' --output-directory '$COMFY_DIR/output' $ATTENTION_FLAG 2>&1 | tee '$LOG_DIR/comfyui.log'"
+  "cd '$COMFY_DIR' && export HF_ENDPOINT='$HF_ENDPOINT' && exec '$VENV_DIR/bin/python' main.py --listen 127.0.0.1 --port '$PORT' --output-directory '$COMFY_DIR/output' $ATTENTION_FLAG 2>&1 | tee '$LOG_DIR/comfyui.log'"
 
 for _ in $(seq 1 90); do
   if curl --silent --fail "http://127.0.0.1:$PORT/system_stats" >/dev/null; then

@@ -93,3 +93,34 @@ test('ComfyUI reports authentication failures and derives the standard websocket
   );
   assert.equal(deriveComfyWebsocketUrl('http://127.0.0.1:8188'), 'ws://127.0.0.1:8188/ws');
 });
+
+test('ComfyUI reports a missing workflow converter for non-JSON 405 responses', async () => {
+  const provider = new ComfyUiProvider({
+    fetchImpl: async () => new Response('Method Not Allowed', {
+      status: 405,
+      headers: { 'Content-Type': 'text/plain' }
+    })
+  });
+
+  await assert.rejects(
+    () => provider.convertWorkflow(profile({ authType: 'none' }), {}, { nodes: [], links: [] }),
+    (error) => error instanceof ComfyUiError
+      && error.code === 'WORKFLOW_CONVERTER_MISSING'
+      && error.status === 405
+  );
+});
+
+test('ComfyUI finds VideoHelperSuite outputs exposed through the gifs field', () => {
+  const provider = new ComfyUiProvider();
+  assert.deepEqual(provider.findVideoOutput({
+    outputs: {
+      36: {
+        gifs: [{ filename: 'Wan-Animate_00001-audio.mp4', subfolder: '', type: 'output' }]
+      }
+    }
+  }), {
+    filename: 'Wan-Animate_00001-audio.mp4',
+    subfolder: '',
+    type: 'output'
+  });
+});

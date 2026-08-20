@@ -430,10 +430,10 @@ export class ComfyUiProvider {
       }
       return converted;
     } catch (error) {
-      if (error instanceof ComfyUiError && error.status === 404) {
-        throw new ComfyUiError('远端 ComfyUI 未安装 Workflow to API Converter Endpoint，请按云端部署说明安装后重启 ComfyUI', {
+      if (error instanceof ComfyUiError && [404, 405].includes(error.status)) {
+        throw new ComfyUiError('远端 ComfyUI 未加载 Workflow to API Converter Endpoint，或转换接口不支持 POST；请安装转换插件并重启 ComfyUI', {
           code: 'WORKFLOW_CONVERTER_MISSING',
-          status: 404
+          status: error.status
         });
       }
       throw error;
@@ -514,7 +514,11 @@ export class ComfyUiProvider {
 
   findVideoOutput(history) {
     for (const output of Object.values(history?.outputs || {})) {
-      const values = [...(Array.isArray(output?.images) ? output.images : []), ...(Array.isArray(output?.videos) ? output.videos : [])];
+      const values = [
+        ...(Array.isArray(output?.images) ? output.images : []),
+        ...(Array.isArray(output?.videos) ? output.videos : []),
+        ...(Array.isArray(output?.gifs) ? output.gifs : [])
+      ];
       const match = values.find((item) => /\.(mp4|webm|mov|m4v)$/i.test(item?.filename || ''));
       if (match) return match;
     }

@@ -80,9 +80,7 @@
           "label": "输出",
           "name": "INT",
           "type": "INT",
-          "links": [
-            41
-          ]
+          "links": []
         }
       ],
       "properties": {
@@ -129,9 +127,7 @@
           "label": "输出",
           "name": "INT",
           "type": "INT",
-          "links": [
-            42
-          ]
+          "links": []
         }
       ],
       "properties": {
@@ -898,7 +894,7 @@
         }
       },
       "widgets_values": [
-        "clip_vision_l"
+        "clip_vision_h.safetensors"
       ]
     },
     {
@@ -1894,7 +1890,7 @@
         "enable",
         "disable",
         512,
-        "yolox_l.torchscript.pt",
+        "yolox_l.onnx",
         "dw-ll_ucoco_384_bs5.torchscript.pt",
         "disable"
       ]
@@ -2618,7 +2614,8 @@
           "type": "INT",
           "links": [
             11,
-            25
+            25,
+            41
           ]
         }
       ],
@@ -2662,7 +2659,8 @@
           "type": "INT",
           "links": [
             12,
-            26
+            26,
+            42
           ]
         }
       ],
@@ -2880,7 +2878,7 @@
         "Node name for S&R": "WanVideoLoraSelect"
       },
       "widgets_values": [
-        "【高噪】wan2.2_i2v_lightx2v_4steps_lora_v1_low_noise_v1_low_noise",
+        "lightx2v_I2V_14B_480p_cfg_step_distill_rank64_bf16.safetensors",
         1,
         false,
         false
@@ -3152,7 +3150,7 @@
     ],
     [
       41,
-      14,
+      33,
       0,
       43,
       2,
@@ -3160,7 +3158,7 @@
     ],
     [
       42,
-      15,
+      35,
       0,
       43,
       3,
