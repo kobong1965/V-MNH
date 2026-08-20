@@ -16,6 +16,13 @@ interface VelaUpdateState {
 interface VelaDesktopBridge {
   isDesktop: true;
   platform: string;
+  windowControls: {
+    getState: () => Promise<{ maximized: boolean }>;
+    minimize: () => Promise<{ ok: boolean }>;
+    toggleMaximize: () => Promise<{ maximized: boolean }>;
+    close: () => Promise<{ ok: boolean }>;
+    onState: (listener: (state: { maximized: boolean }) => void) => () => void;
+  };
   updater: {
     getState: () => Promise<VelaUpdateState>;
     saveConfig: (config: { owner: string; repo: string; privateRepository: boolean; token?: string }) => Promise<VelaUpdateState>;

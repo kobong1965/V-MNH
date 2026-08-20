@@ -102,6 +102,68 @@ test('GPT job checks the configured model before submitting a billable image req
   }
 });
 
+test('video director and competitor analyzer read project media and persist text outputs', async () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'vela-script-runtime-'));
+  const calls = [];
+  const runtime = new VelaRuntime({
+    dataDirectory: directory,
+    projectsDirectory: path.join(directory, 'projects'),
+    secretProtector: new SecretProtector({ key: Buffer.alloc(32, 3) }),
+    gptProvider: {
+      listModels: async () => ['director-model', 'gpt-5.6-terra', 'gpt-5.6-sol', 'qwen-vl-model'],
+      generateDirectorScript: async (_profile, _apiKey, input) => {
+        calls.push({ type: 'director', input });
+        return { text: '10 秒美区小家电脚本', source: { model: input.model } };
+      },
+      analyzeCompetitorScript: async (_profile, _apiKey, input) => {
+        calls.push({ type: 'analysis', input });
+        return { text: '对标拆解与原创提示词', source: { model: 'qwen-vl-model' } };
+      }
+    }
+  });
+  try {
+    const project = runtime.projectStore.saveProject({ name: '脚本项目', nodes: [], groups: [], viewport: { x: 0, y: 0, zoom: 1 } });
+    const product = runtime.media.saveUploadedMedia(project.id, {
+      dataUrl: `data:image/jpeg;base64,${Buffer.from('product').toString('base64')}`,
+      fileName: 'product.jpg'
+    });
+    const frame = runtime.media.saveUploadedMedia(project.id, {
+      dataUrl: `data:image/jpeg;base64,${Buffer.from('frame').toString('base64')}`,
+      fileName: 'frame.jpg'
+    });
+    const profile = runtime.createProfile({
+      type: 'gpt', name: '脚本账户', baseUrl: 'https://relay.test/v1', apiKey: 'secret',
+      models: { prompt: 'director-model', image: '', video: '', analysis: 'qwen-vl-model' }
+    });
+    const directorGroup = runtime.createJobGroup({
+      projectId: project.id, nodeId: 'director', profileId: profile.id, providerType: 'gpt',
+      payload: {
+        nodeKind: 'video-director', sourceBrief: '突出省时', referenceUrls: [product.url],
+        directorPersona: { name: '美区编导', market: '美国' }
+      }, count: 1, seedMode: 'fixed', seed: 1
+    });
+    const analysisGroup = runtime.createJobGroup({
+      projectId: project.id, nodeId: 'analysis', profileId: profile.id, providerType: 'gpt',
+      payload: {
+        nodeKind: 'competitor-script-analyzer', sourceBrief: '保持真实感',
+        referenceUrls: [product.url], competitorFrameUrls: [frame.url]
+      }, count: 1, seedMode: 'fixed', seed: 2
+    });
+    await runtime.scheduler.waitForIdle();
+    assert.equal(runtime.jobs.getJob(directorGroup.jobs[0].id).output.text, '10 秒美区小家电脚本');
+    assert.equal(runtime.jobs.getJob(analysisGroup.jobs[0].id).output.text, '对标拆解与原创提示词');
+    const directorCall = calls.find((call) => call.type === 'director');
+    const analysisCall = calls.find((call) => call.type === 'analysis');
+    assert.equal(directorCall.input.model, 'gpt-5.6-sol');
+    assert.match(directorCall.input.productImageDataUrls[0], /^data:image\/jpeg;base64,/);
+    assert.match(analysisCall.input.competitorFrameDataUrls[0], /^data:image\/jpeg;base64,/);
+    assert.match(analysisCall.input.productImageDataUrls[0], /^data:image\/jpeg;base64,/);
+  } finally {
+    runtime.close();
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 test('unreadable saved credentials fail the job with a repair instruction', async () => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'vela-gpt-credential-'));
   const projectsDirectory = path.join(directory, 'projects');

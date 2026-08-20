@@ -15,7 +15,7 @@ export interface GptVelaProfile extends VelaProfileBase {
   type: 'gpt';
   authType: 'bearer';
   provider: string;
-  models: { prompt: string; image: string; video: string };
+  models: { prompt: string; image: string; video: string; analysis: string };
   endpoints: {
     models: string;
     chat: string;
@@ -28,11 +28,28 @@ export interface GptVelaProfile extends VelaProfileBase {
 
 export type ComfyAuthType = 'none' | 'bearer' | 'basic' | 'custom';
 export type ComfyPlatform = 'generic' | 'autodl' | 'runpod';
+export type ComfyTransport = 'direct' | 'ssh';
 
 export interface ComfyVelaProfile extends VelaProfileBase {
   type: 'comfy';
   platform: ComfyPlatform;
   websocketUrl: string;
+  transport: ComfyTransport;
+  sshHost: string;
+  sshPort: number;
+  sshUsername: string;
+  sshPrivateKeyPath: string;
+  sshLocalPort: number;
+  sshRemoteHost: string;
+  sshRemotePort: number;
+  sshStartScript: string;
+  autoPowerEnabled: boolean;
+  autoPowerProvider: '' | 'autodl-pro';
+  autodlInstanceUuid: string;
+  idleShutdownMinutes: number;
+  powerOnTimeoutMs: number;
+  autoPowerCredentialConfigured: boolean;
+  autoPowerCredentialStatus: 'ready' | 'missing' | 'unreadable';
   authType: ComfyAuthType;
   customHeaderNames: string[];
   workflowVersion: string;
@@ -60,6 +77,7 @@ export const normalizeGptVelaProfile = (profile: GptVelaProfile): GptVelaProfile
     prompt: '',
     image: '',
     video: '',
+    analysis: '',
     ...(profile.models || {})
   },
   endpoints: {
@@ -71,7 +89,25 @@ export const normalizeGptVelaProfile = (profile: GptVelaProfile): GptVelaProfile
 });
 
 const normalizeVelaProfile = (profile: VelaProfile): VelaProfile =>
-  profile.type === 'gpt' ? normalizeGptVelaProfile(profile) : profile;
+  profile.type === 'gpt' ? normalizeGptVelaProfile(profile) : {
+    ...profile,
+    transport: profile.transport || 'direct',
+    sshHost: profile.sshHost || '',
+    sshPort: profile.sshPort || 22,
+    sshUsername: profile.sshUsername || '',
+    sshPrivateKeyPath: profile.sshPrivateKeyPath || '',
+    sshLocalPort: profile.sshLocalPort || 18188,
+    sshRemoteHost: profile.sshRemoteHost || '',
+    sshRemotePort: profile.sshRemotePort || 8188,
+    sshStartScript: profile.sshStartScript || '',
+    autoPowerEnabled: Boolean(profile.autoPowerEnabled),
+    autoPowerProvider: profile.autoPowerProvider || '',
+    autodlInstanceUuid: profile.autodlInstanceUuid || '',
+    idleShutdownMinutes: Number.isFinite(profile.idleShutdownMinutes) ? profile.idleShutdownMinutes : 5,
+    powerOnTimeoutMs: Number.isFinite(profile.powerOnTimeoutMs) ? profile.powerOnTimeoutMs : 600_000,
+    autoPowerCredentialConfigured: Boolean(profile.autoPowerCredentialConfigured),
+    autoPowerCredentialStatus: profile.autoPowerCredentialStatus || 'missing'
+  };
 
 export interface GptConnectionResult {
   ok: true;
@@ -154,7 +190,7 @@ export const createVelaProfile = async (input: {
   provider?: string;
   baseUrl: string;
   apiKey: string;
-  models: { prompt: string; image: string; video?: string };
+  models: { prompt: string; image: string; video?: string; analysis?: string };
   endpoints?: Partial<GptVelaProfile['endpoints']>;
   timeoutMs?: number;
   maxConcurrency?: number;
@@ -169,6 +205,20 @@ export interface CreateComfyProfileInput {
   platform: ComfyPlatform;
   baseUrl: string;
   websocketUrl?: string;
+  transport?: ComfyTransport;
+  sshHost?: string;
+  sshPort?: number;
+  sshUsername?: string;
+  sshPrivateKeyPath?: string;
+  sshLocalPort?: number;
+  sshRemoteHost?: string;
+  sshRemotePort?: number;
+  sshStartScript?: string;
+  autoPowerEnabled?: boolean;
+  autodlInstanceUuid?: string;
+  autodlDeveloperToken?: string;
+  idleShutdownMinutes?: number;
+  powerOnTimeoutMs?: number;
   authType: ComfyAuthType;
   token?: string;
   username?: string;
@@ -208,3 +258,40 @@ export const testVelaProfile = async (id: string): Promise<ProfileConnectionResu
 
 export const getComfyProfileStatus = async (id: string): Promise<ComfyConnectionResult> =>
   parseResponse<ComfyConnectionResult>(await fetch(`/api/vela/comfy/${id}/status`));
+
+export type CloudPowerStateName =
+  | 'unknown'
+  | 'checking'
+  | 'powering-on'
+  | 'waiting-for-running'
+  | 'running'
+  | 'idle-countdown'
+  | 'idle-shutdown-cancelled'
+  | 'remote-busy'
+  | 'powering-off'
+  | 'stopped'
+  | 'error';
+
+export interface CloudPowerState {
+  profileId: string;
+  state: CloudPowerStateName;
+  remoteState?: string;
+  deadlineAt?: string;
+  idleShutdownMinutes?: number;
+  code?: string;
+  message?: string;
+  updatedAt: string | null;
+}
+
+export interface CloudPowerTestResult {
+  ok: true;
+  profileId: string;
+  remoteState: string;
+  checkedAt: string;
+}
+
+export const getCloudPowerState = async (id: string): Promise<CloudPowerState> =>
+  parseResponse<CloudPowerState>(await fetch(`/api/vela/comfy/${id}/power`));
+
+export const testCloudPower = async (id: string): Promise<CloudPowerTestResult> =>
+  parseResponse<CloudPowerTestResult>(await fetch(`/api/vela/comfy/${id}/power/test`, { method: 'POST' }));

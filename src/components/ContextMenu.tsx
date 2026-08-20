@@ -14,7 +14,9 @@ import {
   Files,
   Layers,
   ChevronRight,
-  WandSparkles
+  WandSparkles,
+  UserRoundCog,
+  ScanSearch,
 } from 'lucide-react';
 import { ContextMenuState, NodeType } from '../types';
 import { canConnectNodeKinds, VELA_NODE_CATALOG, type VelaNodeKind } from '../vela/nodeCatalog';
@@ -402,6 +404,8 @@ const getVelaNodeIcon = (kind: VelaNodeKind) => {
   if (kind === 'prompt') return <Type size={18} />;
   if (kind === 'image-input') return <Upload size={18} />;
   if (kind === 'gpt-prompt-optimizer') return <WandSparkles size={18} />;
+  if (kind === 'video-director') return <UserRoundCog size={18} />;
+  if (kind === 'competitor-script-analyzer') return <ScanSearch size={18} />;
   if (kind === 'gpt-video' || kind === 'h3-video' || kind === 'video-result') return <Video size={18} />;
   if (kind === 'image-result') return <Film size={18} />;
   return <ImageIcon size={18} />;

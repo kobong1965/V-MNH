@@ -1,10 +1,14 @@
 export type VelaNodeKind =
   | 'prompt'
   | 'image-input'
+  | 'video-input'
   | 'gpt-prompt-optimizer'
+  | 'video-director'
+  | 'competitor-script-analyzer'
   | 'gpt-image'
   | 'gpt-video'
   | 'h3-video'
+  | 'wan-video-process'
   | 'image-result'
   | 'video-result';
 
@@ -48,12 +52,39 @@ export const VELA_NODE_CATALOG: readonly VelaNodeDefinition[] = [
     outputs: ['image']
   },
   {
+    kind: 'video-input',
+    label: '视频输入',
+    description: '拖入或选择本地动作参考视频',
+    category: 'input',
+    legacyType: 'Video',
+    inputs: [],
+    outputs: ['video']
+  },
+  {
     kind: 'gpt-prompt-optimizer',
     label: 'GPT 提示词优化',
     description: '把简单想法整理成可生成的提示词',
     category: 'gpt',
     legacyType: 'Text',
     inputs: ['text', 'image'],
+    outputs: ['text']
+  },
+  {
+    kind: 'video-director',
+    label: '视频编导',
+    description: '按市场和品类人设生成带货脚本与视频提示词',
+    category: 'gpt',
+    legacyType: 'Text',
+    inputs: ['text', 'image', 'image-list'],
+    outputs: ['text']
+  },
+  {
+    kind: 'competitor-script-analyzer',
+    label: '竞品视频分析',
+    description: '使用 Qwen 拆解对标视频并生成原创脚本',
+    category: 'gpt',
+    legacyType: 'Text',
+    inputs: ['text', 'image', 'image-list', 'video', 'video-list'],
     outputs: ['text']
   },
   {
@@ -81,6 +112,15 @@ export const VELA_NODE_CATALOG: readonly VelaNodeDefinition[] = [
     category: 'video',
     legacyType: 'Video',
     inputs: ['text', 'image'],
+    outputs: ['video-list']
+  },
+  {
+    kind: 'wan-video-process',
+    label: 'Wan 视频处理',
+    description: '在后端 ComfyUI 保留源动作并替换人物角色或服装',
+    category: 'video',
+    legacyType: 'Video',
+    inputs: ['video', 'image'],
     outputs: ['video-list']
   },
   {

@@ -76,6 +76,133 @@ test('project API saves, loads and exports a versioned project', async () => {
   }
 });
 
+test('e-commerce workflow API lists canvases, creates a project and persists deletion', async () => {
+  const fixture = await createServer();
+  try {
+    const listed = await requestJson(`${fixture.baseUrl}/ecommerce-workflows`);
+    assert.equal(listed.response.status, 200);
+    assert.equal(listed.data.length, 10);
+    assert.ok(listed.data.every((workflow) => workflow.preview.nodes.length === workflow.nodeCount));
+
+    const target = listed.data.find((workflow) => workflow.id === 'dw-pose-redraw');
+    const created = await requestJson(`${fixture.baseUrl}/ecommerce-workflows/${target.id}/instantiate`, {
+      method: 'POST', body: '{}'
+    });
+    assert.equal(created.response.status, 201);
+    assert.equal(created.data.name, target.name);
+    assert.equal(created.data.nodes.length, target.nodeCount);
+    assert.equal(fixture.runtime.projectStore.getProject(created.data.id)?.id, created.data.id);
+
+    const deleted = await fetch(`${fixture.baseUrl}/ecommerce-workflows/${target.id}`, { method: 'DELETE' });
+    assert.equal(deleted.status, 204);
+    const afterDelete = await requestJson(`${fixture.baseUrl}/ecommerce-workflows`);
+    assert.equal(afterDelete.data.some((workflow) => workflow.id === target.id), false);
+    const missing = await requestJson(`${fixture.baseUrl}/ecommerce-workflows/${target.id}/instantiate`, {
+      method: 'POST', body: '{}'
+    });
+    assert.equal(missing.response.status, 404);
+  } finally {
+    await fixture.close();
+  }
+});
+
+test('cloud account API returns AutoDL balance and private image repository without exposing its token', async () => {
+  const powerProvider = {
+    getWalletBalance: async () => ({ assets: 456780, accumulate: 900000, voucher_balance: 12000 }),
+    listPrivateImages: async () => ({
+      list: [{ image_uuid: 'image-private-1', name: 'H3 生产镜像', status: 'finished', image_size: 2147483648, create_at: '2026-08-19T09:00:00+08:00' }],
+      result_total: 1
+    })
+  };
+  const fixture = await createServer({ powerProvider });
+  try {
+    fixture.runtime.createProfile({
+      type: 'comfy',
+      name: 'AutoDL H3',
+      platform: 'autodl',
+      baseUrl: 'http://127.0.0.1:8188',
+      authType: 'none',
+      autoPowerEnabled: false,
+      autodlDeveloperToken: 'cloud-token-never-return'
+    });
+
+    const account = await requestJson(`${fixture.baseUrl}/cloud-account`);
+    assert.equal(account.response.status, 200);
+    assert.equal(account.data.configured, true);
+    assert.equal(account.data.balance.availableYuan, 456.78);
+    assert.equal(account.data.balance.voucherYuan, 12);
+    assert.equal(account.data.repository.total, 1);
+    assert.equal(account.data.repository.items[0].name, 'H3 生产镜像');
+    assert.doesNotMatch(JSON.stringify(account.data), /cloud-token-never-return/);
+  } finally {
+    await fixture.close();
+  }
+});
+
+test('cloud account API has a stable unconfigured state', async () => {
+  const fixture = await createServer();
+  try {
+    const account = await requestJson(`${fixture.baseUrl}/cloud-account`);
+    assert.equal(account.response.status, 200);
+    assert.equal(account.data.configured, false);
+    assert.match(account.data.message, /AutoDL/);
+  } finally {
+    await fixture.close();
+  }
+});
+
+test('data dashboard combines AutoDL balance with today H3 usage without exposing credentials', async () => {
+  const powerProvider = {
+    getWalletBalance: async () => ({ assets: 369500, accumulate: 1305000, voucher_balance: 0 }),
+    listPrivateImages: async () => ({ list: [], result_total: 0 })
+  };
+  const fixture = await createServer({ powerProvider });
+  try {
+    const profile = fixture.runtime.createProfile({
+      type: 'comfy',
+      name: 'AutoDL H3 统计账户',
+      platform: 'autodl',
+      baseUrl: 'http://127.0.0.1:8188',
+      authType: 'none',
+      autoPowerEnabled: false,
+      autodlDeveloperToken: 'dashboard-token-never-return'
+    });
+    const now = new Date();
+    const createdAt = new Date(now.getTime() - 120_000).toISOString();
+    const runningAt = new Date(now.getTime() - 90_000).toISOString();
+    const finishedAt = new Date(now.getTime() - 30_000).toISOString();
+    fixture.runtime.database.connection.prepare(`
+      INSERT INTO job_groups(id, project_id, node_id, provider_type, profile_id, seed_mode, base_seed, total_count, created_at, updated_at)
+      VALUES ('dashboard-group', 'project', 'node', 'comfy', ?, 'fixed', 1, 1, ?, ?)
+    `).run(profile.id, createdAt, finishedAt);
+    fixture.runtime.database.connection.prepare(`
+      INSERT INTO jobs(id, group_id, project_id, node_id, provider_type, profile_id, status, payload_json, seed, retry_count, priority, created_at, updated_at)
+      VALUES ('dashboard-job', 'dashboard-group', 'project', 'node', 'comfy', ?, 'succeeded', ?, 1, 0, 0, ?, ?)
+    `).run(profile.id, JSON.stringify({
+      nodeKind: 'h3-video', resolution: '1080p', duration: 15, h3Acceleration: 'turbo-8'
+    }), createdAt, finishedAt);
+    const event = fixture.runtime.database.connection.prepare(`
+      INSERT INTO job_events(job_id, event_type, data_json, created_at)
+      VALUES ('dashboard-job', 'status-changed', ?, ?)
+    `);
+    event.run(JSON.stringify({ from: 'queued', to: 'running' }), runningAt);
+    event.run(JSON.stringify({ from: 'running', to: 'succeeded' }), finishedAt);
+
+    const dashboard = await requestJson(`${fixture.baseUrl}/data-dashboard`);
+    assert.equal(dashboard.response.status, 200);
+    assert.equal(dashboard.data.account.balance.availableYuan, 369.5);
+    assert.equal(dashboard.data.account.balance.accumulatedYuan, 1305);
+    assert.equal(dashboard.data.summary.successfulVideos, 1);
+    assert.equal(dashboard.data.summary.gpuSeconds, 60);
+    assert.equal(dashboard.data.summary.estimatedCostYuan, 0.13);
+    assert.equal(dashboard.data.byResolution.find((item) => item.key === '1080p').successfulVideos, 1);
+    assert.equal(dashboard.data.byPreset.find((item) => item.key === 'turbo-8').successfulVideos, 1);
+    assert.doesNotMatch(JSON.stringify(dashboard.data), /dashboard-token-never-return|autodlDeveloperToken/);
+  } finally {
+    await fixture.close();
+  }
+});
+
 test('workflow API saves a sanitized template and keeps it reusable across projects', async () => {
   const fixture = await createServer();
   try {
@@ -362,6 +489,44 @@ test('ComfyUI profile API tests HTTP/WebSocket status without exposing cloud cre
 
     const status = await requestJson(`${fixture.baseUrl}/comfy/${created.data.id}/status`);
     assert.equal(status.data.state, 'online-idle');
+  } finally {
+    await fixture.close();
+  }
+});
+
+test('AutoDL Pro power API reports status without exposing the developer token', async () => {
+  const developerToken = 'route-autodl-developer-token';
+  const fixture = await createServer({
+    powerProvider: {
+      getStatus: async (profile, secret) => {
+        assert.equal(profile.autodlInstanceUuid, 'pro-76576c61fdf1');
+        assert.equal(secret.autodlDeveloperToken, developerToken);
+        return 'stopped';
+      }
+    }
+  });
+  try {
+    const created = await requestJson(`${fixture.baseUrl}/profiles`, {
+      method: 'POST',
+      body: JSON.stringify({
+        type: 'comfy', name: 'AutoDL Pro', platform: 'autodl',
+        baseUrl: 'http://127.0.0.1:18188', authType: 'none',
+        autoPowerEnabled: true,
+        autodlInstanceUuid: 'pro-76576c61fdf1',
+        autodlDeveloperToken: developerToken
+      })
+    });
+    assert.equal(created.response.status, 201);
+    assert.equal(created.data.autoPowerCredentialConfigured, true);
+    assert.doesNotMatch(JSON.stringify(created.data), /route-autodl-developer-token|autodlDeveloperToken/);
+
+    const tested = await requestJson(`${fixture.baseUrl}/comfy/${created.data.id}/power/test`, { method: 'POST' });
+    assert.equal(tested.response.status, 200);
+    assert.equal(tested.data.remoteState, 'stopped');
+    assert.doesNotMatch(JSON.stringify(tested.data), /route-autodl-developer-token/);
+
+    const state = await requestJson(`${fixture.baseUrl}/comfy/${created.data.id}/power`);
+    assert.equal(state.data.state, 'stopped');
   } finally {
     await fixture.close();
   }

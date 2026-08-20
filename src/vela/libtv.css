@@ -1502,6 +1502,11 @@
   width: 370px;
 }
 
+.vela-canvas-node--video-director .vela-node-card,
+.vela-canvas-node--competitor-script-analyzer .vela-node-card {
+  width: 520px;
+}
+
 .vela-canvas-node--image-input .vela-node-card,
 .vela-canvas-node--gpt-image .vela-node-card,
 .vela-canvas-node--gpt-video .vela-node-card,
@@ -1555,7 +1560,9 @@
 }
 
 .vela-canvas-node--prompt .vela-node-content,
-.vela-canvas-node--gpt-prompt-optimizer .vela-node-content {
+.vela-canvas-node--gpt-prompt-optimizer .vela-node-content,
+.vela-canvas-node--video-director .vela-node-content,
+.vela-canvas-node--competitor-script-analyzer .vela-node-content {
   min-height: 370px;
 }
 
@@ -1579,7 +1586,9 @@
 }
 
 .vela-canvas-node--prompt .vela-prompt-content,
-.vela-canvas-node--gpt-prompt-optimizer .vela-prompt-content {
+.vela-canvas-node--gpt-prompt-optimizer .vela-prompt-content,
+.vela-canvas-node--video-director .vela-prompt-content,
+.vela-canvas-node--competitor-script-analyzer .vela-prompt-content {
   height: 100%;
   min-height: 100%;
 }
@@ -1624,7 +1633,9 @@
 }
 
 .vela-canvas-node--prompt .vela-prompt-content textarea,
-.vela-canvas-node--gpt-prompt-optimizer .vela-prompt-content textarea {
+.vela-canvas-node--gpt-prompt-optimizer .vela-prompt-content textarea,
+.vela-canvas-node--video-director .vela-prompt-content textarea,
+.vela-canvas-node--competitor-script-analyzer .vela-prompt-content textarea {
   height: 100%;
   min-height: 100%;
 }
@@ -1764,6 +1775,113 @@
   padding: 7px 9px;
 }
 
+.vela-script-config {
+  background: #f7f7f4;
+  border: 1px solid #e6e6e1;
+  border-radius: 12px;
+  margin-bottom: 8px;
+  padding: 10px;
+}
+
+.vela-script-config__heading {
+  align-items: center;
+  color: #292927;
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.vela-script-config > label,
+.vela-script-config__grid label {
+  display: grid;
+  gap: 4px;
+}
+
+.vela-script-config label > span {
+  color: #777771;
+  font-size: var(--vela-font-caption);
+}
+
+.vela-script-config select,
+.vela-script-config input {
+  background: #fff;
+  border: 1px solid #ddddda;
+  border-radius: 8px;
+  color: #30302d;
+  font: inherit;
+  font-size: var(--vela-font-helper);
+  height: 34px;
+  min-width: 0;
+  outline: none;
+  padding: 0 9px;
+  width: 100%;
+}
+
+.vela-script-config select:focus-visible,
+.vela-script-config input:focus-visible {
+  border-color: #5c8f78;
+  box-shadow: 0 0 0 2px rgba(35, 113, 80, .12);
+}
+
+.vela-script-config > p {
+  color: #777771;
+  font-size: var(--vela-font-helper);
+  line-height: 1.55;
+  margin: 8px 0 0;
+}
+
+.vela-script-config__grid {
+  display: grid;
+  gap: 7px;
+  grid-template-columns: 1fr 1fr;
+  margin-top: 8px;
+}
+
+.vela-script-config__wide {
+  grid-column: 1 / -1;
+}
+
+.vela-script-input-state,
+.vela-script-model {
+  align-items: center;
+  background: #fff7e8;
+  border-radius: 8px;
+  color: #82570f;
+  display: flex;
+  font-size: var(--vela-font-helper);
+  gap: 5px;
+  margin-top: 8px;
+  padding: 7px 8px;
+}
+
+.vela-script-input-state[data-ready="true"],
+.vela-script-model[data-ready="true"] {
+  background: #eaf6f0;
+  color: #176443;
+}
+
+.vela-script-inputs {
+  display: grid;
+  gap: 7px;
+  grid-template-columns: 1fr 1fr;
+}
+
+.vela-script-inputs span {
+  align-items: center;
+  background: #fff7e8;
+  border-radius: 8px;
+  color: #82570f;
+  display: flex;
+  font-size: var(--vela-font-helper);
+  gap: 5px;
+  padding: 7px 8px;
+}
+
+.vela-script-inputs span[data-ready="true"] {
+  background: #eaf6f0;
+  color: #176443;
+}
+
 .vela-node-controls__chips {
   display: flex;
   gap: 5px;
@@ -1900,6 +2018,56 @@
   width: 20px;
 }
 
+.vela-h3-frame-fit {
+  align-items: center;
+  background: #f7f8f5;
+  border: 1px solid #e3e5df;
+  border-radius: 10px;
+  display: grid;
+  gap: 6px 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-bottom: 8px;
+  padding: 8px 10px;
+}
+
+.vela-h3-frame-fit label {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.vela-h3-frame-fit label > span {
+  color: #777772;
+  font-size: var(--vela-font-caption);
+}
+
+.vela-h3-frame-fit select {
+  background: #fff;
+  border: 1px solid #dcded8;
+  border-radius: 7px;
+  color: #2c2c29;
+  font: inherit;
+  font-size: var(--vela-font-helper);
+  height: 32px;
+  min-width: 0;
+  padding: 0 7px;
+  width: 100%;
+}
+
+.vela-h3-frame-fit select:focus-visible {
+  border-color: #60987f;
+  outline: 2px solid rgba(52, 132, 96, .18);
+  outline-offset: 1px;
+}
+
+.vela-h3-frame-fit p {
+  color: #696963;
+  font-size: var(--vela-font-caption);
+  grid-column: 1 / -1;
+  line-height: 1.5;
+  margin: 0;
+}
+
 .vela-control-popover .vela-control-popover__clear {
   background: transparent;
   border: 1px solid #e0e0dd;
@@ -1990,6 +2158,7 @@
   align-items: center;
   color: #6f6f6b;
   display: flex;
+  flex-wrap: wrap;
   font-size: var(--vela-font-helper);
   gap: 7px;
   min-height: var(--vela-control-height);
@@ -2217,6 +2386,11 @@
 .vela-comfy-diagnostics {
   background: #f1faf5;
   border-color: #cfe8da;
+}
+
+.vela-auto-power-panel {
+  background: #f7fafb;
+  border-color: #dbe7ea;
 }
 
 .vela-comfy-diagnostics strong {

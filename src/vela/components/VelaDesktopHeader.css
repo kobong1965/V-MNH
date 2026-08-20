@@ -1,0 +1,174 @@
+:root { --vela-desktop-header-height: 44px; }
+
+.vela-desktop-frame {
+  background: #f6f7f5;
+  display: grid;
+  grid-template-rows: var(--vela-desktop-header-height) minmax(0, 1fr);
+  height: 100vh;
+  overflow: hidden;
+  width: 100vw;
+}
+
+.vela-desktop-frame[data-theme="dark"] { background: var(--vela-carbon); }
+.vela-desktop-content { min-height: 0; min-width: 0; overflow: hidden; }
+.vela-desktop-content > .vela-home-shell,
+.vela-desktop-content > .vela-app { height: 100%; width: 100%; }
+
+/* Fixed canvas controls are positioned from the browser viewport. Keep their
+   original 18px canvas inset, plus the native desktop header height. */
+.vela-desktop-frame .vela-topbar {
+  top: calc(var(--vela-desktop-header-height) + 18px);
+}
+
+.vela-desktop-header {
+  align-items: stretch;
+  background: rgba(250, 251, 249, .98);
+  border-bottom: 1px solid #e3e5e0;
+  color: #1d1f1c;
+  display: flex;
+  height: var(--vela-desktop-header-height);
+  justify-content: space-between;
+  position: relative;
+  user-select: none;
+  z-index: 3000;
+  -webkit-app-region: drag;
+}
+
+.vela-desktop-header[data-theme="dark"] { background: #161915; border-color: #30342e; color: #eef0eb; }
+.vela-desktop-header button { -webkit-app-region: no-drag; }
+
+.vela-desktop-header__drag-region {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  min-width: 210px;
+  padding: 0 14px;
+}
+
+.vela-desktop-header__drag-region img { border-radius: 5px; height: 20px; width: 20px; }
+.vela-desktop-header__drag-region strong { font-size: 14px; letter-spacing: -.02em; }
+.vela-desktop-header__drag-region span { color: #8a8d86; font-size: 12px; }
+.vela-desktop-header[data-theme="dark"] .vela-desktop-header__drag-region span { color: #959b91; }
+
+.vela-cloud-actions {
+  align-items: center;
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+  padding: 5px 6px;
+  position: relative;
+  -webkit-app-region: no-drag;
+}
+
+.vela-cloud-action {
+  align-items: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  color: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: 12px;
+  gap: 6px;
+  height: 34px;
+  padding: 0 9px;
+}
+
+.vela-cloud-action:hover,
+.vela-cloud-action[data-active="true"] { background: #edf0eb; border-color: #dfe3dc; }
+.vela-cloud-action > b { color: #168aa0; font-size: 12px; font-variant-numeric: tabular-nums; }
+.vela-cloud-action--balance { min-width: 126px; }
+.vela-desktop-header[data-theme="dark"] .vela-cloud-action:hover,
+.vela-desktop-header[data-theme="dark"] .vela-cloud-action[data-active="true"] { background: #252923; border-color: #3b4038; }
+.vela-desktop-header[data-theme="dark"] .vela-cloud-action > b { color: #5dd1e3; }
+
+.vela-window-controls {
+  display: flex;
+  -webkit-app-region: no-drag;
+}
+
+.vela-window-controls button {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  display: flex;
+  justify-content: center;
+  width: 46px;
+}
+
+.vela-window-controls button:hover { background: #e7e9e4; }
+.vela-desktop-header[data-theme="dark"] .vela-window-controls button:hover { background: #2b2f29; }
+.vela-window-controls .vela-window-controls__close:hover { background: #d93025; color: #fff; }
+
+.vela-cloud-popover {
+  background: #fff;
+  border: 1px solid #dfe2dc;
+  border-radius: 10px;
+  box-shadow: 0 14px 36px rgba(25, 29, 23, .16);
+  color: #1c1e1b;
+  max-height: min(620px, calc(100vh - 58px));
+  overflow: auto;
+  position: absolute;
+  right: 4px;
+  top: 42px;
+  width: 390px;
+}
+
+.vela-desktop-header[data-theme="dark"] .vela-cloud-popover { background: #20231f; border-color: #3a3f37; color: #eef0eb; }
+.vela-cloud-popover > header { align-items: center; border-bottom: 1px solid #eceeea; display: flex; justify-content: space-between; min-height: 58px; padding: 0 14px; }
+.vela-desktop-header[data-theme="dark"] .vela-cloud-popover > header { border-color: #363a34; }
+.vela-cloud-popover > header > div { align-items: center; display: flex; gap: 9px; }
+.vela-cloud-popover > header span { display: grid; gap: 1px; }
+.vela-cloud-popover > header strong { font-size: 14px; }
+.vela-cloud-popover > header small { color: #858981; font-size: 11px; }
+.vela-cloud-popover > header button { align-items: center; background: transparent; border: 0; border-radius: 6px; color: inherit; cursor: pointer; display: flex; height: 30px; justify-content: center; width: 30px; }
+.vela-cloud-popover > header button:hover { background: #f0f2ee; }
+.vela-desktop-header[data-theme="dark"] .vela-cloud-popover > header button:hover { background: #30342e; }
+
+.vela-cloud-empty { align-items: center; color: #767a73; display: flex; flex-direction: column; gap: 8px; padding: 30px 20px; text-align: center; }
+.vela-cloud-empty strong { color: #2a2c28; font-size: 14px; }
+.vela-desktop-header[data-theme="dark"] .vela-cloud-empty strong { color: #f0f2ed; }
+.vela-cloud-empty span { font-size: 12px; line-height: 1.55; }
+.vela-cloud-empty button,
+.vela-cloud-balance > button { align-items: center; background: #171a17; border: 0; border-radius: 7px; color: #fff; cursor: pointer; display: flex; font: inherit; font-size: 12px; gap: 7px; min-height: 34px; padding: 0 13px; }
+.vela-desktop-header[data-theme="dark"] .vela-cloud-empty button,
+.vela-desktop-header[data-theme="dark"] .vela-cloud-balance > button { background: #f1f3ee; color: #171917; }
+.vela-cloud-empty--compact { padding: 22px 12px; }
+
+.vela-cloud-balance { display: grid; gap: 9px; padding: 14px; }
+.vela-cloud-balance > div { align-items: baseline; background: #f4f6f2; border: 1px solid #e8ebe5; border-radius: 8px; display: flex; justify-content: space-between; padding: 12px; }
+.vela-cloud-balance > div:first-child { background: #eaf8f9; border-color: #cdecef; }
+.vela-desktop-header[data-theme="dark"] .vela-cloud-balance > div { background: #292d27; border-color: #393e36; }
+.vela-desktop-header[data-theme="dark"] .vela-cloud-balance > div:first-child { background: #173033; border-color: #285157; }
+.vela-cloud-balance span { color: #747870; font-size: 12px; }
+.vela-cloud-balance strong { font-size: 17px; font-variant-numeric: tabular-nums; }
+.vela-cloud-balance p,
+.vela-cloud-repository > p { background: #fff4e4; border-radius: 6px; color: #8b581b; font-size: 11px; margin: 0; padding: 8px 10px; }
+.vela-cloud-balance > button { justify-self: start; margin-top: 2px; }
+
+.vela-cloud-repository { padding: 12px 14px 14px; }
+.vela-cloud-repository__summary { align-items: center; display: flex; font-size: 12px; justify-content: space-between; padding: 3px 1px 10px; }
+.vela-cloud-repository__summary span { color: #777b74; }
+.vela-cloud-repository ul { display: grid; gap: 6px; list-style: none; margin: 0; padding: 0; }
+.vela-cloud-repository li { align-items: center; background: #f5f6f3; border: 1px solid #e9ebe6; border-radius: 8px; display: flex; gap: 12px; justify-content: space-between; min-height: 54px; padding: 8px 10px; }
+.vela-desktop-header[data-theme="dark"] .vela-cloud-repository li { background: #292c27; border-color: #393d36; }
+.vela-cloud-repository li > span { display: grid; gap: 2px; min-width: 0; }
+.vela-cloud-repository li strong { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vela-cloud-repository li small,
+.vela-cloud-repository time { color: #888c84; font-size: 10px; }
+.vela-cloud-repository time { flex: 0 0 auto; }
+
+@media (max-width: 900px) {
+  .vela-desktop-frame .vela-topbar {
+    top: calc(var(--vela-desktop-header-height) + 10px);
+  }
+
+  .vela-desktop-header__drag-region span,
+  .vela-cloud-action > span,
+  .vela-cloud-action > svg:last-child { display: none; }
+  .vela-cloud-action,
+  .vela-cloud-action--balance { min-width: 34px; padding: 0 8px; }
+}

@@ -80,6 +80,27 @@ export const getVelaJobErrorMessage = (error: VelaJob['error']): string => {
   if (error.code === 'RESULT_DOWNLOAD_FAILED') {
     return '模型已经返回结果，但软件下载媒体文件时失败；可直接重试，软件会自动重试下载连接。';
   }
+  if (['SSH_TUNNEL_FAILED', 'SSH_TUNNEL_TIMEOUT', 'REMOTE_START_FAILED', 'REMOTE_START_TIMEOUT'].includes(error.code || '')) {
+    return message || '无法连接 AutoDL 实例或启动远端 ComfyUI，请确认实例处于“运行中”状态。';
+  }
+  if (error.code === 'PROMPT_TIMEOUT') {
+    return 'ComfyUI 任务仍在云端运行，远端任务 ID 已保留。点击重试只会继续查询，不会重复提交。';
+  }
+  if (error.code === 'PROMPT_REJECTED') {
+    return message || 'ComfyUI 拒绝了工作流，请检查模型文件和节点是否完整。';
+  }
+  if (error.code === 'EXECUTION_FAILED') {
+    return message || 'ComfyUI 执行工作流失败，请按节点返回的原因检查显存、模型或输入参数。';
+  }
+  if (error.code === 'OUTPUT_NOT_FOUND') {
+    return 'ComfyUI 工作流已结束，但没有找到可下载的视频文件；远端任务 ID 已保留。';
+  }
+  if (error.code === 'WORKFLOW_CONVERTER_MISSING') {
+    return message || '远端 ComfyUI 缺少工作流转换端点，请按 Wan 云端部署说明安装转换插件后重启。';
+  }
+  if (error.code === 'COMFY_UNAVAILABLE') {
+    return message || '云端 ComfyUI 暂时不可用，请确认 AutoDL 实例与服务状态。';
+  }
   if (error.code === 'NETWORK_ERROR') {
     if (networkCode === 'ENOTFOUND' || networkCode === 'EAI_AGAIN') {
       return `${host} 的 DNS 解析失败，请检查本机 DNS 或稍后重试。`;

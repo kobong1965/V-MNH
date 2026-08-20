@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import { ContractValidationError } from '../../shared/vela-contracts.js';
 import { ProviderError } from '../providers/openAiCompatibleProvider.js';
 import { ComfyUiError } from '../providers/comfyUiProvider.js';
+import { AutoDlPowerError } from '../providers/autodlPowerProvider.js';
 import { redactSecrets } from '../vela/redaction.js';
 
 const router = express.Router();
@@ -15,7 +16,7 @@ const runtime = (req) => {
 
 const handleError = (res, error) => {
   const message = error instanceof Error ? error.message : 'Unknown error';
-  const providerError = error instanceof ProviderError || error instanceof ComfyUiError;
+  const providerError = error instanceof ProviderError || error instanceof ComfyUiError || error instanceof AutoDlPowerError;
   const status = providerError
     ? error.code === 'AUTH_FAILED' ? 401
       : ['MODEL_NOT_FOUND', 'CREDENTIAL_UNREADABLE', 'CREDENTIAL_MISSING'].includes(error.code) ? 422
@@ -35,6 +36,22 @@ const handleError = (res, error) => {
 router.get('/vela/profiles', (req, res) => {
   try { res.json(runtime(req).profiles.list({ type: req.query.type })); }
   catch (error) { handleError(res, error); }
+});
+
+router.post('/vela/portable-backup/export', (req, res) => {
+  try {
+    const backup = runtime(req).portableBackup.export(req.body?.password);
+    res.setHeader('Content-Type', 'application/vnd.vela.backup');
+    res.setHeader('Content-Disposition', 'attachment; filename="vela-portable-backup.vela-backup"');
+    res.send(backup);
+  } catch (error) { handleError(res, error); }
+});
+
+router.post('/vela/portable-backup/import', (req, res) => {
+  try {
+    if (!req.body?.packageBase64) throw new Error('迁移包不能为空');
+    res.json(runtime(req).portableBackup.import(Buffer.from(req.body.packageBase64, 'base64'), req.body?.password));
+  } catch (error) { handleError(res, error); }
 });
 
 router.post('/vela/profiles', (req, res) => {
@@ -61,6 +78,26 @@ router.post('/vela/profiles/:id/test', async (req, res) => {
 
 router.get('/vela/comfy/:id/status', async (req, res) => {
   try { res.json(await runtime(req).getComfyStatus(req.params.id)); }
+  catch (error) { handleError(res, error); }
+});
+
+router.get('/vela/comfy/:id/power', (req, res) => {
+  try { res.json(runtime(req).getCloudPowerState(req.params.id)); }
+  catch (error) { handleError(res, error); }
+});
+
+router.post('/vela/comfy/:id/power/test', async (req, res) => {
+  try { res.json(await runtime(req).testCloudPower(req.params.id)); }
+  catch (error) { handleError(res, error); }
+});
+
+router.get('/vela/cloud-account', async (req, res) => {
+  try { res.json(await runtime(req).getCloudAccountOverview()); }
+  catch (error) { handleError(res, error); }
+});
+
+router.get('/vela/data-dashboard', async (req, res) => {
+  try { res.json(await runtime(req).getDataDashboardOverview()); }
   catch (error) { handleError(res, error); }
 });
 
@@ -144,6 +181,28 @@ router.post('/vela/workflows/:id/instantiate', (req, res) => {
 router.delete('/vela/workflows/:id', (req, res) => {
   try {
     if (!runtime(req).workflowTemplates.delete(req.params.id)) return res.status(404).json({ error: '工作流不存在' });
+    res.status(204).end();
+  } catch (error) { handleError(res, error); }
+});
+
+router.get('/vela/ecommerce-workflows', (req, res) => {
+  try { res.json(runtime(req).ecommerceWorkflows.list()); }
+  catch (error) { handleError(res, error); }
+});
+
+router.post('/vela/ecommerce-workflows/:id/instantiate', (req, res) => {
+  try {
+    const project = runtime(req).ecommerceWorkflows.createProject(req.params.id);
+    if (!project) return res.status(404).json({ error: '电商工作流不存在或已删除' });
+    res.status(201).json(project);
+  } catch (error) { handleError(res, error); }
+});
+
+router.delete('/vela/ecommerce-workflows/:id', (req, res) => {
+  try {
+    if (!runtime(req).ecommerceWorkflows.delete(req.params.id)) {
+      return res.status(404).json({ error: '电商工作流不存在或已删除' });
+    }
     res.status(204).end();
   } catch (error) { handleError(res, error); }
 });

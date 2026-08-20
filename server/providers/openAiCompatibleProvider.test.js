@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { OpenAiCompatibleProvider, ProviderError } from './openAiCompatibleProvider.js';
+import {
+  OpenAiCompatibleProvider,
+  ProviderError,
+  selectLatestFlagshipGptModel
+} from './openAiCompatibleProvider.js';
 
 const profile = (patch = {}) => ({
   id: 'gpt-main',
@@ -14,6 +18,20 @@ const profile = (patch = {}) => ({
 const response = (status, body) => new Response(JSON.stringify(body), {
   status,
   headers: { 'Content-Type': 'application/json' }
+});
+
+test('latest GPT selector prefers the newest flagship alias or Sol model', () => {
+  assert.equal(selectLatestFlagshipGptModel([
+    'gpt-5.3-codex-spark',
+    'gpt-5.4',
+    'gpt-5.5',
+    'gpt-5.6-luna',
+    'gpt-5.6-terra',
+    'gpt-5.6-sol',
+    'gpt-image-2'
+  ]), 'gpt-5.6-sol');
+  assert.equal(selectLatestFlagshipGptModel(['gpt-5.6-sol', 'gpt-5.6']), 'gpt-5.6');
+  assert.equal(selectLatestFlagshipGptModel(['qwen3.7-plus', 'grok-4.5']), null);
 });
 
 test('connection test lists models and detects authentication and model errors', async () => {
@@ -140,6 +158,41 @@ test('prompt and image responses are normalized for the canvas', async () => {
   assert.equal(images[0].kind, 'base64');
 });
 
+test('video director and Qwen competitor analysis use separate configured models', async () => {
+  const requests = [];
+  const provider = new OpenAiCompatibleProvider({
+    fetchImpl: async (_url, options) => {
+      requests.push(JSON.parse(options.body));
+      return response(200, { choices: [{ message: { content: requests.length === 1 ? '编导脚本' : '竞品拆解与原创脚本' } }] });
+    }
+  });
+  const configured = profile({
+    models: { prompt: 'director-model', image: '', video: '', analysis: 'qwen-vl-model' },
+    endpoints: { chat: '/chat/completions' }
+  });
+  const director = await provider.generateDirectorScript(configured, 'key', {
+    brief: '突出便携和静音',
+    persona: { name: '美区小家电编导', market: '美国', category: '便携小家电', style: '真实 UGC', language: '英语' },
+    productImageDataUrls: ['data:image/jpeg;base64,cHJvZHVjdA=='],
+    model: 'gpt-5.6-sol'
+  });
+  const analyzed = await provider.analyzeCompetitorScript(configured, 'key', {
+    brief: '面向美国用户',
+    competitorFrameDataUrls: ['data:image/jpeg;base64,ZnJhbWUx', 'data:image/jpeg;base64,ZnJhbWUy'],
+    productImageDataUrls: ['data:image/jpeg;base64,cHJvZHVjdA==']
+  });
+  assert.equal(director.text, '编导脚本');
+  assert.equal(director.source.model, 'gpt-5.6-sol');
+  assert.equal(director.source.modelSelection, 'latest-flagship-gpt');
+  assert.equal(analyzed.text, '竞品拆解与原创脚本');
+  assert.equal(analyzed.source.model, 'qwen-vl-model');
+  assert.equal(requests[0].model, 'gpt-5.6-sol');
+  assert.equal(requests[1].model, 'qwen-vl-model');
+  const qwenContent = requests[1].messages[1].content;
+  assert.equal(qwenContent.filter((part) => part.type === 'image_url').length, 3);
+  assert.match(qwenContent[0].text, /前 2 张图.*后 1 张图/);
+});
+
 test('reference image request uses multipart edit endpoint exactly once', async () => {
   let calls = 0;
   const provider = new OpenAiCompatibleProvider({
@@ -149,12 +202,14 @@ test('reference image request uses multipart edit endpoint exactly once', async 
       assert.ok(options.body instanceof FormData);
       assert.equal(options.body.get('model'), 'image-ok');
       assert.ok(options.body.get('image') instanceof Blob);
+      assert.ok(options.body.get('mask') instanceof Blob);
       return response(200, { data: [{ b64_json: Buffer.from('edited').toString('base64') }] });
     }
   });
   const images = await provider.editImages(profile(), 'key', {
     prompt: '保留商品，替换背景',
-    referenceImages: [{ data: Buffer.from('reference'), mime: 'image/png', filename: 'reference.png' }]
+    referenceImages: [{ data: Buffer.from('reference'), mime: 'image/png', filename: 'reference.png' }],
+    mask: { data: Buffer.from('mask'), mime: 'image/png', filename: 'mask.png' }
   });
   assert.equal(images[0].kind, 'base64');
   assert.equal(calls, 1);

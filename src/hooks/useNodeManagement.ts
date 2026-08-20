@@ -46,7 +46,7 @@ export const useNodeManagement = () => {
         const canvasY = (y - viewport.y) / viewport.zoom;
 
         const nodeSize = (nodeKind?: VelaNodeKind) => ({
-            width: nodeKind && ['prompt', 'gpt-prompt-optimizer'].includes(nodeKind) ? 370 : 656,
+            width: nodeKind && ['prompt', 'gpt-prompt-optimizer', 'video-director', 'competitor-script-analyzer'].includes(nodeKind) ? 520 : 656,
             height: 370
         });
         const size = nodeSize(kind);
@@ -89,7 +89,17 @@ export const useNodeManagement = () => {
             videoGenerationMode: kind === 'gpt-video' ? 'text-to-video' : undefined
         };
 
-        if (type === NodeType.TEXT && (!kind || ['prompt', 'gpt-prompt-optimizer'].includes(kind))) {
+        if (kind === 'video-director') {
+            newNode.directorPresetId = 'vn-grounded';
+            newNode.sourceBrief = '';
+            newNode.analysisFrameCount = 8;
+        }
+        if (kind === 'competitor-script-analyzer') {
+            newNode.sourceBrief = '';
+            newNode.analysisFrameCount = 8;
+        }
+
+        if (type === NodeType.TEXT && (!kind || ['prompt', 'gpt-prompt-optimizer', 'video-director', 'competitor-script-analyzer'].includes(kind))) {
             newNode.textMode = 'menu';
         }
 
@@ -174,8 +184,8 @@ export const useNodeManagement = () => {
                 }
                 const newNodeId = crypto.randomUUID();
                 const GAP = 90;
-                const sourceWidth = sourceNode.kind && ['prompt', 'gpt-prompt-optimizer'].includes(sourceNode.kind) ? 370 : 656;
-                const targetWidth = kind && ['prompt', 'gpt-prompt-optimizer'].includes(kind) ? 370 : 656;
+                const sourceWidth = sourceNode.kind && ['prompt', 'gpt-prompt-optimizer', 'video-director', 'competitor-script-analyzer'].includes(sourceNode.kind) ? 520 : 656;
+                const targetWidth = kind && ['prompt', 'gpt-prompt-optimizer', 'video-director', 'competitor-script-analyzer'].includes(kind) ? 520 : 656;
                 const hasDropPoint = Number.isFinite(contextMenu.dropX) && Number.isFinite(contextMenu.dropY);
                 const droppedX = hasDropPoint ? (contextMenu.dropX - viewport.x) / viewport.zoom - targetWidth / 2 : null;
                 const droppedY = hasDropPoint ? (contextMenu.dropY - viewport.y) / viewport.zoom - 185 : null;
@@ -206,6 +216,15 @@ export const useNodeManagement = () => {
                         videoDuration: kind === 'gpt-video' ? 5 : undefined,
                         videoGenerationMode: kind === 'gpt-video' ? 'text-to-video' : undefined
                     };
+                    if (kind === 'video-director') {
+                        newNode.directorPresetId = 'vn-grounded';
+                        newNode.sourceBrief = '';
+                        newNode.analysisFrameCount = 8;
+                    }
+                    if (kind === 'competitor-script-analyzer') {
+                        newNode.sourceBrief = '';
+                        newNode.analysisFrameCount = 8;
+                    }
                 } else {
                     // Prepend: New -> Source
                     newNode = {
@@ -227,6 +246,15 @@ export const useNodeManagement = () => {
                         videoDuration: kind === 'gpt-video' ? 5 : undefined,
                         videoGenerationMode: kind === 'gpt-video' ? 'text-to-video' : undefined
                     };
+                    if (kind === 'video-director') {
+                        newNode.directorPresetId = 'vn-grounded';
+                        newNode.sourceBrief = '';
+                        newNode.analysisFrameCount = 8;
+                    }
+                    if (kind === 'competitor-script-analyzer') {
+                        newNode.sourceBrief = '';
+                        newNode.analysisFrameCount = 8;
+                    }
                     // Update source to add new node as parent
                     const existingParentIds = sourceNode.parentIds || [];
                     updateNode(contextMenu.sourceNodeId, { parentIds: [...existingParentIds, newNodeId] });
@@ -238,7 +266,7 @@ export const useNodeManagement = () => {
         } else {
             // Global menu - add at click position
             const isToolbarAdd = contextMenu.sourceNodeId === '__toolbar_add__';
-            const toolbarYRatio = kind && !['prompt', 'gpt-prompt-optimizer'].includes(kind) ? 0.405 : 0.39;
+            const toolbarYRatio = kind && !['prompt', 'gpt-prompt-optimizer', 'video-director', 'competitor-script-analyzer'].includes(kind) ? 0.405 : 0.39;
             addNode(
                 type,
                 isToolbarAdd ? window.innerWidth / 2 : contextMenu.x,

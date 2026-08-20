@@ -1317,16 +1317,25 @@ const httpServer = app.listen(PORT, HOST, () => {
 });
 
 let shuttingDown = false;
-const shutdown = () => {
+const shutdown = async () => {
     if (shuttingDown) return;
     shuttingDown = true;
-    httpServer.close(() => {
-        try { app.locals.velaRuntime?.close(); } catch (error) { console.error('Vela runtime close failed:', error); }
-        process.exit(0);
-    });
-    setTimeout(() => process.exit(1), 5000).unref();
+    httpServer.close();
+    const forceExit = setTimeout(() => process.exit(1), 12_000);
+    forceExit.unref();
+    try {
+        await Promise.race([
+            app.locals.velaRuntime?.shutdownCloudResources?.(),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('云算力退出关机超时')), 8_000))
+        ]);
+    } catch (error) {
+        console.error('Vela cloud shutdown failed:', error);
+    }
+    try { app.locals.velaRuntime?.close(); } catch (error) { console.error('Vela runtime close failed:', error); }
+    clearTimeout(forceExit);
+    process.exit(0);
 };
 
-process.on('SIGTERM', shutdown);
-process.on('SIGINT', shutdown);
-process.on('disconnect', shutdown);
+process.on('SIGTERM', () => { void shutdown(); });
+process.on('SIGINT', () => { void shutdown(); });
+process.on('disconnect', () => { void shutdown(); });

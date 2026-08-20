@@ -42,6 +42,10 @@ export interface NodeData {
   uploadProgress?: number; // 0-100 while a local file is being read or persisted
   uploadSource?: 'canvas-drop'; // Enables retry guidance for files dropped onto the canvas
   profileId?: string; // Account/compute profile reference; never stores a real key
+  backendWorkflowId?: string; // Bundled backend workflow identifier; never contains secrets
+  workflowInputRole?: string; // Semantic role used to inject this input into a backend workflow
+  workflowInputRequired?: boolean;
+  workflowEngine?: 'gpt-image' | 'h3-video' | 'wan-video-process';
   outputCount?: number; // Number of generated child jobs requested by this node
   imageBatchMode?: 'independent' | 'pose-variation'; // One image per request; pose mode assigns a distinct action to each batch job
   jobGroupId?: string; // Durable task group reference (implemented in P2)
@@ -50,6 +54,17 @@ export interface NodeData {
   annotationText?: string; // User-facing note shown above an image node
   annotationColor?: string; // CSS color for the user-facing node note
   annotationFontSize?: number; // Canvas-space font size for the user-facing node note
+
+  // Video director and competitor analysis nodes
+  sourceBrief?: string; // Product selling points, audience and additional requirements
+  directorPresetId?: 'vn-grounded' | 'us-appliance' | 'custom';
+  directorName?: string;
+  directorMarket?: string;
+  directorCategory?: string;
+  directorStyle?: string;
+  directorLanguage?: string;
+  lastDirectorModel?: string; // Actual highest GPT model selected for the latest director run
+  analysisFrameCount?: number; // Evenly sampled competitor-video frames
 
   // Text node specific
   textMode?: 'menu' | 'editing'; // For Text nodes: current mode
@@ -61,6 +76,11 @@ export interface NodeData {
   videoModel?: string; // Video model version (e.g., 'veo-3.1', 'kling-v2-1')
   videoDuration?: number; // Video duration in seconds (e.g., 5, 6, 8, 10)
   videoGenerationMode?: 'text-to-video' | 'image-to-video'; // API video node submission mode
+  h3Acceleration?: 'standard' | 'turbo-8' | 'turbo-4'; // MiniMax H3 sampling profile
+  h3Upscale?: 'off' | 'auto'; // Real-ESRGAN AI super resolution for 1080p/2K output
+  h3UpscaleQuality?: 'LOW' | 'MEDIUM' | 'HIGH' | 'ULTRA';
+  h3FrameFit?: 'ai-expand' | 'crop'; // Adapt mismatched reference ratios without stretching
+  h3OutpaintProfileId?: string; // GPT image-edit profile used to generatively extend H3 keyframes
   generateAudio?: boolean; // Whether to generate native audio (Kling 2.6, Veo 3.1)
   inputUrl?: string; // Input URL for video generation (image-to-video)
 

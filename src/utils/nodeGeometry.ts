@@ -23,7 +23,7 @@ const clampDimension = (value: number | undefined, fallback: number, min: number
 
 export const isResizableTextNode = (node: NodeData): boolean => (
   node.type === NodeType.TEXT
-  && (!node.kind || ['prompt', 'gpt-prompt-optimizer'].includes(node.kind))
+  && (!node.kind || ['prompt', 'gpt-prompt-optimizer', 'video-director', 'competitor-script-analyzer'].includes(node.kind))
 );
 
 export const getResultCollectionCount = (node: NodeData): number => {
@@ -48,11 +48,12 @@ export const getResultCollectionWidth = (node: NodeData): number => {
 
 export const getCanvasNodeWidth = (node: NodeData, parentNode?: NodeData): number => {
   if (isResizableTextNode(node)) {
-    const fallback = node.kind ? 370 : 365;
+    const fallback = ['video-director', 'competitor-script-analyzer'].includes(node.kind || '') ? 520 : node.kind ? 370 : 365;
     return clampDimension(node.canvasWidth, fallback, TEXT_NODE_MIN_WIDTH, TEXT_NODE_MAX_WIDTH);
   }
   if (node.kind) {
     if (['prompt', 'gpt-prompt-optimizer'].includes(node.kind)) return 370;
+    if (['video-director', 'competitor-script-analyzer'].includes(node.kind)) return 520;
     return getResultCollectionWidth(node);
   }
   if (node.type === NodeType.IMAGE_EDITOR) {

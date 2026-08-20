@@ -1,10 +1,15 @@
 import fs from 'node:fs';
+import { createRequire } from 'node:module';
 import path from 'node:path';
-
-import updaterPackage from 'electron-updater';
+import { fileURLToPath } from 'node:url';
 
 import { buildFeedOptions, DEFAULT_UPDATE_CONFIG, normalizeUpdateConfig, redactUpdateError } from './updateConfig.js';
 
+// Electron's ESM package resolver can fail on unpacked Windows installations
+// whose path contains non-ASCII characters. Resolve the CommonJS updater from
+// a native filesystem path so locations such as D:\桌面 work reliably.
+const require = createRequire(fileURLToPath(import.meta.url));
+const updaterPackage = require('electron-updater');
 const { autoUpdater } = updaterPackage;
 
 export class VelaUpdater {

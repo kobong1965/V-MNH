@@ -24,7 +24,7 @@ export const getRestartRecoveryStatus = (job) => {
   if (job.status === 'submitting') return job.promptId ? 'reconnecting' : 'queued';
   if (job.status === 'running') return 'reconnecting';
   if (job.status === 'downloading') {
-    return job.promptId && job.payload?.nodeKind === 'gpt-video' ? 'reconnecting' : 'failed';
+    return job.promptId && ['gpt-video', 'h3-video'].includes(job.payload?.nodeKind) ? 'reconnecting' : 'failed';
   }
   return job.status;
 };

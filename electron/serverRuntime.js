@@ -78,7 +78,7 @@ export const startControlService = ({
   return child;
 };
 
-export const stopControlService = async (child, timeoutMs = 5000) => {
+export const stopControlService = async (child, timeoutMs = 12_000) => {
   if (!child || child.exitCode !== null) return;
   child.kill('SIGTERM');
   await Promise.race([
