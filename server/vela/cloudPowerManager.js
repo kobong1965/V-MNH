@@ -17,6 +17,7 @@ export class CloudPowerManager {
     getProfile,
     listJobs,
     getRemoteQueue,
+    refreshProfileConnection,
     onStateChange,
     setTimer = setTimeout,
     clearTimer = clearTimeout,
@@ -31,6 +32,9 @@ export class CloudPowerManager {
     this.getProfile = getProfile;
     this.listJobs = listJobs;
     this.getRemoteQueue = getRemoteQueue;
+    this.refreshProfileConnection = typeof refreshProfileConnection === 'function'
+      ? refreshProfileConnection
+      : null;
     this.onStateChange = onStateChange;
     this.setTimer = setTimer;
     this.clearTimer = clearTimer;
@@ -114,6 +118,7 @@ export class CloudPowerManager {
       this.publish(profileId, 'checking');
       let state = String(await this.powerProvider.getStatus(profile, profile.secret) || 'unknown').toLowerCase();
       if (RUNNING_STATES.has(state)) {
+        await this.refreshProfileConnection?.(profile);
         this.publish(profileId, 'running');
         return { enabled: true, state };
       }
@@ -126,6 +131,7 @@ export class CloudPowerManager {
       state = await this.powerProvider.waitForState(profile, profile.secret, ['running'], {
         timeoutMs: profile.powerOnTimeoutMs
       });
+      await this.refreshProfileConnection?.(profile);
       this.publish(profileId, 'running');
       return { enabled: true, state };
     });
@@ -184,6 +190,14 @@ export class CloudPowerManager {
       const profile = this.getProfile(profileId);
       if (!this.isEnabled(profile)) return { poweredOff: false, reason: 'disabled' };
       if (this.hasLocalWork(profileId)) return { poweredOff: false, reason: 'local-work' };
+      // Query AutoDL first. Calling ComfyUI while the instance is already off
+      // tries to open SSH/start the remote service and produces a misleading
+      // REMOTE_START_FAILED during an ordinary idle check.
+      const currentState = String(await this.powerProvider.getStatus(profile, profile.secret) || 'unknown').toLowerCase();
+      if (OFF_STATES.has(currentState)) {
+        this.publish(profileId, 'stopped');
+        return { poweredOff: false, reason: 'already-stopped' };
+      }
       const remoteFirst = await this.getRemoteQueue(profile);
       if ((remoteFirst?.running || 0) > 0 || (remoteFirst?.pending || 0) > 0) {
         this.publish(profileId, 'remote-busy', { queue: remoteFirst });
@@ -197,11 +211,6 @@ export class CloudPowerManager {
         this.publish(profileId, 'remote-busy', { queue: remoteSecond });
         this.scheduleIdleShutdown(profileId);
         return { poweredOff: false, reason: 'remote-work' };
-      }
-      const currentState = String(await this.powerProvider.getStatus(profile, profile.secret) || 'unknown').toLowerCase();
-      if (OFF_STATES.has(currentState)) {
-        this.publish(profileId, 'stopped');
-        return { poweredOff: false, reason: 'already-stopped' };
       }
       this.publish(profileId, 'powering-off');
       await this.powerProvider.powerOff(profile, profile.secret);

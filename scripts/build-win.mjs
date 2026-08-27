@@ -3,6 +3,23 @@ import { tmpdir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 
+const wait = (milliseconds) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds);
+
+function copyArtifact(source, destination) {
+  let lastError;
+  for (let attempt = 1; attempt <= 12; attempt += 1) {
+    try {
+      copyFileSync(source, destination);
+      return;
+    } catch (error) {
+      lastError = error;
+      if (!['EBUSY', 'EPERM'].includes(error?.code) || attempt === 12) throw error;
+      wait(1_000);
+    }
+  }
+  throw lastError;
+}
+
 const projectRoot = resolve(import.meta.dirname, '..');
 const releaseDir = join(projectRoot, 'release');
 const temporaryOutput = mkdtempSync(join(tmpdir(), 'vela-electron-release-'));
@@ -35,7 +52,7 @@ try {
 
   for (const artifact of artifacts) {
     const source = join(temporaryOutput, artifact);
-    copyFileSync(source, join(releaseDir, basename(source)));
+    copyArtifact(source, join(releaseDir, basename(source)));
   }
 
   console.log(`Windows installer copied to ${releaseDir}`);

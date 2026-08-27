@@ -3,7 +3,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { findAvailablePort, startControlService, stopControlService, waitForHealth } from './serverRuntime.js';
+import {
+  findAvailablePort,
+  startControlService,
+  stopControlService,
+  waitForHealth,
+  writeRuntimeDiscovery
+} from './serverRuntime.js';
 import { VelaUpdater } from './updater.js';
 import { bindWindowStateEvents, registerWindowControlHandlers } from './windowControls.js';
 
@@ -123,6 +129,10 @@ const boot = async () => {
   });
   const exitedEarly = new Promise((_, reject) => controlService.once('exit', (code) => reject(new Error(`本机服务提前退出（代码 ${code}）`))));
   await Promise.race([waitForHealth(serviceBaseUrl), exitedEarly]);
+  await writeRuntimeDiscovery({ userDataDirectory: userData, baseUrl: serviceBaseUrl, pid: process.pid });
+  // Keep the legacy log contract so older Storyworks builds can still discover
+  // the current dynamic port even if the child process output is buffered.
+  fs.appendFileSync(logPath, `Backend server running on ${serviceBaseUrl}\n`);
   registerWindowControlHandlers({ ipcMain, getWindow: () => mainWindow });
   createTray();
   await createWindow();

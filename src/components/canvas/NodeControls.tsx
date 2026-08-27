@@ -19,7 +19,7 @@ interface NodeControlsProps {
     inputUrl?: string;
     isLoading: boolean;
     isSuccess: boolean;
-    connectedImageNodes?: { id: string; url: string; type?: NodeType }[]; // Connected parent nodes
+    connectedImageNodes?: { id: string; url: string; type?: NodeType; sourceAssetId?: string }[]; // Connected parent nodes
     onUpdate: (id: string, updates: Partial<NodeData>) => void;
     onGenerate: (id: string) => void;
     onChangeAngleGenerate?: (nodeId: string) => void;

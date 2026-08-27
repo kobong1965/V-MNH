@@ -1,0 +1,3 @@
+use_sharded_repodata: false
+repodata_use_zst: true
+remote_connect_timeout_secs: 30

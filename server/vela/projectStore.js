@@ -110,6 +110,44 @@ const getProjectThumbnail = (project) => {
   return undefined;
 };
 
+const getProjectSource = (project) => (
+  String(project.id || '').startsWith('storyworks-')
+  || project.nodes.some((node) => node.kind === 'storyworks-reference')
+    ? 'storyworks'
+    : 'vela'
+);
+
+export const migrateProjectH3NodesToR2V = (project) => {
+  if (!project || !Array.isArray(project.nodes)) return project;
+  const byId = new Map(project.nodes.map((node) => [node.id, node]));
+  return {
+    ...project,
+    nodes: project.nodes.map((node) => {
+      if (node.kind !== 'h3-video') return node;
+      const parentIds = [...new Set((node.parentIds || []).flatMap((parentId) => {
+        const parent = byId.get(parentId);
+        return parent?.kind === 'gpt-image' && Array.isArray(parent.parentIds) && parent.parentIds.length
+          ? parent.parentIds
+          : [parentId];
+      }))];
+      const requiredReferenceNodeIds = node.requiredReferenceNodeIds?.length ? node.requiredReferenceNodeIds : parentIds;
+      const requiredAssetIds = node.requiredAssetIds?.length
+        ? node.requiredAssetIds
+        : requiredReferenceNodeIds.map((id) => byId.get(id)?.sourceAssetId).filter(Boolean);
+      const { h3FrameFit: _legacyFrameFit, h3OutpaintProfileId: _legacyOutpaint, ...rest } = node;
+      return {
+        ...rest,
+        parentIds,
+        videoGenerationMode: 'reference-to-video',
+        h3Acceleration: node.h3Acceleration === 'standard' ? 'standard' : 'turbo-4',
+        h3ReferenceImageSize: node.h3ReferenceImageSize || 'match',
+        ...(requiredReferenceNodeIds.length ? { requiredReferenceNodeIds } : {}),
+        ...(requiredAssetIds.length ? { requiredAssetIds } : {})
+      };
+    })
+  };
+};
+
 export class ProjectStore {
   constructor({ dataDirectory, projectsDirectory, snapshotLimit = 20, hooks = {} }) {
     if (!dataDirectory) throw new Error('dataDirectory is required');
@@ -167,7 +205,7 @@ export class ProjectStore {
       }
     }
 
-    const project = validateProjectDocument({
+    const project = validateProjectDocument(migrateProjectH3NodesToR2V({
       schemaVersion: VELA_SCHEMA_VERSION,
       id,
       name: String(draft.name || previous?.name || '未命名项目').trim() || '未命名项目',
@@ -177,7 +215,7 @@ export class ProjectStore {
       groups: Array.isArray(draft.groups) ? draft.groups : [],
       viewport: draft.viewport || { x: 0, y: 0, zoom: 1 },
       settings: draft.settings || {}
-    });
+    }));
 
     atomicWriteJson(projectPath, project, this.hooks);
     return project;
@@ -219,10 +257,11 @@ export class ProjectStore {
     if (!directory) return null;
     const projectPath = path.join(directory, 'project.json');
     try {
-      return validateProjectDocument(JSON.parse(fs.readFileSync(projectPath, 'utf8')));
+      return migrateProjectH3NodesToR2V(validateProjectDocument(JSON.parse(fs.readFileSync(projectPath, 'utf8'))));
     } catch (error) {
       const snapshot = this.readLatestValidSnapshot(directory);
       if (!snapshot) throw error;
+      snapshot.project = migrateProjectH3NodesToR2V(snapshot.project);
       atomicWriteJson(projectPath, snapshot.project);
       this.lastRecovery = { projectId, snapshot: snapshot.file };
       return snapshot.project;
@@ -243,6 +282,7 @@ export class ProjectStore {
           createdAt: project.createdAt,
           updatedAt: project.updatedAt,
           nodeCount: project.nodes.length,
+          source: getProjectSource(project),
           thumbnailUrl: getProjectThumbnail(project)
         });
       } catch {

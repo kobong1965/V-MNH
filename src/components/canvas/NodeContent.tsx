@@ -9,6 +9,7 @@ import React, { useRef, useState, useEffect } from 'react';
 import { Check, CircleAlert, Loader2, Maximize2, ImageIcon as ImageIcon, Film, Upload, Video, GripVertical, Download, Expand, Shrink, HardDrive, FileText, Music2, WandSparkles } from 'lucide-react';
 import { NodeData, NodeStatus, NodeType } from '../../types';
 import { getCanvasNodeHeight, isResizableTextNode } from '../../utils/nodeGeometry';
+import { isKnownVelaNodeKind } from '../../vela/nodeCatalog';
 
 interface NodeContentProps {
     data: NodeData;
@@ -83,6 +84,8 @@ export const NodeContent: React.FC<NodeContentProps> = ({
     const resizableTextHeight = isResizableTextNode(data) ? getCanvasNodeHeight(data) : undefined;
     const isTextEditing = isResizableTextNode(data) && data.textMode === 'editing';
     const isGeneratedTextKind = ['gpt-prompt-optimizer', 'video-director', 'competitor-script-analyzer'].includes(data.kind || '');
+    const isStoryworksReference = data.kind === 'storyworks-reference';
+    const isUnsupportedKind = Boolean(data.kind) && !isKnownVelaNodeKind(data.kind);
 
     // Sync local state ONLY when data.prompt changes externally (not from our own update)
     useEffect(() => {
@@ -241,7 +244,24 @@ export const NodeContent: React.FC<NodeContentProps> = ({
                     className={`vela-node-content ${selected ? 'is-selected' : ''}`}
                     style={resizableTextHeight ? { height: `${resizableTextHeight}px`, minHeight: `${resizableTextHeight}px` } : undefined}
                 >
-                    {(data.kind === 'prompt' || isGeneratedTextKind) ? (
+                    {isUnsupportedKind ? (
+                        <div className="vela-compatibility-content" role="status">
+                            <CircleAlert size={28} strokeWidth={1.7} aria-hidden="true" />
+                            <strong>此节点暂以兼容模式显示</strong>
+                            <span>节点类型：{data.kind}</span>
+                            {localPrompt && <p>{localPrompt}</p>}
+                            <small>节点数据已经保留，不会影响画布中的其他内容。</small>
+                        </div>
+                    ) : isStoryworksReference ? (
+                        <article className="vela-storyworks-reference" aria-label={`${data.title || 'Storyworks 参考'}连续性参考`}>
+                            <div className="vela-storyworks-reference__badge">
+                                <FileText size={14} aria-hidden="true" />
+                                Storyworks 连续性参考
+                            </div>
+                            <p>{localPrompt || '此参考节点暂未包含连续性描述。'}</p>
+                            <small>只读同步内容 · 连接到生成节点后自动加入提示信息</small>
+                        </article>
+                    ) : (data.kind === 'prompt' || isGeneratedTextKind) ? (
                         <div
                             className={`vela-prompt-content ${isTextEditing ? 'is-editing' : 'is-viewing'}`}
                             onDoubleClick={(event) => {
@@ -323,8 +343,8 @@ export const NodeContent: React.FC<NodeContentProps> = ({
                             {['gpt-video', 'h3-video', 'wan-video-process'].includes(data.kind) ? <Film className="vela-node-hero-icon" size={56} strokeWidth={1.5} aria-hidden="true" /> : <ImageIcon className="vela-node-hero-icon" size={56} strokeWidth={1.5} aria-hidden="true" />}
                             <div className="vela-node-suggestions">
                                 <span>尝试：</span>
-                                <button type="button"><WandSparkles size={16} />{data.kind === 'wan-video-process' ? '保留动作替换' : ['gpt-video', 'h3-video'].includes(data.kind) ? '图生视频' : '图生图'}</button>
-                                <button type="button"><Maximize2 size={16} />{data.kind === 'wan-video-process' ? 'Wan 后端工作流' : data.kind === 'gpt-video' ? '文生视频' : data.kind === 'h3-video' ? '首尾帧视频' : '图片高清'}</button>
+                                <button type="button"><WandSparkles size={16} />{data.kind === 'wan-video-process' ? '保留动作替换' : data.kind === 'h3-video' ? '多素材 R2V' : data.kind === 'gpt-video' ? '图生视频' : '图生图'}</button>
+                                <button type="button"><Maximize2 size={16} />{data.kind === 'wan-video-process' ? 'Wan 后端工作流' : data.kind === 'gpt-video' ? '文生视频' : data.kind === 'h3-video' ? 'Ref2VA 视频' : '图片高清'}</button>
                             </div>
                         </div>
                     )}

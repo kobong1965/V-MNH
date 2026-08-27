@@ -288,6 +288,29 @@ class SshTunnelManager {
     return ready;
   }
 
+  restart(profile) {
+    if (profile.transport !== 'ssh') return;
+    const pending = this.pending.get(profile.id);
+    if (pending) return pending;
+    const operation = this.restartTunnel(profile).finally(() => this.pending.delete(profile.id));
+    this.pending.set(profile.id, operation);
+    return operation;
+  }
+
+  async restartTunnel(profile) {
+    const current = this.tunnels.get(profile.id);
+    this.tunnels.delete(profile.id);
+    if (current?.process) {
+      await new Promise((resolve) => {
+        if (current.process.exitCode !== null) { resolve(); return; }
+        const timer = setTimeout(resolve, 2_000);
+        current.process.once('exit', () => { clearTimeout(timer); resolve(); });
+        current.process.kill('SIGKILL');
+      });
+    }
+    return this.start(profile);
+  }
+
   close() {
     for (const starter of this.starters) starter.kill('SIGKILL');
     for (const tunnel of this.tunnels.values()) tunnel.process?.kill('SIGKILL');
@@ -390,6 +413,19 @@ export class ComfyUiProvider {
     };
     if (checkWebSocket) result.websocket = await this.checkWebSocket(profile, secret);
     return result;
+  }
+
+  async ensureServiceReady(profile, secret) {
+    try {
+      return await this.getStatus(profile, secret);
+    } catch (error) {
+      const recoverable = profile.transport === 'ssh'
+        && Boolean(profile.sshStartScript)
+        && ['NETWORK_ERROR', 'TIMEOUT', 'SSH_TUNNEL_TIMEOUT', 'REMOTE_START_TIMEOUT'].includes(error?.code);
+      if (!recoverable || typeof this.tunnelManager.restart !== 'function') throw error;
+      await this.tunnelManager.restart(profile);
+      return this.getStatus(profile, secret);
+    }
   }
 
   testConnection(profile, secret) {
@@ -512,8 +548,21 @@ export class ComfyUiProvider {
     }
   }
 
-  findVideoOutput(history) {
-    for (const output of Object.values(history?.outputs || {})) {
+  findVideoOutput(history, preferredNodeIds = []) {
+    const outputs = history?.outputs || {};
+    const orderedOutputs = [];
+    const visited = new Set();
+    for (const nodeId of preferredNodeIds) {
+      const key = String(nodeId);
+      if (outputs[key]) {
+        orderedOutputs.push(outputs[key]);
+        visited.add(key);
+      }
+    }
+    for (const [nodeId, output] of Object.entries(outputs)) {
+      if (!visited.has(nodeId)) orderedOutputs.push(output);
+    }
+    for (const output of orderedOutputs) {
       const values = [
         ...(Array.isArray(output?.images) ? output.images : []),
         ...(Array.isArray(output?.videos) ? output.videos : []),

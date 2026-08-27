@@ -2,6 +2,8 @@ export type VelaJobStatus =
   | 'queued' | 'submitting' | 'running' | 'reconnecting'
   | 'downloading' | 'succeeded' | 'failed' | 'cancelled';
 
+export const AUTO_COMFY_PROFILE_ID = 'auto-comfy';
+
 export interface VelaJob {
   id: string;
   groupId: string;

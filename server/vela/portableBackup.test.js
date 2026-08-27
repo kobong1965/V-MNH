@@ -38,8 +38,6 @@ test('portable backup encrypts profiles, SSH key, projects and media for another
       dataUrl: `data:image/png;base64,${Buffer.from('portable-image').toString('base64')}`,
       fileName: 'product.png'
     });
-    source.ecommerceWorkflows.delete('kontext-photo-restore');
-
     const backup = source.portableBackup.export('correct-horse-123');
     const envelopeText = backup.toString('utf8');
     assert.doesNotMatch(envelopeText, /sk-portable-secret|PRIVATE-KEY-CONTENT|gpu\.example\.test/);
@@ -53,7 +51,7 @@ test('portable backup encrypts profiles, SSH key, projects and media for another
     assert.equal(fs.readFileSync(wan.sshPrivateKeyPath, 'utf8'), 'PRIVATE-KEY-CONTENT');
     assert.equal(target.projectStore.listProjects().length, 1);
     assert.equal(target.media.list(restored.projectIds[0]).length, 1);
-    assert.equal(target.ecommerceWorkflows.list().some((workflow) => workflow.id === 'kontext-photo-restore'), false);
+    assert.deepEqual(target.ecommerceWorkflows.list(), []);
   } finally {
     source.close();
     target.close();

@@ -1,11 +1,9 @@
 const MODEL_FILES = Object.freeze({
-  diffusion: 'minimax_h3_fl2va_pruned_int8_convrot.safetensors',
+  diffusion: 'minimax_h3_ref2va_pruned_int8_convrot.safetensors',
   clip: 'qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors',
   videoVae: 'minimax_h3_video_vae_fp16.safetensors',
   audioVae: 'minimax_h3_audio_vae_fp32.safetensors',
-  upscaler: 'RealESRGAN_x2plus.pth',
-  turbo8: 'minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors',
-  turbo4: 'minimax_h3_fl2v_turbo_4step_v1.0_768p_comfyui_bf16.safetensors'
+  turbo4: 'minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16.safetensors'
 });
 
 const BASE_DIMENSIONS = Object.freeze({
@@ -48,20 +46,20 @@ export const buildMiniMaxH3Prompt = ({
   duration = 5,
   aspectRatio = '16:9',
   resolution = '720p',
-  acceleration = 'turbo-8',
+  acceleration = 'turbo-4',
   upscale = 'auto',
-  firstFrame,
-  lastFrame,
-  referenceFit = 'cover',
+  referenceImages = [],
+  referenceImageSize = 'match',
   filenamePrefix = 'vela/minimax-h3'
 } = {}) => {
   const graph = {};
   const dimensions = resolveMiniMaxH3Dimensions({ resolution, aspectRatio });
+  const normalizedReferences = Array.isArray(referenceImages) ? referenceImages.filter(Boolean) : [];
+  if (normalizedReferences.length < 1) throw new Error('MiniMax H3 R2V 至少需要 1 张参考图');
+  if (normalizedReferences.length > 9) throw new Error('MiniMax H3 R2V 最多支持 9 张参考图');
   const accelerationConfig = acceleration === 'standard'
     ? { steps: 20, lora: null }
-    : acceleration === 'turbo-4'
-      ? { steps: 4, lora: MODEL_FILES.turbo4 }
-      : { steps: 8, lora: MODEL_FILES.turbo8 };
+    : { steps: 4, lora: MODEL_FILES.turbo4 };
 
   graph['1'] = node('UNETLoader', { unet_name: MODEL_FILES.diffusion, weight_dtype: 'default' });
   let modelLink = ['1', 0];
@@ -80,38 +78,19 @@ export const buildMiniMaxH3Prompt = ({
   const conditioningInputs = {
     clip: ['3', 0],
     vae: ['4', 0],
+    audio_vae: ['5', 0],
     prompt: String(prompt || '').trim() || 'cinematic video',
     width: dimensions.width,
     height: dimensions.height,
-    length: minimaxH3FrameCount(duration)
+    length: minimaxH3FrameCount(duration),
+    ref_image_size: referenceImageSize === 'max' ? 'max' : 'match'
   };
-  if (firstFrame) {
-    graph['20'] = node('LoadImage', { image: firstFrame });
-    if (referenceFit === 'cover') {
-      graph['22'] = node('ImageScale', {
-        image: ['20', 0],
-        upscale_method: 'lanczos',
-        width: dimensions.width,
-        height: dimensions.height,
-        crop: 'center'
-      });
-      conditioningInputs.first_frame = ['22', 0];
-    } else conditioningInputs.first_frame = ['20', 0];
-  }
-  if (lastFrame) {
-    graph['21'] = node('LoadImage', { image: lastFrame });
-    if (referenceFit === 'cover') {
-      graph['23'] = node('ImageScale', {
-        image: ['21', 0],
-        upscale_method: 'lanczos',
-        width: dimensions.width,
-        height: dimensions.height,
-        crop: 'center'
-      });
-      conditioningInputs.last_frame = ['23', 0];
-    } else conditioningInputs.last_frame = ['21', 0];
-  }
-  graph['6'] = node('MiniMaxH3ImageToVideo', conditioningInputs);
+  normalizedReferences.forEach((remotePath, index) => {
+    const loadNodeId = String(20 + index);
+    graph[loadNodeId] = node('LoadImage', { image: remotePath });
+    conditioningInputs[`ref_images.ref_image_${index}`] = [loadNodeId, 0];
+  });
+  graph['6'] = node('MiniMaxH3ReferenceToVideo', conditioningInputs);
   graph['7'] = node('RandomNoise', { noise_seed: Math.max(0, Math.trunc(Number(seed) || 0)) });
   graph['8'] = node('BasicGuider', { model: modelLink, conditioning: ['6', 0] });
   graph['9'] = node('KSamplerSelect', { sampler_name: 'res_multistep' });
@@ -133,13 +112,11 @@ export const buildMiniMaxH3Prompt = ({
 
   let imageLink = ['12', 0];
   if (upscale !== 'off' && dimensions.targetWidth && dimensions.targetHeight) {
-    graph['14'] = node('UpscaleModelLoader', { model_name: MODEL_FILES.upscaler });
-    graph['17'] = node('ImageUpscaleWithModel', {
-      upscale_model: ['14', 0],
-      image: imageLink
-    });
+    // RealESRGAN receives the complete 243-frame batch and can retain more than
+    // 100 GB of RAM during long H3 clips. A deterministic Lanczos scale keeps
+    // the requested delivery size without making result saving a failure point.
     graph['18'] = node('ImageScale', {
-      image: ['17', 0],
+      image: imageLink,
       upscale_method: 'lanczos',
       width: dimensions.targetWidth,
       height: dimensions.targetHeight,

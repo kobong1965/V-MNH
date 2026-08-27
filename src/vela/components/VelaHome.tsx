@@ -1,8 +1,8 @@
 import {
   BarChart3,
+  Clapperboard,
   Download,
   Home,
-  ImageIcon,
   Loader2,
   MoreHorizontal,
   PackageOpen,
@@ -27,6 +27,7 @@ import type { AppearanceMode, CanvasColorMode } from '../services/settingsServic
 import { VelaApiSettings } from './VelaApiSettings';
 import { VelaDataDashboard } from './VelaDataDashboard';
 import { VelaEcommerceWorkflows } from './VelaEcommerceWorkflows';
+import { ProjectThumbnail, VelaProjectGallery } from './VelaProjectGallery';
 import { VelaSettings } from './VelaSettings';
 import './VelaHome.css';
 
@@ -46,26 +47,6 @@ interface VelaHomeProps {
   canvas: CanvasColorMode;
   onAppearanceChange: (value: AppearanceMode) => void;
   onCanvasChange: (value: CanvasColorMode) => void;
-}
-
-function ProjectThumbnail({ project, compact = false }: { project: VelaProjectSummary; compact?: boolean }) {
-  const [failed, setFailed] = useState(false);
-  if (!project.thumbnailUrl || failed) {
-    return (
-      <span className="vela-home-project-placeholder" data-compact={compact || undefined} aria-hidden="true">
-        <ImageIcon size={compact ? 18 : 28} strokeWidth={1.5} />
-      </span>
-    );
-  }
-  return (
-    <img
-      className="vela-home-project-thumbnail"
-      data-compact={compact || undefined}
-      src={project.thumbnailUrl}
-      alt=""
-      onError={() => setFailed(true)}
-    />
-  );
 }
 
 export function VelaHome({
@@ -226,6 +207,8 @@ export function VelaHome({
   };
 
   const recentProjects = projects.slice(0, 6);
+  const storyProjects = projects.filter((project) => project.source === 'storyworks');
+  const standardProjects = projects.filter((project) => project.source !== 'storyworks');
 
   return (
     <div className="vela-home-shell" data-theme={theme}>
@@ -305,8 +288,30 @@ export function VelaHome({
         <VelaEcommerceWorkflows
           busyWorkflowId={creatingWorkflowId}
           disabled={busy}
+          projects={standardProjects}
+          currentProjectId={currentProjectId}
           onCreate={runCreateWorkflow}
+          onOpenProject={runOpen}
         />
+
+        <section className="vela-short-drama" aria-labelledby="vela-short-drama-title">
+          <header className="vela-short-drama-heading">
+            <div>
+              <h2 id="vela-short-drama-title"><Clapperboard size={19} aria-hidden="true" />短剧</h2>
+              <p>通过编导车间导入的故事项目</p>
+            </div>
+            <span>{storyProjects.length} 个故事</span>
+          </header>
+          <VelaProjectGallery
+            projects={storyProjects}
+            variant="storyworks"
+            currentProjectId={currentProjectId}
+            disabled={busy}
+            emptyTitle="还没有短剧项目"
+            emptyDescription="从编导车间导入故事后，会自动显示在这里。"
+            onOpen={runOpen}
+          />
+        </section>
       </main> : page === 'dashboard' ? (
         <main className="vela-home-main vela-home-main--settings">
           <VelaDataDashboard />

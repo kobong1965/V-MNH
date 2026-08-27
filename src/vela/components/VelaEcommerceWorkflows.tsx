@@ -6,17 +6,23 @@ import {
   listEcommerceWorkflows,
   type EcommerceWorkflowSummary
 } from '../services/ecommerceWorkflowService';
+import type { VelaProjectSummary } from '../services/projectService';
+import { VelaProjectGallery } from './VelaProjectGallery';
 import { WorkflowCanvasPreview } from './WorkflowCanvasPreview';
 
 interface VelaEcommerceWorkflowsProps {
   busyWorkflowId: string | null;
   disabled?: boolean;
+  projects: VelaProjectSummary[];
+  currentProjectId?: string;
   onCreate: (workflowId: string) => void | Promise<void>;
+  onOpenProject: (projectId: string) => void | Promise<void>;
 }
 
-type WorkflowFilter = 'all' | EcommerceWorkflowSummary['category'];
+type WorkflowFilter = 'projects' | 'all' | EcommerceWorkflowSummary['category'];
 
 const FILTERS: Array<{ id: WorkflowFilter; label: string }> = [
+  { id: 'projects', label: '项目' },
   { id: 'all', label: '全部' },
   { id: 'commerce', label: '电商视觉' },
   { id: 'outfit', label: '服装换装' },
@@ -25,9 +31,9 @@ const FILTERS: Array<{ id: WorkflowFilter; label: string }> = [
   { id: 'restore', label: '修复工具' }
 ];
 
-export function VelaEcommerceWorkflows({ busyWorkflowId, disabled, onCreate }: VelaEcommerceWorkflowsProps) {
+export function VelaEcommerceWorkflows({ busyWorkflowId, disabled, projects, currentProjectId, onCreate, onOpenProject }: VelaEcommerceWorkflowsProps) {
   const [workflows, setWorkflows] = useState<EcommerceWorkflowSummary[]>([]);
-  const [filter, setFilter] = useState<WorkflowFilter>('all');
+  const [filter, setFilter] = useState<WorkflowFilter>('projects');
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -68,6 +74,11 @@ export function VelaEcommerceWorkflows({ busyWorkflowId, disabled, onCreate }: V
         .includes(normalizedQuery);
     });
   }, [filter, query, workflows]);
+  const visibleProjects = useMemo(() => {
+    const normalizedQuery = query.trim().toLocaleLowerCase('zh-CN');
+    if (!normalizedQuery) return projects;
+    return projects.filter((project) => project.name.toLocaleLowerCase('zh-CN').includes(normalizedQuery));
+  }, [projects, query]);
 
   const confirmDelete = async () => {
     if (!deleteTarget) return;
@@ -88,7 +99,7 @@ export function VelaEcommerceWorkflows({ busyWorkflowId, disabled, onCreate }: V
     <section className="vela-commerce" aria-labelledby="vela-commerce-title">
       <header className="vela-commerce-heading">
         <h1 id="vela-commerce-title"><ShoppingBag size={19} aria-hidden="true" />电商工作流</h1>
-        <span className="vela-commerce-count">{workflows.length} 个工作流</span>
+        <span className="vela-commerce-count">{filter === 'projects' ? `${projects.length} 个项目` : `${workflows.length} 个工作流`}</span>
       </header>
 
       <div className="vela-commerce-toolbar">
@@ -107,22 +118,32 @@ export function VelaEcommerceWorkflows({ busyWorkflowId, disabled, onCreate }: V
         </div>
         <label className="vela-commerce-search">
           <Search size={17} aria-hidden="true" />
-          <span className="vela-visually-hidden">搜索工作流</span>
-          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索工作流" />
+          <span className="vela-visually-hidden">{filter === 'projects' ? '搜索项目' : '搜索工作流'}</span>
+          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={filter === 'projects' ? '搜索项目' : '搜索工作流'} />
           {query && (
             <button type="button" aria-label="清空搜索" onClick={() => setQuery('')}><X size={15} aria-hidden="true" /></button>
           )}
         </label>
       </div>
 
-      {error && (
+      {filter !== 'projects' && error && (
         <div className="vela-commerce-message" role="alert">
           <span>{error}</span>
           <button type="button" onClick={() => void refresh()}>重新加载</button>
         </div>
       )}
 
-      {loading ? (
+      {filter === 'projects' ? (
+        <VelaProjectGallery
+          projects={visibleProjects}
+          variant="project"
+          currentProjectId={currentProjectId}
+          disabled={disabled}
+          emptyTitle={projects.length === 0 ? '还没有项目' : '没有匹配的项目'}
+          emptyDescription={projects.length === 0 ? '点击左侧“新建项目”后，项目会显示在这里。' : '请更换搜索关键词。'}
+          onOpen={onOpenProject}
+        />
+      ) : loading ? (
         <div className="vela-commerce-grid" aria-label="正在加载工作流">
           {Array.from({ length: 8 }, (_, index) => <div className="vela-commerce-skeleton" key={index} aria-hidden="true" />)}
         </div>

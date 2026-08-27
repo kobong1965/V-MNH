@@ -293,31 +293,42 @@ export class ProfileRepository {
         || Object.prototype.hasOwnProperty.call(patch, 'autodlDeveloperToken')
         || Boolean(patch.clearAutoPowerCredential)
         || authChanged;
-      if (existingCredential.status === 'unreadable' && modifiesSecret) {
-        throw new Error('当前连接凭据无法解密，请清除旧凭据后重新配置');
-      }
-      let nextSecret = { ...(existingCredential.secret || {}) };
-      if (patch.clearSecret || publicConfig.authType === 'none' || authChanged || hasComfyAuthSecretPatch(patch)) {
-        nextSecret = clearComfyAuthSecret(nextSecret);
-      }
-      if (publicConfig.authType !== 'none' && (authChanged || hasComfyAuthSecretPatch(patch))) {
-        nextSecret = {
+      // Public-only edits must not destroy an unreadable encrypted envelope. When the
+      // user explicitly supplies replacement credentials, however, rebuild the
+      // complete secret from that input instead of requiring the old value to be
+      // decrypted first. This is the recovery path after a Windows/user-data restore.
+      if (existingCredential.status !== 'unreadable' || modifiesSecret) {
+        let nextSecret = existingCredential.status === 'unreadable'
+          ? {}
+          : { ...(existingCredential.secret || {}) };
+        if (patch.clearSecret || publicConfig.authType === 'none' || authChanged || hasComfyAuthSecretPatch(patch)) {
+          nextSecret = clearComfyAuthSecret(nextSecret);
+        }
+        if (publicConfig.authType !== 'none' && (authChanged || hasComfyAuthSecretPatch(patch))) {
+          nextSecret = {
+            ...nextSecret,
+            ...(comfySecretFromDraft({ ...patch, authType: publicConfig.authType }) || {})
+          };
+        }
+        if (patch.clearAutoPowerCredential) delete nextSecret.autodlDeveloperToken;
+        if (Object.prototype.hasOwnProperty.call(patch, 'autodlDeveloperToken')) {
+          const token = String(patch.autodlDeveloperToken || '').trim();
+          if (token) nextSecret.autodlDeveloperToken = token;
+        }
+        if (publicConfig.autoPowerEnabled && !nextSecret.autodlDeveloperToken) {
+          throw new Error('启用自动开关机前必须填写 AutoDL Developer Token');
+        }
+        if (publicConfig.authType !== 'none' && !hasSecretValues(comfySecretFromDraft({
           ...nextSecret,
-          ...(comfySecretFromDraft({ ...patch, authType: publicConfig.authType }) || {})
-        };
+          authType: publicConfig.authType
+        }))) {
+          throw new Error('连接凭据无法解密，请重新填写完整的 ComfyUI 认证信息');
+        }
+        if (publicConfig.authType === 'custom') {
+          publicConfig.customHeaderNames = Object.keys(nextSecret.customHeaders || {});
+        }
+        encrypted = hasSecretValues(nextSecret) ? this.secretProtector.encrypt(nextSecret) : null;
       }
-      if (patch.clearAutoPowerCredential) delete nextSecret.autodlDeveloperToken;
-      if (Object.prototype.hasOwnProperty.call(patch, 'autodlDeveloperToken')) {
-        const token = String(patch.autodlDeveloperToken || '').trim();
-        if (token) nextSecret.autodlDeveloperToken = token;
-      }
-      if (publicConfig.autoPowerEnabled && !nextSecret.autodlDeveloperToken) {
-        throw new Error('启用自动开关机前必须填写 AutoDL Developer Token');
-      }
-      if (publicConfig.authType === 'custom') {
-        publicConfig.customHeaderNames = Object.keys(nextSecret.customHeaders || {});
-      }
-      encrypted = hasSecretValues(nextSecret) ? this.secretProtector.encrypt(nextSecret) : null;
     }
     this.database.connection.prepare(`
       UPDATE profiles SET name = ?, public_json = ?, encrypted_secret = ?, updated_at = ? WHERE id = ?

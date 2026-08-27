@@ -144,7 +144,15 @@ router.patch('/vela/projects/:id', (req, res) => {
 
 router.delete('/vela/projects/:id', (req, res) => {
   try {
-    const deleted = runtime(req).projectStore.deleteProject(req.params.id);
+    const service = runtime(req);
+    const activeJobs = service.jobs.listJobs({ limit: 2000 }).filter((job) => (
+      job.projectId === req.params.id
+      && ['queued', 'submitting', 'running', 'reconnecting', 'downloading'].includes(job.status)
+    ));
+    if (activeJobs.length) {
+      return res.status(409).json({ error: `项目仍有 ${activeJobs.length} 个生成任务，完成或取消后才能删除。` });
+    }
+    const deleted = service.projectStore.deleteProject(req.params.id);
     if (!deleted) return res.status(404).json({ error: '项目不存在' });
     res.status(204).end();
   } catch (error) { handleError(res, error); }

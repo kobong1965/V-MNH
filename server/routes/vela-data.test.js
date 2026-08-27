@@ -76,31 +76,43 @@ test('project API saves, loads and exports a versioned project', async () => {
   }
 });
 
-test('e-commerce workflow API lists canvases, creates a project and persists deletion', async () => {
+test('project deletion is blocked while a queued job still owns its output directory', async () => {
+  const fixture = await createServer();
+  try {
+    const created = await requestJson(`${fixture.baseUrl}/projects`, {
+      method: 'POST',
+      body: JSON.stringify({ name: '进行中项目', nodes: [], groups: [], viewport: { x: 0, y: 0, zoom: 1 } })
+    });
+    fixture.runtime.jobs.createGroup({
+      id: 'guard-group', projectId: created.data.id, nodeId: 'node-1', providerType: 'fake',
+      profileId: 'offline-profile', seedMode: 'increment', baseSeed: 1
+    }, [{
+      id: 'guard-job', groupId: 'guard-group', projectId: created.data.id, nodeId: 'node-1', providerType: 'fake',
+      profileId: 'offline-profile', payload: { nodeKind: 'gpt-image', prompt: 'guard' }, seed: 1, workflowVersion: null, priority: 0
+    }]);
+    const response = await fetch(`${fixture.baseUrl}/projects/${created.data.id}`, { method: 'DELETE' });
+    assert.equal(response.status, 409);
+    assert.match((await response.json()).error, /生成任务/);
+    assert.ok(fixture.runtime.projectStore.getProject(created.data.id));
+  } finally {
+    await fixture.close();
+  }
+});
+
+test('retired e-commerce workflows are absent from the API', async () => {
   const fixture = await createServer();
   try {
     const listed = await requestJson(`${fixture.baseUrl}/ecommerce-workflows`);
     assert.equal(listed.response.status, 200);
-    assert.equal(listed.data.length, 10);
-    assert.ok(listed.data.every((workflow) => workflow.preview.nodes.length === workflow.nodeCount));
+    assert.deepEqual(listed.data, []);
 
-    const target = listed.data.find((workflow) => workflow.id === 'dw-pose-redraw');
-    const created = await requestJson(`${fixture.baseUrl}/ecommerce-workflows/${target.id}/instantiate`, {
-      method: 'POST', body: '{}'
-    });
-    assert.equal(created.response.status, 201);
-    assert.equal(created.data.name, target.name);
-    assert.equal(created.data.nodes.length, target.nodeCount);
-    assert.equal(fixture.runtime.projectStore.getProject(created.data.id)?.id, created.data.id);
-
-    const deleted = await fetch(`${fixture.baseUrl}/ecommerce-workflows/${target.id}`, { method: 'DELETE' });
-    assert.equal(deleted.status, 204);
-    const afterDelete = await requestJson(`${fixture.baseUrl}/ecommerce-workflows`);
-    assert.equal(afterDelete.data.some((workflow) => workflow.id === target.id), false);
-    const missing = await requestJson(`${fixture.baseUrl}/ecommerce-workflows/${target.id}/instantiate`, {
+    const missing = await requestJson(`${fixture.baseUrl}/ecommerce-workflows/wan22-animate-face-outfit/instantiate`, {
       method: 'POST', body: '{}'
     });
     assert.equal(missing.response.status, 404);
+
+    const deleted = await fetch(`${fixture.baseUrl}/ecommerce-workflows/wan22-animate-face-outfit`, { method: 'DELETE' });
+    assert.equal(deleted.status, 404);
   } finally {
     await fixture.close();
   }

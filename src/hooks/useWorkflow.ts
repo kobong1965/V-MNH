@@ -74,9 +74,17 @@ export const useWorkflow = ({
                 setWorkflowId(workflow.id);
                 setCanvasTitle(workflow.name || '未命名工作区');
                 setEditingTitleValue(workflow.name || '未命名工作区');
-                setNodes((workflow.nodes || []).map((node) => (
-                    node.type === NodeType.TEXT ? { ...node, textMode: 'menu' as const } : node
-                )));
+                setNodes((workflow.nodes || []).map((node) => {
+                    if (node.kind === 'h3-video') return {
+                        ...node,
+                        videoGenerationMode: 'reference-to-video' as const,
+                        h3Acceleration: node.h3Acceleration === 'standard' ? 'standard' as const : 'turbo-4' as const,
+                        h3ReferenceImageSize: node.h3ReferenceImageSize || 'match' as const,
+                        h3FrameFit: undefined,
+                        h3OutpaintProfileId: undefined
+                    };
+                    return node.type === NodeType.TEXT ? { ...node, textMode: 'menu' as const } : node;
+                }));
                 setGroups(workflow.groups || []); // Restore groups
                 setViewport(workflow.viewport || { x: 0, y: 0, zoom: 1 });
                 // Reset selection

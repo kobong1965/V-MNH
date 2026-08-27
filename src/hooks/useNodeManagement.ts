@@ -86,7 +86,9 @@ export const useNodeManagement = () => {
             imageModel: kind === 'gpt-image' ? 'gpt-image-1.5' : undefined,
             videoModel: kind === 'gpt-video' ? 'seedance-2.5-720p' : kind === 'h3-video' ? 'h3-comfy' : undefined,
             videoDuration: kind === 'gpt-video' ? 5 : undefined,
-            videoGenerationMode: kind === 'gpt-video' ? 'text-to-video' : undefined
+            videoGenerationMode: kind === 'gpt-video' ? 'text-to-video' : kind === 'h3-video' ? 'reference-to-video' : undefined,
+            h3Acceleration: kind === 'h3-video' ? 'turbo-4' : undefined,
+            h3ReferenceImageSize: kind === 'h3-video' ? 'match' : undefined
         };
 
         if (kind === 'video-director') {
@@ -214,7 +216,9 @@ export const useNodeManagement = () => {
                         imageModel: kind === 'gpt-image' ? 'gpt-image-1.5' : undefined,
                         videoModel: kind === 'gpt-video' ? 'seedance-2.5-720p' : kind === 'h3-video' ? 'h3-comfy' : undefined,
                         videoDuration: kind === 'gpt-video' ? 5 : undefined,
-                        videoGenerationMode: kind === 'gpt-video' ? 'text-to-video' : undefined
+                        videoGenerationMode: kind === 'gpt-video' ? 'text-to-video' : kind === 'h3-video' ? 'reference-to-video' : undefined,
+                        h3Acceleration: kind === 'h3-video' ? 'turbo-4' : undefined,
+                        h3ReferenceImageSize: kind === 'h3-video' ? 'match' : undefined
                     };
                     if (kind === 'video-director') {
                         newNode.directorPresetId = 'vn-grounded';
@@ -244,7 +248,9 @@ export const useNodeManagement = () => {
                         imageModel: kind === 'gpt-image' ? 'gpt-image-1.5' : undefined,
                         videoModel: kind === 'gpt-video' ? 'seedance-2.5-720p' : kind === 'h3-video' ? 'h3-comfy' : undefined,
                         videoDuration: kind === 'gpt-video' ? 5 : undefined,
-                        videoGenerationMode: kind === 'gpt-video' ? 'text-to-video' : undefined
+                        videoGenerationMode: kind === 'gpt-video' ? 'text-to-video' : kind === 'h3-video' ? 'reference-to-video' : undefined,
+                        h3Acceleration: kind === 'h3-video' ? 'turbo-4' : undefined,
+                        h3ReferenceImageSize: kind === 'h3-video' ? 'match' : undefined
                     };
                     if (kind === 'video-director') {
                         newNode.directorPresetId = 'vn-grounded';

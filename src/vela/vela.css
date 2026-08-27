@@ -537,12 +537,36 @@ textarea {
   overflow: auto;
 }
 
+.vela-task-filters {
+  align-items: center;
+  border-top: 1px solid var(--vela-border);
+  display: flex;
+  gap: var(--vela-space-2);
+  padding: var(--vela-space-2) var(--vela-space-3);
+}
+
+.vela-task-filters button {
+  background: transparent;
+  border: 1px solid var(--vela-border);
+  border-radius: 999px;
+  color: var(--vela-muted);
+  font: inherit;
+  font-size: var(--vela-font-helper);
+  padding: 5px 10px;
+}
+
+.vela-task-filters button[data-active="true"] {
+  background: color-mix(in srgb, var(--vela-blue) 12%, transparent);
+  border-color: color-mix(in srgb, var(--vela-blue) 42%, var(--vela-border));
+  color: var(--vela-mist);
+}
+
 .vela-task-item {
   align-items: start;
   border-bottom: 1px solid var(--vela-border);
   display: grid;
   gap: var(--vela-space-3);
-  grid-template-columns: 54px minmax(0, 1fr) 40px 36px;
+  grid-template-columns: 54px minmax(0, 1fr) 40px 36px 36px;
   min-height: 66px;
   padding: var(--vela-space-2) var(--vela-space-3);
   position: relative;

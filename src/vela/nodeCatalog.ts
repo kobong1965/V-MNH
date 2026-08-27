@@ -2,6 +2,7 @@ export type VelaNodeKind =
   | 'prompt'
   | 'image-input'
   | 'video-input'
+  | 'storyworks-reference'
   | 'gpt-prompt-optimizer'
   | 'video-director'
   | 'competitor-script-analyzer'
@@ -27,6 +28,7 @@ export interface VelaNodeDefinition {
   description: string;
   category: 'input' | 'gpt' | 'video' | 'result';
   legacyType: VelaLegacyNodeType;
+  userCreatable?: boolean;
   inputs: VelaPortType[];
   outputs: VelaPortType[];
   defaultPrompt?: string;
@@ -59,6 +61,16 @@ export const VELA_NODE_CATALOG: readonly VelaNodeDefinition[] = [
     legacyType: 'Video',
     inputs: [],
     outputs: ['video']
+  },
+  {
+    kind: 'storyworks-reference',
+    label: 'Storyworks 参考',
+    description: '从 Storyworks 同步的人物、场景或道具连续性参考',
+    category: 'input',
+    legacyType: 'Image',
+    userCreatable: false,
+    inputs: [],
+    outputs: ['text', 'image']
   },
   {
     kind: 'gpt-prompt-optimizer',
@@ -107,11 +119,11 @@ export const VELA_NODE_CATALOG: readonly VelaNodeDefinition[] = [
   },
   {
     kind: 'h3-video',
-    label: 'H3 视频',
-    description: '通过云端 ComfyUI 生成视频',
+    label: 'H3 R2V 视频',
+    description: '把已连接的人物、场景和道具参考素材共同交给云端 Ref2VA 生成视频',
     category: 'video',
     legacyType: 'Video',
-    inputs: ['text', 'image'],
+    inputs: ['text', 'image', 'image-list'],
     outputs: ['video-list']
   },
   {
@@ -147,13 +159,24 @@ const NODE_DEFINITIONS = new Map(
   VELA_NODE_CATALOG.map((definition) => [definition.kind, definition])
 );
 
-export const getNodeDefinition = (kind: VelaNodeKind): VelaNodeDefinition => {
-  const definition = NODE_DEFINITIONS.get(kind);
-  if (!definition) {
-    throw new Error(`Unknown Vela node kind: ${kind}`);
-  }
-  return definition;
+const UNKNOWN_NODE_DEFINITION: VelaNodeDefinition = {
+  kind: 'prompt',
+  label: '兼容节点',
+  description: '当前版本暂不支持此节点，原始内容已安全保留',
+  category: 'input',
+  legacyType: 'Text',
+  inputs: [],
+  outputs: []
 };
+
+export const isKnownVelaNodeKind = (kind: unknown): kind is VelaNodeKind =>
+  typeof kind === 'string' && NODE_DEFINITIONS.has(kind as VelaNodeKind);
+
+export const getNodeDefinition = (kind: VelaNodeKind | string): VelaNodeDefinition =>
+  NODE_DEFINITIONS.get(kind as VelaNodeKind) || {
+    ...UNKNOWN_NODE_DEFINITION,
+    description: `当前版本暂不支持节点“${kind}”，原始内容已安全保留。`
+  };
 
 const singularPort = (port: VelaPortType): VelaPortType => {
   if (port === 'image-list') return 'image';

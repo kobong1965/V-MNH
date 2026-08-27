@@ -30,7 +30,7 @@ interface CanvasNodeProps {
   profileName?: string;
   profiles?: VelaProfile[];
   inputUrl?: string;
-  connectedImageNodes?: { id: string; url: string; type?: NodeType }[]; // For frame-to-frame video mode and motion control
+  connectedImageNodes?: { id: string; url: string; type?: NodeType; sourceAssetId?: string }[]; // R2V references or legacy frame inputs
   onUpdate: (id: string, updates: Partial<NodeData>) => void;
   onGenerate: (id: string) => void;
   onAddNext: (id: string, type: 'left' | 'right', point?: { x: number; y: number }) => void;

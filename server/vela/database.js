@@ -60,6 +60,12 @@ export class VelaDatabase {
   }
 
   close() {
-    this.connection.close();
+    try {
+      if (this.databasePath !== ':memory:') {
+        this.connection.exec('PRAGMA wal_checkpoint(TRUNCATE);');
+      }
+    } finally {
+      this.connection.close();
+    }
   }
 }

@@ -1712,6 +1712,67 @@
   font-size: var(--vela-font-helper);
 }
 
+.vela-canvas-node--storyworks-reference .vela-node-content {
+  min-height: 220px;
+}
+
+.vela-storyworks-reference,
+.vela-compatibility-content {
+  align-items: flex-start;
+  background: #fff;
+  color: #484844;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  justify-content: center;
+  min-height: 218px;
+  padding: 24px;
+  width: 100%;
+}
+
+.vela-storyworks-reference__badge {
+  align-items: center;
+  background: #f1f1ee;
+  border: 1px solid #e1e1dc;
+  border-radius: 999px;
+  color: #555550;
+  display: inline-flex;
+  font-size: var(--vela-font-helper);
+  font-weight: 650;
+  gap: 6px;
+  padding: 6px 10px;
+}
+
+.vela-storyworks-reference p,
+.vela-compatibility-content p {
+  color: #292927;
+  font-size: var(--vela-font-control);
+  line-height: 1.65;
+  margin: 0;
+  max-height: 112px;
+  overflow: auto;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  width: 100%;
+}
+
+.vela-storyworks-reference small,
+.vela-compatibility-content small,
+.vela-compatibility-content > span {
+  color: #888883;
+  font-size: var(--vela-font-helper);
+  line-height: 1.45;
+}
+
+.vela-compatibility-content {
+  color: #8a5d21;
+}
+
+.vela-compatibility-content strong {
+  color: #5b4529;
+  font-size: var(--vela-font-body);
+}
+
 .vela-node-controls-shell {
   top: calc(100% + 14px) !important;
 }
@@ -1728,11 +1789,74 @@
   width: 660px;
 }
 
+.vela-node-controls--notice {
+  align-items: flex-start;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 13px 15px;
+  width: 420px;
+}
+
+.vela-node-controls--notice strong {
+  color: #2f2f2d;
+  font-size: var(--vela-font-control);
+}
+
+.vela-node-controls--notice span {
+  color: #7d7d78;
+  font-size: var(--vela-font-helper);
+  line-height: 1.45;
+}
+
 .vela-video-mode {
   align-items: center;
   display: flex;
   gap: 4px;
   padding: 0 0 8px;
+}
+
+.vela-video-engine {
+  align-items: center;
+  background: #f7f8f5;
+  border: 1px solid #e1e3dd;
+  border-radius: 10px;
+  display: grid;
+  gap: 4px 10px;
+  grid-template-columns: max-content minmax(220px, 1fr);
+  margin-bottom: 8px;
+  padding: 9px 10px;
+}
+
+.vela-video-engine > span {
+  color: #444440;
+  font-size: var(--vela-font-helper);
+  font-weight: 650;
+}
+
+.vela-video-engine select {
+  background: #fff;
+  border: 1px solid #d8dad4;
+  border-radius: 7px;
+  color: #252523;
+  font-size: var(--vela-font-control);
+  height: 36px;
+  min-width: 0;
+  padding: 0 9px;
+  width: 100%;
+}
+
+.vela-video-engine select:focus-visible {
+  border-color: #5f7bea;
+  outline: 2px solid rgba(75, 103, 225, .2);
+  outline-offset: 1px;
+}
+
+.vela-video-engine small {
+  color: #74746f;
+  font-size: var(--vela-font-caption);
+  grid-column: 1 / -1;
+  line-height: 1.45;
 }
 
 .vela-video-mode button {

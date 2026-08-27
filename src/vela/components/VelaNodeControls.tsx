@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ArrowUp, Check, ChevronDown, Film, ImagePlus, Loader2, Maximize2, Minus, Plus, ScanSearch, Sparkles, UserRoundCog, X } from 'lucide-react';
 import { NodeStatus, NodeType, type NodeData } from '../../types';
-import { getNodeDefinition } from '../nodeCatalog';
+import { getNodeDefinition, isKnownVelaNodeKind } from '../nodeCatalog';
 import {
   IMAGE_ASPECT_RATIOS,
   IMAGE_RESOLUTIONS,
@@ -10,6 +10,7 @@ import {
   VIDEO_RESOLUTIONS
 } from '../generationOptions';
 import type { VelaProfile } from '../services/profileService';
+import { createVideoEngineUpdate, isMiniMaxH3Profile, type VideoEngineKind } from '../videoEngine';
 import { resolveVideoDirectorPersona, VIDEO_DIRECTOR_PRESETS } from '../videoDirectorPresets';
 
 interface VelaNodeControlsProps {
@@ -17,7 +18,7 @@ interface VelaNodeControlsProps {
   isLoading: boolean;
   profileName?: string;
   profiles?: VelaProfile[];
-  connectedImageNodes?: { id: string; url: string; type?: NodeType }[];
+  connectedImageNodes?: { id: string; url: string; type?: NodeType; sourceAssetId?: string }[];
   onUpdate: (id: string, updates: Partial<NodeData>) => void;
   onGenerate: (id: string) => void;
 }
@@ -28,14 +29,6 @@ const VIDEO_DURATIONS = [4, 5, 10, 15, 30, 60, 90, 120, 180] as const;
 export function VelaNodeControls({ data, isLoading, profileName, profiles = [], connectedImageNodes = [], onUpdate, onGenerate }: VelaNodeControlsProps) {
   const [openPanel, setOpenPanel] = useState<'reference' | 'style' | null>(null);
   const selectedProfile = profiles.find((profile) => profile.id === data.profileId);
-  const h3OutpaintProfiles = profiles
-    .filter((profile) => profile.type === 'gpt' && Boolean(profile.models.image))
-    .sort((left, right) => {
-      const leftPreferred = left.type === 'gpt' && /gpt-image/i.test(left.models.image) ? 0 : 1;
-      const rightPreferred = right.type === 'gpt' && /gpt-image/i.test(right.models.image) ? 0 : 1;
-      return leftPreferred - rightPreferred || left.name.localeCompare(right.name);
-    });
-  const preferredOutpaintProfileId = h3OutpaintProfiles[0]?.id;
   const isVideoDirector = data.kind === 'video-director';
   const isCompetitorAnalyzer = data.kind === 'competitor-script-analyzer';
   const isScriptNode = isVideoDirector || isCompetitorAnalyzer;
@@ -53,32 +46,57 @@ export function VelaNodeControls({ data, isLoading, profileName, profiles = [], 
   }, [configuredVideoResolution, data.id, data.resolution, onUpdate]);
   useEffect(() => {
     const comfyProfiles = profiles.filter((profile) => profile.type === 'comfy');
-    if (['h3-video', 'wan-video-process'].includes(data.kind || '') && !data.profileId && comfyProfiles.length === 1) {
+    if (data.kind === 'wan-video-process' && !data.profileId && comfyProfiles.length === 1) {
       onUpdate(data.id, { profileId: comfyProfiles[0].id });
     }
   }, [data.id, data.kind, data.profileId, onUpdate, profiles]);
   useEffect(() => {
-    if (data.kind === 'h3-video' && !data.h3OutpaintProfileId && preferredOutpaintProfileId) {
-      onUpdate(data.id, { h3OutpaintProfileId: preferredOutpaintProfileId });
+    if (data.kind === 'h3-video' && data.videoGenerationMode !== 'reference-to-video') {
+      onUpdate(data.id, {
+        videoGenerationMode: 'reference-to-video',
+        h3Acceleration: data.h3Acceleration === 'standard' ? 'standard' : 'turbo-4',
+        h3FrameFit: undefined,
+        h3OutpaintProfileId: undefined
+      });
     }
-  }, [data.h3OutpaintProfileId, data.id, data.kind, onUpdate, preferredOutpaintProfileId]);
+  }, [data.h3Acceleration, data.id, data.kind, data.videoGenerationMode, onUpdate]);
   if (!data.kind) return null;
   const definition = getNodeDefinition(data.kind);
+  const isKnownKind = isKnownVelaNodeKind(data.kind);
+  if (!isKnownKind || data.kind === 'storyworks-reference') {
+    return (
+      <section
+        className="vela-node-controls vela-node-controls--notice"
+        aria-label={isKnownKind ? 'Storyworks 参考说明' : '兼容节点说明'}
+        onPointerDown={(event) => event.stopPropagation()}
+      >
+        <strong>{isKnownKind ? 'Storyworks 连续性参考' : '兼容模式'}</strong>
+        <span>{isKnownKind ? '此节点由 Storyworks 同步，只读保留并自动参与下游提示词。' : definition.description}</span>
+      </section>
+    );
+  }
   const canGenerate = GENERATION_KINDS.has(data.kind);
   const isApiVideo = data.kind === 'gpt-video';
   const isH3Video = data.kind === 'h3-video';
   const isWanProcess = data.kind === 'wan-video-process';
   const isVideoGenerator = isApiVideo || isH3Video;
-  const videoGenerationMode = data.videoGenerationMode || (connectedImageNodes.length > 0 ? 'image-to-video' : 'text-to-video');
-  const h3FrameFit = data.h3FrameFit || 'ai-expand';
-  const needsReferenceImage = isVideoGenerator && videoGenerationMode === 'image-to-video' && connectedImageNodes.length === 0;
+  const videoGenerationMode = isH3Video ? 'reference-to-video' : data.videoGenerationMode || (connectedImageNodes.length > 0 ? 'image-to-video' : 'text-to-video');
+  const requiredReferenceNodeIds = data.requiredReferenceNodeIds ?? [];
+  const connectedReadyIds = new Set(connectedImageNodes.map((node) => node.id));
+  const linkedIds = new Set(data.parentIds ?? []);
+  const missingRequiredReferenceNodeIds = requiredReferenceNodeIds.filter((nodeId) => !linkedIds.has(nodeId) || !connectedReadyIds.has(nodeId));
+  const needsReferenceImage = isH3Video
+    ? connectedImageNodes.length === 0 || missingRequiredReferenceNodeIds.length > 0 || connectedImageNodes.length > 9
+    : isVideoGenerator && videoGenerationMode === 'image-to-video' && connectedImageNodes.length === 0;
   const wanInputMissing = isWanProcess && (connectedImageCount === 0 || connectedVideoCount === 0);
-  const accountPlaceholder = isWanProcess ? '选择 Wan ComfyUI 算力' : data.kind === 'h3-video' ? '选择 H3 云算力' : isCompetitorAnalyzer ? '选择含 Qwen 的账户' : isApiVideo ? '选择视频账户' : isGptNode ? '选择 GPT 账户' : definition.label;
+  const accountPlaceholder = isWanProcess ? '选择 Wan ComfyUI 算力' : data.kind === 'h3-video' ? '自动分配（推荐）' : isCompetitorAnalyzer ? '选择含 Qwen 的账户' : isApiVideo ? '选择视频账户' : isGptNode ? '选择 GPT 账户' : definition.label;
   const accountName = profileName || accountPlaceholder;
   const isMediaGenerator = data.kind === 'gpt-image' || isVideoGenerator;
   const availableProfiles = isGptNode
     ? profiles.filter((profile) => profile.type === 'gpt' && (!isApiVideo || Boolean(profile.models.video)) && (!isCompetitorAnalyzer || Boolean(profile.models.analysis)))
-    : profiles.filter((profile) => profile.type === 'comfy');
+    : isH3Video
+      ? profiles.filter(isMiniMaxH3Profile)
+      : profiles.filter((profile) => profile.type === 'comfy');
   const ratios = isVideoGenerator ? VIDEO_ASPECT_RATIOS : IMAGE_ASPECT_RATIOS;
   const resolutions = isApiVideo
     ? configuredVideoResolution ? [configuredVideoResolution] : ['480p', '720p']
@@ -161,6 +179,20 @@ export function VelaNodeControls({ data, isLoading, profileName, profiles = [], 
         </div>
       )}
       {isVideoGenerator && (
+        <label className="vela-video-engine">
+          <span>视频生成引擎</span>
+          <select
+            aria-label="视频生成引擎"
+            value={data.kind}
+            onChange={(event) => onUpdate(data.id, createVideoEngineUpdate(event.target.value as VideoEngineKind, data))}
+          >
+            <option value="h3-video">MiniMax H3 云端算力</option>
+            <option value="gpt-video">API 视频模型</option>
+          </select>
+          <small>{isH3Video ? '可自动分配两台 H3 GPU，也可在下方指定算力。' : '使用已配置的视频 API 账户。'}</small>
+        </label>
+      )}
+      {isApiVideo && (
         <div className="vela-video-mode" role="group" aria-label="视频生成模式">
           <button
             type="button"
@@ -175,6 +207,14 @@ export function VelaNodeControls({ data, isLoading, profileName, profiles = [], 
             onClick={() => onUpdate(data.id, { videoGenerationMode: 'image-to-video' })}
           >图生视频</button>
           <span aria-live="polite">{videoGenerationMode === 'image-to-video' ? `使用 ${connectedImageNodes.length} 张参考图` : '只使用文字描述'}</span>
+        </div>
+      )}
+      {isH3Video && (
+        <div className="vela-video-mode" role="status" aria-label="H3 R2V 参考素材模式">
+          <button type="button" data-active aria-pressed disabled>R2V 参考素材视频</button>
+          <span>{requiredReferenceNodeIds.length
+            ? `必需素材 ${connectedImageNodes.length}/${requiredReferenceNodeIds.length}`
+            : `已连接 ${connectedImageNodes.length} 张参考图`}</span>
         </div>
       )}
       {isMediaGenerator && (
@@ -243,58 +283,22 @@ export function VelaNodeControls({ data, isLoading, profileName, profiles = [], 
           ))}
         </div>
       )}
-      {isH3Video && videoGenerationMode === 'image-to-video' && connectedImageNodes.length > 0 && (
-        <div className="vela-h3-frame-fit" aria-label="H3 参考图画幅适配">
-          <label>
-            <span>参考图适配</span>
-            <select
-              aria-label="参考图比例适配方式"
-              value={h3FrameFit}
-              onChange={(event) => onUpdate(data.id, {
-                h3FrameFit: event.target.value as NodeData['h3FrameFit'],
-                jobGroupId: undefined,
-                errorMessage: undefined
-              })}
-            >
-              <option value="ai-expand">AI 智能扩图</option>
-              <option value="crop">中心裁切（不拉伸）</option>
-            </select>
-          </label>
-          {h3FrameFit === 'ai-expand' && (
-            <label>
-              <span>扩图账户</span>
-              <select
-                aria-label="AI 扩图账户"
-                value={data.h3OutpaintProfileId || preferredOutpaintProfileId || ''}
-                onChange={(event) => onUpdate(data.id, {
-                  h3OutpaintProfileId: event.target.value || undefined,
-                  jobGroupId: undefined,
-                  errorMessage: undefined
-                })}
-              >
-                <option value="">选择图片编辑账户</option>
-                {h3OutpaintProfiles.map((profile) => (
-                  <option key={profile.id} value={profile.id}>{profile.name}</option>
-                ))}
-              </select>
-            </label>
-          )}
-          <p role={h3FrameFit === 'ai-expand' && h3OutpaintProfiles.length === 0 ? 'status' : undefined}>
-            {h3FrameFit === 'ai-expand'
-              ? h3OutpaintProfiles.length > 0
-                ? '比例不同时先补全缺失画面，再交给 H3；同一批视频复用扩图结果，不会拉伸人物。'
-                : '比例不同时需要先在 API 设置中添加支持图片编辑的账户。'
-              : '保持人物比例并居中裁切，画面边缘可能被移除。'}
-          </p>
-        </div>
+      {needsReferenceImage && <p className="vela-video-mode-hint" role="status">{isH3Video
+        ? connectedImageNodes.length > 9
+          ? `H3 R2V 最多支持 9 张图，当前已连接 ${connectedImageNodes.length} 张。`
+          : missingRequiredReferenceNodeIds.length
+            ? `本镜头还有 ${missingRequiredReferenceNodeIds.length} 个必需的人物、场景或道具素材未连接或未就绪。`
+            : 'H3 R2V 需要先连接至少一张参考素材。'
+        : '图生视频需要先从图片节点连接至少一张参考图。'}</p>}
+      {isH3Video && !needsReferenceImage && (
+        <p className="vela-video-mode-hint">全部人物、场景和道具参考图会按连线顺序作为 &lt;Picture 1...N&gt; 一起送入 Ref2VA；不会生成首帧。</p>
       )}
-      {needsReferenceImage && <p className="vela-video-mode-hint" role="status">图生视频需要先从图片节点连接至少一张参考图。</p>}
       {isWanProcess && <p className="vela-video-mode-hint" role="status">{wanInputMissing ? '请连接一张角色参考图和一条动作参考视频。' : '输入已就绪；完整 Wan 工作流将在后端运行，源视频动作会被保留。'}</p>}
       {!isWanProcess && <div className="vela-node-controls__composer" data-expanded={data.isPromptExpanded || undefined}>
         <textarea
           value={isScriptNode ? data.sourceBrief || '' : data.prompt || ''}
-          placeholder={isVideoDirector ? '补充产品卖点、目标人群、时长或禁用内容…' : isCompetitorAnalyzer ? '补充希望借鉴的结构、目标市场和产品卖点…' : isVideoGenerator ? '描述镜头、动作、节奏和声音…' : '写下你想生成的画面，或输入修改要求…'}
-          aria-label={isScriptNode ? '产品与脚本补充要求' : '生成描述'}
+          placeholder={isVideoDirector ? '补充产品卖点、目标人群、时长或禁用内容…' : isCompetitorAnalyzer ? '补充希望借鉴的结构、目标市场和产品卖点…' : isH3Video ? '商品信息：米白色儿童贝雷帽…\n关键词：真实 UGC、自然阳光、越南家庭…\n场景与镜头：妈妈给孩子戴帽，近景展示刺绣…' : isVideoGenerator ? '描述镜头、动作、节奏和声音…' : '写下你想生成的画面，或输入修改要求…'}
+          aria-label={isScriptNode ? '产品与脚本补充要求' : isH3Video ? '商品信息关键词与视频场景' : '生成描述'}
           onChange={(event) => onUpdate(data.id, isScriptNode ? { sourceBrief: event.target.value } : { prompt: event.target.value })}
           onWheel={(event) => event.stopPropagation()}
         />
@@ -356,10 +360,19 @@ export function VelaNodeControls({ data, isLoading, profileName, profiles = [], 
             {isH3Video && (
               <label className="vela-setting-select" title="H3 生成速度">
                 <span className="sr-only">H3 生成速度</span>
-                <select aria-label="H3 生成速度" value={data.h3Acceleration || 'turbo-8'} onChange={(event) => onUpdate(data.id, { h3Acceleration: event.target.value as NodeData['h3Acceleration'] })}>
-                  <option value="turbo-8">Turbo 8步</option>
+                <select aria-label="H3 生成速度" value={data.h3Acceleration === 'standard' ? 'standard' : 'turbo-4'} onChange={(event) => onUpdate(data.id, { h3Acceleration: event.target.value as NodeData['h3Acceleration'] })}>
                   <option value="turbo-4">极速 4步</option>
                   <option value="standard">标准 20步</option>
+                </select>
+                <ChevronDown size={12} aria-hidden="true" />
+              </label>
+            )}
+            {isH3Video && (
+              <label className="vela-setting-select" title="R2V 参考图精度">
+                <span className="sr-only">R2V 参考图精度</span>
+                <select aria-label="R2V 参考图精度" value={data.h3ReferenceImageSize || 'match'} onChange={(event) => onUpdate(data.id, { h3ReferenceImageSize: event.target.value as NodeData['h3ReferenceImageSize'] })}>
+                  <option value="match">标准参考</option>
+                  <option value="max">身份细节优先</option>
                 </select>
                 <ChevronDown size={12} aria-hidden="true" />
               </label>
@@ -385,8 +398,8 @@ export function VelaNodeControls({ data, isLoading, profileName, profiles = [], 
           type="button"
           className="vela-generate-button"
           disabled={!canSubmit || isLoading}
-          aria-label={canSubmit ? '开始生成' : wanInputMissing ? '请连接角色图和动作视频' : scriptInputMissing ? isCompetitorAnalyzer ? '请连接一条对标视频和产品图' : '请连接产品图' : needsReferenceImage ? '请先连接参考图' : '当前节点无需生成'}
-          title={canSubmit ? '开始生成' : wanInputMissing ? 'Wan 处理需要一张角色参考图和一条动作参考视频' : scriptInputMissing ? isCompetitorAnalyzer ? '竞品分析需要一条对标视频和至少一张产品图' : '视频编导需要至少一张产品图' : needsReferenceImage ? '图生视频需要参考图' : definition.description}
+          aria-label={canSubmit ? '开始生成' : wanInputMissing ? '请连接角色图和动作视频' : scriptInputMissing ? isCompetitorAnalyzer ? '请连接一条对标视频和产品图' : '请连接产品图' : needsReferenceImage ? '请连接全部必需参考素材' : '当前节点无需生成'}
+          title={canSubmit ? '开始生成' : wanInputMissing ? 'Wan 处理需要一张角色参考图和一条动作参考视频' : scriptInputMissing ? isCompetitorAnalyzer ? '竞品分析需要一条对标视频和至少一张产品图' : '视频编导需要至少一张产品图' : needsReferenceImage ? 'H3 R2V 必须连接全部必需人物、场景和道具参考图' : definition.description}
           onClick={() => canSubmit && onGenerate(data.id)}
         >
           {isLoading ? <Loader2 className="animate-spin" size={18} /> : <ArrowUp size={18} />}

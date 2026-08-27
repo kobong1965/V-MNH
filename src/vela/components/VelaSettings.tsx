@@ -1,14 +1,17 @@
 import {
   Check,
+  Copy,
   Download,
   ExternalLink,
   FileUp,
   Github,
   KeyRound,
+  Link2,
   LoaderCircle,
   Monitor,
   Moon,
   RefreshCw,
+  RotateCcw,
   ShieldCheck,
   Sun,
   SunMoon
@@ -17,6 +20,12 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 
 import type { AppearanceMode, CanvasColorMode } from '../services/settingsService';
 import { exportPortableBackup, importPortableBackup } from '../services/portableBackupService';
+import {
+  getVelaConnectionInfo,
+  revokeVelaConnections,
+  rotateVelaPairingCode,
+  type VelaConnectionInfo
+} from '../services/connectionService';
 
 interface VelaSettingsProps {
   appearance: AppearanceMode;
@@ -53,6 +62,9 @@ export function VelaSettings({ appearance, canvas, resolvedAppearance, onAppeara
   const [backupPasswordConfirm, setBackupPasswordConfirm] = useState('');
   const [backupBusy, setBackupBusy] = useState(false);
   const [backupMessage, setBackupMessage] = useState<string | null>(null);
+  const [connectionInfo, setConnectionInfo] = useState<VelaConnectionInfo | null>(null);
+  const [connectionBusy, setConnectionBusy] = useState(false);
+  const [connectionMessage, setConnectionMessage] = useState<string | null>(null);
   const backupInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -63,6 +75,12 @@ export function VelaSettings({ appearance, canvas, resolvedAppearance, onAppeara
     });
     return bridge.onState(setUpdateState);
   }, [bridge]);
+
+  useEffect(() => {
+    void getVelaConnectionInfo()
+      .then(setConnectionInfo)
+      .catch((error) => setConnectionMessage(error instanceof Error ? error.message : '连接信息读取失败'));
+  }, []);
 
   const updateAction = useMemo(() => {
     if (updateState.status === 'available') return { label: '下载更新', icon: Download, action: () => bridge?.download() };
@@ -120,6 +138,31 @@ export function VelaSettings({ appearance, canvas, resolvedAppearance, onAppeara
     }
   };
 
+  const runConnectionAction = async (
+    action: () => Promise<VelaConnectionInfo>,
+    successMessage: string
+  ) => {
+    try {
+      setConnectionBusy(true);
+      setConnectionMessage(null);
+      setConnectionInfo(await action());
+      setConnectionMessage(successMessage);
+    } catch (error) {
+      setConnectionMessage(error instanceof Error ? error.message : '连接操作失败');
+    } finally {
+      setConnectionBusy(false);
+    }
+  };
+
+  const copyConnectionValue = async (value: string, label: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setConnectionMessage(`${label}已复制。`);
+    } catch {
+      setConnectionMessage(`无法复制${label}，请手动选择复制。`);
+    }
+  };
+
   return (
     <div className="vela-settings-page">
       <header className="vela-settings-heading">
@@ -142,6 +185,43 @@ export function VelaSettings({ appearance, canvas, resolvedAppearance, onAppeara
             <button type="button" data-selected={canvas === 'dark' || undefined} onClick={() => onCanvasChange('dark')}><Moon size={15} /> 黑色画布</button>
           </div>
         </div>
+      </section>
+
+      <section className="vela-settings-section" aria-labelledby="storyworks-connection-title">
+        <div className="vela-settings-section-heading">
+          <div><Link2 size={19} /><div><h2 id="storyworks-connection-title">Storyworks 手动连接</h2><p>把画布 API 地址和一次性连接码填入 Storyworks，即可手动绑定两端。</p></div></div>
+          <span>{connectionInfo ? `${connectionInfo.connectedClients} 个已连接` : '正在读取'}</span>
+        </div>
+        {connectionInfo ? (
+          <div className="vela-connection-grid">
+            <div className="vela-connection-address">
+              <span>画布 API 地址</span>
+              <strong>{connectionInfo.baseUrls[0]}</strong>
+              <button type="button" aria-label="复制画布 API 地址" onClick={() => void copyConnectionValue(connectionInfo.baseUrls[0], 'API 地址')}><Copy size={15} /> 复制</button>
+            </div>
+            <div className="vela-pairing-code">
+              <span>一次性连接码</span>
+              <strong aria-label={`连接码 ${connectionInfo.pairingCode}`}>{connectionInfo.pairingCode}</strong>
+              <button type="button" aria-label="复制一次性连接码" onClick={() => void copyConnectionValue(connectionInfo.pairingCode, '连接码')}><Copy size={15} /> 复制</button>
+            </div>
+            {connectionInfo.baseUrls.length > 1 && (
+              <div className="vela-connection-lan">
+                <span>同一局域网可用地址</span>
+                {connectionInfo.baseUrls.slice(1).map((url) => <button type="button" key={url} onClick={() => void copyConnectionValue(url, '局域网地址')}>{url}<Copy size={14} /></button>)}
+              </div>
+            )}
+            <div className="vela-connection-meta">
+              <span>连接码有效至 {new Date(connectionInfo.expiresAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}</span>
+              <span>{connectionInfo.lanEnabled ? '局域网访问已开启，远程请求必须配对' : '当前仅允许本机连接'}</span>
+            </div>
+            <div className="vela-update-actions">
+              <button type="button" disabled={connectionBusy} onClick={() => void runConnectionAction(rotateVelaPairingCode, '已生成新的连接码，旧连接码立即失效。')}><RotateCcw size={15} /> 换一个连接码</button>
+              <button type="button" data-primary="true" disabled={connectionBusy || connectionInfo.connectedClients === 0} onClick={() => void runConnectionAction(revokeVelaConnections, '已断开所有 Storyworks 连接。')}><ShieldCheck size={15} /> 断开全部连接</button>
+            </div>
+          </div>
+        ) : <div className="vela-settings-empty"><LoaderCircle className="vela-spin" size={20} /><strong>正在读取连接服务</strong><span>画布其他功能不受影响。</span></div>}
+        {connectionMessage && <p className="vela-settings-note" role="status">{connectionMessage}</p>}
+        <p className="vela-settings-note">连接码只用于交换访问令牌；Storyworks 会用 Windows 加密保存令牌，项目文件和日志均不保存连接码。</p>
       </section>
 
       <section className="vela-settings-section" aria-labelledby="portable-backup-title">

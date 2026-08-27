@@ -37,6 +37,46 @@ test('concurrent jobs share one AutoDL wake operation', async () => {
   assert.equal(calls.filter((call) => call === 'wait-running').length, 1);
 });
 
+test('two AutoDL profiles wake and track power independently', async () => {
+  const calls = [];
+  const profiles = new Map([
+    ['gpu-a', makeProfile({ id: 'gpu-a', autodlInstanceUuid: 'pro-gpua' })],
+    ['gpu-b', makeProfile({ id: 'gpu-b', autodlInstanceUuid: 'pro-gpub' })]
+  ]);
+  const manager = new CloudPowerManager({
+    powerProvider: {
+      getStatus: async (profile) => { calls.push(`status:${profile.id}`); return 'stopped'; },
+      powerOn: async (profile) => { calls.push(`power-on:${profile.id}`); },
+      waitForState: async (profile) => { calls.push(`running:${profile.id}`); return 'running'; }
+    },
+    getProfile: (profileId) => profiles.get(profileId),
+    listJobs: () => [{ status: 'queued' }],
+    getRemoteQueue: async () => ({ running: 0, pending: 0 })
+  });
+
+  const [first, second] = await Promise.all([manager.ensureReady('gpu-a'), manager.ensureReady('gpu-b')]);
+  assert.equal(first.state, 'running');
+  assert.equal(second.state, 'running');
+  assert.equal(calls.filter((call) => call === 'power-on:gpu-a').length, 1);
+  assert.equal(calls.filter((call) => call === 'power-on:gpu-b').length, 1);
+  assert.equal(manager.getState('gpu-a').state, 'running');
+  assert.equal(manager.getState('gpu-b').state, 'running');
+});
+
+test('a running AutoDL profile refreshes its transient SSH connection before use', async () => {
+  const refreshed = [];
+  const manager = new CloudPowerManager({
+    powerProvider: { getStatus: async () => 'running' },
+    getProfile: () => makeProfile({ transport: 'ssh', sshHost: 'old.example', sshPort: 1000 }),
+    listJobs: () => [{ status: 'queued' }],
+    getRemoteQueue: async () => ({ running: 0, pending: 0 }),
+    refreshProfileConnection: async (profile) => { refreshed.push(profile.id); }
+  });
+
+  assert.deepEqual(await manager.ensureReady('autodl-pro'), { enabled: true, state: 'running' });
+  assert.deepEqual(refreshed, ['autodl-pro']);
+});
+
 test('idle shutdown verifies both local and remote queues twice before one power-off', async () => {
   let timerCallback;
   let timerDelay;
@@ -123,6 +163,19 @@ test('remote ComfyUI work blocks power-off even when local jobs are idle', async
   assert.equal(powerOffCalls, 0);
   assert.equal(manager.getState('autodl-pro').state, 'idle-countdown');
   manager.close();
+});
+
+test('an already stopped instance is never probed through SSH during idle shutdown', async () => {
+  let remoteChecks = 0;
+  const manager = new CloudPowerManager({
+    powerProvider: { getStatus: async () => 'shutdown' },
+    getProfile: () => makeProfile(),
+    listJobs: () => [],
+    getRemoteQueue: async () => { remoteChecks += 1; throw new Error('SSH must not run'); }
+  });
+  assert.deepEqual(await manager.powerOffIfStillIdle('autodl-pro'), { poweredOff: false, reason: 'already-stopped' });
+  assert.equal(remoteChecks, 0);
+  assert.equal(manager.getState('autodl-pro').state, 'stopped');
 });
 
 test('application shutdown powers off even when local and remote work are still marked active', async () => {

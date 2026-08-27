@@ -23,21 +23,21 @@ import { buildComfyAuthHeaders, ComfyUiError, ComfyUiProvider } from '../provide
 import { AutoDlPowerProvider } from '../providers/autodlPowerProvider.js';
 import {
   buildMiniMaxH3Prompt,
-  MINIMAX_H3_MODEL_FILES,
-  resolveMiniMaxH3Dimensions
+  MINIMAX_H3_MODEL_FILES
 } from '../providers/minimaxH3Workflow.js';
 import { CloudPowerManager } from './cloudPowerManager.js';
-import {
-  composeH3OutpaintPrompt,
-  createH3OutpaintInput,
-  finalizeH3Outpaint,
-  inspectReferenceAspect
-} from './h3ReferenceAdapter.js';
 import { injectWanWorkflowInputs } from './wanWorkflowRuntime.js';
 import { PortableBackupService } from './portableBackup.js';
+import { AUTO_COMFY_PROFILE_ID } from '../../shared/vela-contracts.js';
 
 const delay = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 const MODEL_CACHE_TTL_MS = 30_000;
+const CLOUD_OFF_STATES = new Set(['stopped', 'shutdown', 'shutoff', 'closed', 'poweroff', 'powered-off']);
+
+const isMiniMaxH3Profile = (profile) => profile?.type === 'comfy' && (
+  String(profile.workflowVersion || '').toLowerCase().startsWith('minimax-h3')
+  || (Array.isArray(profile.tags) && profile.tags.some((tag) => /minimax\s*h3/i.test(String(tag))))
+);
 
 const gptModelTypeForNodeKind = (nodeKind) => {
   if (['gpt-prompt-optimizer', 'video-director'].includes(nodeKind)) return 'prompt';
@@ -56,6 +56,15 @@ const gptModelLabel = (modelType) => ({
 const endpointHost = (baseUrl) => {
   try { return new URL(baseUrl).host; }
   catch { return String(baseUrl || '').slice(0, 120); }
+};
+
+const withH3PictureTags = (prompt, count) => {
+  const value = String(prompt || '').trim();
+  const missing = Array.from({ length: count }, (_, index) => index + 1)
+    .filter((number) => !value.includes(`<Picture ${number}>`));
+  if (!missing.length) return value;
+  const legend = missing.map((number) => `<Picture ${number}> is reference material ${number}; preserve its identity and appearance.`).join('\n');
+  return `${legend}\n\n${value || 'Create a coherent cinematic shot using every reference material.'}`;
 };
 
 const authenticatedDownloadOptions = (result, profile, apiKey) => {
@@ -139,6 +148,14 @@ export class VelaRuntime {
         const status = await this.comfyProvider.getStatus(profile, profile.secret || {});
         return status.queue || { running: 0, pending: 0 };
       },
+      refreshProfileConnection: async (profile) => {
+        if (profile.transport !== 'ssh' || typeof this.powerProvider.getSnapshot !== 'function') return profile;
+        const snapshot = await this.powerProvider.getSnapshot(profile, profile.secret || {});
+        const sshHost = String(snapshot?.proxy_host || '').trim();
+        const sshPort = Math.max(0, Number(snapshot?.ssh_port) || 0);
+        if (!sshHost || !sshPort || (sshHost === profile.sshHost && sshPort === profile.sshPort)) return profile;
+        return this.profiles.update(profile.id, { sshHost, sshPort });
+      },
       onStateChange: (state) => {
         const event = redactSecrets({ type: 'cloud-power.state', ...state });
         console.info('[Vela Cloud Power]', safeLogJson(event));
@@ -149,6 +166,7 @@ export class VelaRuntime {
   }
 
   async executeJob(job) {
+    if (this.failJobForMissingProject(job)) return this.jobs.getJob(job.id);
     if (job.providerType === 'gpt') return this.executeGptJob(job);
     if (job.providerType === 'comfy') return this.executeComfyJob(job);
     if (job.providerType !== 'fake') throw new Error(`Provider ${job.providerType} is not available`);
@@ -166,6 +184,26 @@ export class VelaRuntime {
       progress: 1,
       output: { previewOnly: true, label: `P2 fake output ${job.id}` }
     });
+  }
+
+  failJobForMissingProject(job) {
+    if (!['gpt', 'comfy'].includes(job.providerType)) return false;
+    if (this.projectStore.getProject(job.projectId)) return false;
+    let current = this.jobs.getJob(job.id);
+    if (!current || !['queued', 'submitting', 'running', 'reconnecting', 'downloading'].includes(current.status)) return true;
+    if (current.status === 'queued') current = this.jobs.transition(job.id, 'submitting', { progress: 0 });
+    if (['submitting', 'running', 'reconnecting', 'downloading'].includes(current.status)) {
+      this.jobs.transition(job.id, 'failed', {
+        error: {
+          code: 'PROJECT_NOT_FOUND',
+          message: '任务所属项目已不存在；为避免云端计算完成后无法保存，任务未继续执行。',
+          retryable: false,
+          safeToRetry: false
+        }
+      });
+    }
+    if (job.providerType === 'comfy') this.powerManager.noteWorkFinished(job.profileId, job.id);
+    return true;
   }
 
   async executeGptJob(job) {
@@ -390,90 +428,6 @@ export class VelaRuntime {
     return credentials;
   }
 
-  async prepareH3Reference(job, reference, index) {
-    const aspectRatio = job.payload.aspectRatio || '16:9';
-    const inspection = await inspectReferenceAspect(reference.data, aspectRatio);
-    if (inspection.matches || job.payload.h3FrameFit === 'crop') return reference;
-
-    const adaptationKey = `${job.groupId}:${index}`;
-    const cachedRecord = this.media.list(job.projectId).find((record) => (
-      record.kind === 'image'
-      && record.source?.type === 'h3-ai-outpaint'
-      && record.source?.adaptationKey === adaptationKey
-    ));
-    if (cachedRecord) {
-      return this.media.readReference(
-        job.projectId,
-        `/api/vela/projects/${job.projectId}/media/${cachedRecord.id}/file`
-      );
-    }
-
-    const outpaintProfile = this.resolveH3OutpaintProfile(job.payload.h3OutpaintProfileId);
-    const prepared = await createH3OutpaintInput(reference.data, aspectRatio);
-    let result;
-    try {
-      const results = await this.gptProvider.editImages(
-        outpaintProfile,
-        outpaintProfile.secret.apiKey,
-        {
-          prompt: composeH3OutpaintPrompt({
-            aspectRatio,
-            scenePrompt: job.payload.prompt
-          }),
-          referenceImages: [{
-            data: prepared.image,
-            mime: 'image/png',
-            filename: `h3-reference-${index + 1}.png`
-          }],
-          mask: {
-            data: prepared.mask,
-            mime: 'image/png',
-            filename: `h3-reference-${index + 1}-mask.png`
-          },
-          count: 1,
-          size: prepared.size,
-          quality: 'high',
-          idempotencyKey: `${adaptationKey}:h3-ai-outpaint`
-        }
-      );
-      result = results[0];
-    } catch (error) {
-      throw new ComfyUiError(`AI 智能扩图失败：${error instanceof Error ? error.message : '图片编辑服务不可用'}`, {
-        code: 'H3_OUTPAINT_FAILED',
-        status: error?.status,
-        retryable: Boolean(error?.retryable),
-        safeToRetry: Boolean(error?.safeToRetry),
-        details: { outpaintProfileName: outpaintProfile.name, upstreamCode: error?.code }
-      });
-    }
-
-    const materialized = await this.media.materializeProviderResult(result, {
-      allowBase64: true,
-      fallbackMime: 'image/png',
-      ...authenticatedDownloadOptions(result, outpaintProfile, outpaintProfile.secret.apiKey)
-    });
-    const dimensions = resolveMiniMaxH3Dimensions({
-      resolution: job.payload.resolution,
-      aspectRatio
-    });
-    const expanded = await finalizeH3Outpaint(materialized.data, aspectRatio, dimensions);
-    const media = this.media.saveCopiedMedia(job.projectId, {
-      data: expanded,
-      mime: 'image/png',
-      fileName: `H3-${aspectRatio.replace(':', 'x')}-智能扩图-${index + 1}.png`,
-      source: {
-        type: 'h3-ai-outpaint',
-        adaptationKey,
-        groupId: job.groupId,
-        sourceFileName: reference.filename,
-        profileId: outpaintProfile.id,
-        model: outpaintProfile.models.image,
-        aspectRatio
-      }
-    });
-    return this.media.readReference(job.projectId, media.url);
-  }
-
   async executeComfyJob(job) {
     let profile = this.profiles.get(job.profileId);
     const startedAt = Date.now();
@@ -496,11 +450,14 @@ export class VelaRuntime {
 
       this.powerManager.noteWorkStarted(job.profileId, job.id);
       await this.powerManager.ensureReady(job.profileId);
+      profile = this.profiles.getWithSecret(job.profileId);
+      await this.comfyProvider.ensureServiceReady?.(profile, profile.secret || {});
 
       const isWanWorkflow = job.payload?.nodeKind === 'wan-video-process';
       const comfyModel = isWanWorkflow ? `wan2.2-animate:${job.payload?.ecommerceWorkflowId || 'unknown'}` : MINIMAX_H3_MODEL_FILES.diffusion;
       let promptId = job.promptId;
       let clientId;
+      const warnings = [];
       if (!promptId) {
         let graph;
         if (isWanWorkflow) {
@@ -536,23 +493,31 @@ export class VelaRuntime {
           const injectedWorkflow = injectWanWorkflowInputs({ workflow: uiWorkflow, definition, uploadedInputs });
           graph = await this.comfyProvider.convertWorkflow(profile, profile.secret || {}, injectedWorkflow);
         } else {
-          const references = Array.isArray(job.payload.referenceUrls)
-            ? job.payload.referenceUrls.slice(0, 2).map((url) => this.media.readReference(job.projectId, url))
-            : [];
+          const referenceUrls = Array.isArray(job.payload.referenceUrls) ? job.payload.referenceUrls.filter(Boolean) : [];
+          const requiredReferenceCount = Number(job.payload.requiredReferenceCount || referenceUrls.length);
+          if (referenceUrls.length < 1) {
+            throw new ComfyUiError('MiniMax H3 R2V 至少需要连接 1 张参考图片', { code: 'H3_R2V_REFERENCE_REQUIRED' });
+          }
+          if (referenceUrls.length > 9) {
+            throw new ComfyUiError('MiniMax H3 R2V 最多支持 9 张参考图片，请拆分镜头', { code: 'H3_R2V_REFERENCE_LIMIT' });
+          }
+          if (requiredReferenceCount !== referenceUrls.length) {
+            throw new ComfyUiError(`H3 R2V 素材不完整：需要 ${requiredReferenceCount} 张，实际收到 ${referenceUrls.length} 张`, { code: 'H3_R2V_REFERENCE_INCOMPLETE' });
+          }
+          const references = referenceUrls.map((url) => this.media.readReference(job.projectId, url));
           const uploaded = [];
           for (const [index, reference] of references.entries()) {
             if (!reference.mime.startsWith('image/')) {
-              throw new ComfyUiError('MiniMax H3 图生视频只支持图片参考素材', { code: 'INVALID_INPUT' });
+              throw new ComfyUiError(`MiniMax H3 R2V 的第 ${index + 1} 个素材不是图片`, { code: 'INVALID_INPUT' });
             }
-            const preparedReference = await this.prepareH3Reference(job, reference, index);
             uploaded.push(await this.comfyProvider.uploadImage(profile, profile.secret || {}, {
-              data: preparedReference.data,
-              mime: preparedReference.mime,
-              filename: `${job.id}-${index + 1}-${preparedReference.filename}`
+              data: reference.data,
+              mime: reference.mime,
+              filename: `${job.id}-r2v-${index + 1}-${reference.filename}`
             }));
           }
           graph = buildMiniMaxH3Prompt({
-            prompt: job.payload.prompt,
+            prompt: withH3PictureTags(job.payload.prompt, uploaded.length),
             seed: job.seed,
             duration: job.payload.duration,
             aspectRatio: job.payload.aspectRatio,
@@ -560,9 +525,8 @@ export class VelaRuntime {
             acceleration: job.payload.h3Acceleration,
             upscale: job.payload.h3Upscale,
             upscaleQuality: job.payload.h3UpscaleQuality,
-            firstFrame: uploaded[0],
-            lastFrame: uploaded[1],
-            referenceFit: 'cover',
+            referenceImages: uploaded,
+            referenceImageSize: job.payload.h3ReferenceImageSize,
             filenamePrefix: `vela/minimax-h3-${job.id}`
           });
         }
@@ -593,7 +557,7 @@ export class VelaRuntime {
       if (!current || current.status !== 'running') {
         throw new ComfyUiError('ComfyUI 任务状态已改变，已停止下载结果', { code: 'JOB_STATE_CHANGED', safeToRetry: true });
       }
-      const output = this.comfyProvider.findVideoOutput(history);
+      const output = this.comfyProvider.findVideoOutput(history, isWanWorkflow ? [] : ['16']);
       const result = { kind: 'url', value: this.comfyProvider.createViewUrl(profile, output), taskId: promptId };
       this.jobs.transition(job.id, 'downloading', { progress: 0.9 });
       const media = await this.media.saveProviderVideo(job.projectId, result, {
@@ -602,7 +566,10 @@ export class VelaRuntime {
         nodeId: job.nodeId,
         taskId: promptId
       }, { headers: buildComfyAuthHeaders(profile, profile.secret || {}) });
-      return this.jobs.transition(job.id, 'succeeded', { progress: 1, output: { media } });
+      return this.jobs.transition(job.id, 'succeeded', {
+        progress: 1,
+        output: { media, ...(warnings.length ? { warnings } : {}) }
+      });
     } catch (error) {
       const current = this.jobs.getJob(job.id);
       const details = redactSecrets({
@@ -620,7 +587,7 @@ export class VelaRuntime {
           message: error instanceof Error ? error.message : 'ComfyUI 任务失败',
           status: error?.status,
           retryable: Boolean(error?.retryable),
-          safeToRetry: Boolean(error?.safeToRetry),
+          safeToRetry: Boolean(error?.safeToRetry || (!current.promptId && error?.retryable)),
           details
         }) });
       }
@@ -727,6 +694,39 @@ export class VelaRuntime {
         promise: Promise.resolve(result.models)
       });
       return result;
+    }
+    if (this.powerManager.isEnabled?.(profile)) {
+      const power = await this.powerManager.test(profile.id);
+      const remoteState = String(power?.remoteState || 'unknown').toLowerCase();
+      if (CLOUD_OFF_STATES.has(remoteState)) {
+        return {
+          ok: true,
+          type: 'comfy',
+          state: 'offline',
+          baseUrl: profile.baseUrl,
+          websocketUrl: profile.websocketUrl || '',
+          websocket: { ok: false, url: profile.websocketUrl || '' },
+          http: { systemStats: false, queue: false },
+          system: {
+            os: null,
+            pythonVersion: null,
+            deviceCount: 0,
+            gpu: null
+          },
+          queue: {
+            running: 0,
+            pending: 0,
+            total: 0,
+            maxConcurrency: profile.maxConcurrency,
+            full: false
+          },
+          power: {
+            managed: true,
+            remoteState
+          },
+          checkedAt: power.checkedAt || new Date().toISOString()
+        };
+      }
     }
     const result = await this.comfyProvider.testConnection(profile, profile.secret || {});
     this.scheduler.configureConnection(profile.id, { maxConcurrency: profile.maxConcurrency, online: true });
@@ -853,7 +853,8 @@ export class VelaRuntime {
   }
 
   createJobGroup(draft) {
-    const expanded = expandJobGroup(draft);
+    const resolvedDraft = this.resolveJobProfile(draft);
+    const expanded = expandJobGroup(resolvedDraft);
     const group = this.jobs.createGroup(expanded.group, expanded.jobs);
     const jobs = expanded.jobs.map((job) => this.jobs.getJob(job.id));
     for (const job of jobs) {
@@ -861,6 +862,27 @@ export class VelaRuntime {
       this.scheduler.enqueue(job);
     }
     return { group, jobs };
+  }
+
+  resolveJobProfile(draft) {
+    if (draft?.profileId !== AUTO_COMFY_PROFILE_ID) return draft;
+    if (draft.providerType !== 'comfy' || draft.payload?.nodeKind !== 'h3-video') {
+      throw new Error('自动算力分配仅支持 MiniMax H3 视频节点');
+    }
+    const candidates = this.profiles.list({ type: 'comfy' })
+      .filter(isMiniMaxH3Profile)
+      .map((profile) => {
+        const summary = this.scheduler.getSummary(profile.id);
+        return {
+          profile,
+          load: Math.max(0, Number(summary?.running) || 0) + Math.max(0, Number(summary?.queued) || 0)
+        };
+      })
+      .sort((left, right) => left.load - right.load || left.profile.name.localeCompare(right.profile.name));
+    if (candidates.length === 0) {
+      throw new Error('尚未配置可用的 MiniMax H3 ComfyUI 算力');
+    }
+    return { ...draft, profileId: candidates[0].profile.id };
   }
 
   retryJob(jobId) {
@@ -893,6 +915,7 @@ export class VelaRuntime {
   recover() {
     const jobs = this.jobs.recoverAfterRestart();
     for (const job of jobs) {
+      if (this.failJobForMissingProject(job)) continue;
       if (
         job.status === 'reconnecting'
         && ['gpt', 'comfy'].includes(job.providerType)

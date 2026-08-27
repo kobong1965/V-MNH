@@ -1,6 +1,7 @@
 export const VELA_SCHEMA_VERSION = 1;
 export const VELA_EXPORT_VERSION = 1;
 export const MAX_BATCH_SIZE = 50;
+export const AUTO_COMFY_PROFILE_ID = 'auto-comfy';
 
 export const JOB_STATUSES = Object.freeze([
   'queued',
@@ -118,6 +119,18 @@ export const validateJobDraft = (job) => {
   assertString(job.profileId, '$.profileId', { max: 128 });
   assertString(job.providerType, '$.providerType', { max: 64 });
   assertObject(job.payload, '$.payload');
+  if (job.payload.nodeKind === 'h3-video') {
+    if (job.payload.videoGenerationMode !== 'reference-to-video') {
+      throw new ContractValidationError('H3 仅支持 R2V 参考素材模式', '$.payload.videoGenerationMode');
+    }
+    if (!Array.isArray(job.payload.referenceUrls) || job.payload.referenceUrls.length < 1 || job.payload.referenceUrls.length > 9) {
+      throw new ContractValidationError('H3 R2V 必须提供 1-9 张参考图', '$.payload.referenceUrls');
+    }
+    const required = Number(job.payload.requiredReferenceCount ?? job.payload.referenceUrls.length);
+    if (!Number.isInteger(required) || required !== job.payload.referenceUrls.length) {
+      throw new ContractValidationError('H3 R2V 的必需素材数量与实际参考图数量不一致', '$.payload.requiredReferenceCount');
+    }
+  }
   assertNoPlaintextSecrets(job.payload, '$.payload');
   return job;
 };

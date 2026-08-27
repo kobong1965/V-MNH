@@ -18,6 +18,7 @@ export interface VelaProjectSummary {
   createdAt: string;
   updatedAt: string;
   nodeCount: number;
+  source: 'vela' | 'storyworks';
   thumbnailUrl?: string;
 }
 

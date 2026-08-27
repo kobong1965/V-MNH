@@ -192,11 +192,12 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
 
   // 2. Connector Drag Drop (Add Next)
   const isConnector = state.type === 'node-connector';
+  const userCreatableDefinitions = VELA_NODE_CATALOG.filter((definition) => definition.userCreatable !== false);
   const visibleNodeDefinitions = isConnector && state.sourceNodeKind
-    ? VELA_NODE_CATALOG.filter((definition) => state.connectorSide === 'left'
+    ? userCreatableDefinitions.filter((definition) => state.connectorSide === 'left'
       ? canConnectNodeKinds(definition.kind, state.sourceNodeKind!)
       : canConnectNodeKinds(state.sourceNodeKind!, definition.kind))
-    : VELA_NODE_CATALOG;
+    : userCreatableDefinitions;
 
   // If it's the Global Menu (Right Click on Blank), we show the specific options
   if (state.type === 'global' && view === 'main') {

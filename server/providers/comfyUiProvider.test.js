@@ -94,6 +94,32 @@ test('ComfyUI reports authentication failures and derives the standard websocket
   assert.equal(deriveComfyWebsocketUrl('http://127.0.0.1:8188'), 'ws://127.0.0.1:8188/ws');
 });
 
+test('SSH ComfyUI health check restarts a live tunnel whose remote service exited', async () => {
+  let restarted = false;
+  const tunnelManager = {
+    ensure: async () => {},
+    restart: async () => { restarted = true; },
+    close: () => {}
+  };
+  const provider = new ComfyUiProvider({
+    tunnelManager,
+    fetchImpl: async (url) => {
+      if (!restarted) throw new TypeError('fetch failed');
+      if (url.endsWith('/system_stats')) return jsonResponse(200, { system: {}, devices: [] });
+      return jsonResponse(200, { queue_running: [], queue_pending: [] });
+    }
+  });
+
+  const result = await provider.ensureServiceReady(profile({
+    transport: 'ssh',
+    sshStartScript: '/root/autodl-tmp/vela-h3/deploy/start-comfy.sh',
+    authType: 'none'
+  }), {});
+
+  assert.equal(restarted, true);
+  assert.equal(result.ok, true);
+});
+
 test('ComfyUI reports a missing workflow converter for non-JSON 405 responses', async () => {
   const provider = new ComfyUiProvider({
     fetchImpl: async () => new Response('Method Not Allowed', {
@@ -120,6 +146,20 @@ test('ComfyUI finds VideoHelperSuite outputs exposed through the gifs field', ()
     }
   }), {
     filename: 'Wan-Animate_00001-audio.mp4',
+    subfolder: '',
+    type: 'output'
+  });
+});
+
+test('ComfyUI prefers the H3 final SaveVideo node over an earlier preview video', () => {
+  const provider = new ComfyUiProvider();
+  assert.deepEqual(provider.findVideoOutput({
+    outputs: {
+      12: { videos: [{ filename: 'h3-preview-640x1152.mp4', subfolder: '', type: 'output' }] },
+      16: { videos: [{ filename: 'h3-final-1080x1920.mp4', subfolder: '', type: 'output' }] }
+    }
+  }, ['16']), {
+    filename: 'h3-final-1080x1920.mp4',
     subfolder: '',
     type: 'output'
   });

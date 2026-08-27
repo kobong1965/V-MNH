@@ -21,6 +21,8 @@ import storyboardRoutes from './routes/storyboard.js';
 import velaGenerationRoutes from './routes/vela-generation.js';
 import velaDataRoutes from './routes/vela-data.js';
 import { VelaRuntime } from './vela/runtime.js';
+import { createPairingService, isLoopbackRequest } from './vela/pairingService.js';
+import { getRuntimeDiscoveryUserDataDirectory, writeRuntimeDiscovery } from '../electron/serverRuntime.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -64,6 +66,18 @@ const VELA_PROJECTS_DIR = path.resolve(
     || path.join(os.homedir(), 'Documents', 'Vela Projects')
 );
 
+const pairingService = createPairingService({ dataDirectory: VELA_DATA_DIR });
+const advertisedBaseUrls = () => {
+    const urls = [`http://127.0.0.1:${PORT}`];
+    if (HOST !== '0.0.0.0') return urls;
+    for (const entries of Object.values(os.networkInterfaces())) {
+        for (const entry of entries || []) {
+            if (entry.family === 'IPv4' && !entry.internal) urls.push(`http://${entry.address}:${PORT}`);
+        }
+    }
+    return [...new Set(urls)];
+};
+
 [LIBRARY_DIR, WORKFLOWS_DIR, IMAGES_DIR, VIDEOS_DIR, CHATS_DIR, LIBRARY_ASSETS_DIR].forEach(dir => {
     if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true });
@@ -78,6 +92,37 @@ app.use(express.json({ limit: '512mb' }));
 
 app.get('/api/vela/health', (_req, res) => {
     res.json({ ok: true, service: 'vela-control', version: 1 });
+});
+
+const localConnectionAction = (req, res, action) => {
+    if (!isLoopbackRequest(req)) return res.status(403).json({ error: '连接码只能在 Vela 本机界面中查看或更新。' });
+    const info = action();
+    return res.json({
+        ...info,
+        baseUrls: advertisedBaseUrls(),
+        lanEnabled: HOST === '0.0.0.0',
+        remotePairingRequired: HOST === '0.0.0.0'
+    });
+};
+
+app.get('/api/vela/connection', (req, res) => localConnectionAction(req, res, () => pairingService.info()));
+app.post('/api/vela/connection/rotate', (req, res) => localConnectionAction(req, res, () => pairingService.rotateCode()));
+app.post('/api/vela/connection/revoke', (req, res) => localConnectionAction(req, res, () => pairingService.revokeAll()));
+app.post('/api/vela/connection/pair', (req, res) => {
+    try {
+        const paired = pairingService.pair(req.body?.code, req.body?.clientName);
+        res.json({ ok: true, accessToken: paired.token, client: paired.client });
+    } catch (error) {
+        res.status(401).json({ error: error instanceof Error ? error.message : '画布配对失败' });
+    }
+});
+
+app.use('/api/vela', (req, res, next) => {
+    if (HOST !== '0.0.0.0' || isLoopbackRequest(req)) return next();
+    const authorization = req.get('authorization') || '';
+    const token = authorization.startsWith('Bearer ') ? authorization.slice(7).trim() : '';
+    if (!pairingService.verify(token)) return res.status(401).json({ error: '画布连接未配对或配对已失效。' });
+    next();
 });
 
 // Serve static assets from library with CORS headers for cross-origin image access
@@ -1314,6 +1359,20 @@ if (process.env.NODE_ENV === 'production') {
 
 const httpServer = app.listen(PORT, HOST, () => {
     console.log(`Backend server running on http://${HOST}:${PORT}`);
+    // The service publishes its own discovery record as a second source of truth.
+    // This keeps Storyworks attached to the live dynamic port even if the desktop
+    // main process is interrupted between health-check and discovery publication.
+    const discoveryUserDataDirectory = getRuntimeDiscoveryUserDataDirectory({
+        dataDirectory: VELA_DATA_DIR,
+        processArguments: process.argv
+    });
+    if (discoveryUserDataDirectory) {
+        void writeRuntimeDiscovery({
+            userDataDirectory: discoveryUserDataDirectory,
+            baseUrl: `http://127.0.0.1:${PORT}`,
+            pid: process.ppid || process.pid
+        }).catch((error) => console.error('Vela runtime discovery write failed:', error));
+    }
 });
 
 let shuttingDown = false;

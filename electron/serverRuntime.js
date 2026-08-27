@@ -1,5 +1,44 @@
 import net from 'node:net';
 import { spawn } from 'node:child_process';
+import { mkdir, writeFile } from 'node:fs/promises';
+import path from 'node:path';
+
+export const VELA_RUNTIME_DISCOVERY_FILE = 'runtime-discovery.json';
+
+const normalizeLocalBaseUrl = (value) => {
+  const url = new URL(value);
+  const localHosts = new Set(['127.0.0.1', 'localhost', '[::1]']);
+  if (url.protocol !== 'http:' || !localHosts.has(url.hostname) || !url.port || url.username || url.password) {
+    throw new Error('Vela runtime discovery only accepts a local HTTP localhost address');
+  }
+  url.pathname = '/';
+  url.search = '';
+  url.hash = '';
+  return url.toString().replace(/\/$/, '');
+};
+
+export const writeRuntimeDiscovery = async ({
+  userDataDirectory,
+  baseUrl,
+  pid = process.pid,
+  now = new Date()
+}) => {
+  if (!userDataDirectory) throw new Error('userDataDirectory is required');
+  const payload = {
+    schemaVersion: 1,
+    service: 'vela-control',
+    baseUrl: normalizeLocalBaseUrl(baseUrl),
+    pid: Number(pid),
+    updatedAt: now.toISOString()
+  };
+  await mkdir(userDataDirectory, { recursive: true });
+  await writeFile(
+    path.join(userDataDirectory, VELA_RUNTIME_DISCOVERY_FILE),
+    `${JSON.stringify(payload, null, 2)}\n`,
+    'utf8'
+  );
+  return payload;
+};
 
 export const findAvailablePort = (host = '127.0.0.1') => new Promise((resolve, reject) => {
   const probe = net.createServer();
@@ -42,6 +81,17 @@ export const buildControlServiceArguments = ({
   `--vela-projects-dir=${encodeURIComponent(projectsDirectory)}`,
   `--vela-library-dir=${encodeURIComponent(libraryDirectory)}`
 ];
+
+export const getRuntimeDiscoveryUserDataDirectory = ({
+  dataDirectory,
+  processArguments = process.argv
+} = {}) => {
+  if (!dataDirectory || !Array.isArray(processArguments)) return null;
+  const isDesktopChild = processArguments.some((argument) =>
+    String(argument || '').startsWith('--vela-data-dir=')
+  );
+  return isDesktopChild ? path.dirname(path.resolve(dataDirectory)) : null;
+};
 
 export const startControlService = ({
   electronExecutable,

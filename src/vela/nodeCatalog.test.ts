@@ -4,6 +4,7 @@ import test from 'node:test';
 import {
   canConnectNodeKinds,
   getNodeDefinition,
+  isKnownVelaNodeKind,
   VELA_NODE_CATALOG
 } from './nodeCatalog.ts';
 
@@ -14,6 +15,7 @@ test('Vela catalog exposes only the first-version canvas nodes', () => {
       'prompt',
       'image-input',
       'video-input',
+      'storyworks-reference',
       'gpt-prompt-optimizer',
       'video-director',
       'competitor-script-analyzer',
@@ -30,9 +32,26 @@ test('Vela catalog exposes only the first-version canvas nodes', () => {
 test('node definitions carry Chinese labels and legacy canvas mappings', () => {
   const h3Node = getNodeDefinition('h3-video');
 
-  assert.equal(h3Node.label, 'H3 视频');
+  assert.equal(h3Node.label, 'H3 R2V 视频');
   assert.equal(h3Node.legacyType, 'Video');
-  assert.deepEqual(h3Node.inputs, ['text', 'image']);
+  assert.deepEqual(h3Node.inputs, ['text', 'image', 'image-list']);
+});
+
+test('Storyworks references are supported as read-only continuity inputs', () => {
+  const reference = getNodeDefinition('storyworks-reference');
+
+  assert.equal(reference.label, 'Storyworks 参考');
+  assert.equal(reference.category, 'input');
+  assert.equal(reference.userCreatable, false);
+  assert.deepEqual(reference.outputs, ['text', 'image']);
+  assert.equal(canConnectNodeKinds('storyworks-reference', 'gpt-image'), true);
+});
+
+test('unknown node kinds fall back without crashing the canvas', () => {
+  assert.equal(isKnownVelaNodeKind('storyworks-reference'), true);
+  assert.equal(isKnownVelaNodeKind('future-plugin-node'), false);
+  assert.doesNotThrow(() => getNodeDefinition('future-plugin-node'));
+  assert.match(getNodeDefinition('future-plugin-node').description, /原始内容已安全保留/);
 });
 
 test('typed ports allow the approved GPT to H3 workflow', () => {

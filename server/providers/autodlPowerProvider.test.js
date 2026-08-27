@@ -81,6 +81,79 @@ test('AutoDL provider reads wallet balance and the private Pro image repository'
   assert.equal(calls[0].headers.Authorization, secret.autodlDeveloperToken);
 });
 
+test('AutoDL provider saves an image and creates one PRO6000 instance from it', async () => {
+  const calls = [];
+  const provider = new AutoDlPowerProvider({
+    requestImpl: async (url, options) => {
+      calls.push({ url, ...options });
+      const pathname = new URL(url).pathname;
+      if (pathname.endsWith('/snapshot')) {
+        return { status: 200, body: { code: 'Success', data: { expand_system_disk_size: 214748364800 } } };
+      }
+      if (pathname.endsWith('/image/save')) {
+        return { status: 200, body: { code: 'Success', data: { image_uuid: 'image-vela-h3' } } };
+      }
+      if (pathname.endsWith('/pro/list')) {
+        return { status: 200, body: { code: 'Success', data: { list: [], result_total: 0 } } };
+      }
+      return { status: 200, body: { code: 'Success', data: 'pro-secondgpu' } };
+    }
+  });
+
+  const snapshot = await provider.getSnapshot(profile(), secret);
+  const saved = await provider.savePrivateImage(profile(), secret, { imageName: 'Vela MiniMax H3 20260820' });
+  const instances = await provider.listInstances(profile(), secret, { pageSize: 50 });
+  const created = await provider.createInstance(profile(), secret, {
+    imageUuid: saved.image_uuid,
+    instanceName: 'Vela MiniMax H3 GPU 2',
+    expandSystemDiskByGb: 200,
+    startCommand: 'bash /root/autodl-tmp/vela-h3/deploy/start-comfy.sh'
+  });
+
+  assert.equal(snapshot.expand_system_disk_size, 214748364800);
+  assert.equal(instances.result_total, 0);
+  assert.equal(created, 'pro-secondgpu');
+  assert.deepEqual(calls.map((call) => [call.method, new URL(call.url).pathname]), [
+    ['GET', '/api/v1/dev/instance/pro/snapshot'],
+    ['POST', '/api/v1/dev/instance/pro/image/save'],
+    ['POST', '/api/v1/dev/instance/pro/list'],
+    ['POST', '/api/v1/dev/instance/pro/create']
+  ]);
+  assert.equal(new URL(calls[0].url).searchParams.get('instance_uuid'), profile().autodlInstanceUuid);
+  assert.deepEqual(calls[1].body, {
+    instance_uuid: profile().autodlInstanceUuid,
+    image_name: 'Vela MiniMax H3 20260820'
+  });
+  assert.deepEqual(calls[2].body, { page_index: 1, page_size: 50 });
+  assert.deepEqual(calls[3].body, {
+    req_gpu_amount: 1,
+    expand_system_disk_by_gb: 200,
+    gpu_spec_uuid: 'pro6000-p',
+    image_uuid: 'image-vela-h3',
+    cuda_v_from: 128,
+    instance_name: 'Vela MiniMax H3 GPU 2',
+    start_command: 'bash /root/autodl-tmp/vela-h3/deploy/start-comfy.sh'
+  });
+});
+
+test('AutoDL provider rejects unsafe image and GPU identifiers before creating an instance', async () => {
+  let calls = 0;
+  const provider = new AutoDlPowerProvider({ requestImpl: async () => { calls += 1; } });
+  await assert.rejects(
+    () => provider.createInstance(profile(), secret, { imageUuid: 'not-an-image' }),
+    (error) => error.code === 'AUTODL_IMAGE_INVALID'
+  );
+  await assert.rejects(
+    () => provider.createInstance(profile(), secret, { imageUuid: 'image-safe', gpuSpecUuid: 'bad spec' }),
+    (error) => error.code === 'AUTODL_GPU_SPEC_INVALID'
+  );
+  await assert.rejects(
+    () => provider.savePrivateImage(profile(), secret, { imageName: '' }),
+    (error) => error.code === 'AUTODL_IMAGE_NAME_INVALID'
+  );
+  assert.equal(calls, 0);
+});
+
 test('AutoDL provider rejects non-Pro UUID and missing tokens before sending a request', async () => {
   let calls = 0;
   const provider = new AutoDlPowerProvider({ requestImpl: async () => { calls += 1; } });
@@ -125,4 +198,44 @@ test('waitForState polls the same instance until it becomes running', async () =
   });
   assert.equal(await provider.waitForState(profile(), secret, ['running']), 'running');
   assert.equal(states.length, 0);
+});
+
+test('AutoDL provider retries rate-limited requests with exponential backoff', async () => {
+  let requests = 0;
+  const sleeps = [];
+  const provider = new AutoDlPowerProvider({
+    rateLimitRetries: 4,
+    sleep: async (milliseconds) => { sleeps.push(milliseconds); },
+    requestImpl: async () => {
+      requests += 1;
+      if (requests < 3) {
+        return { status: 429, body: { code: 'Failed', msg: '请求过于频繁' } };
+      }
+      return { status: 200, body: { code: 'Success', data: 'running' } };
+    }
+  });
+
+  assert.equal(await provider.getStatus(profile(), secret), 'running');
+  assert.equal(requests, 3);
+  assert.deepEqual(sleeps, [750, 1_500]);
+});
+
+test('AutoDL provider serializes concurrent account-control requests', async () => {
+  let active = 0;
+  let maximumActive = 0;
+  const provider = new AutoDlPowerProvider({
+    requestImpl: async () => {
+      active += 1;
+      maximumActive = Math.max(maximumActive, active);
+      await new Promise((resolve) => setImmediate(resolve));
+      active -= 1;
+      return { status: 200, body: { code: 'Success', data: 'running' } };
+    }
+  });
+
+  await Promise.all([
+    provider.getStatus(profile(), secret),
+    provider.getStatus(profile({ autodlInstanceUuid: 'pro-secondgpu' }), secret)
+  ]);
+  assert.equal(maximumActive, 1);
 });

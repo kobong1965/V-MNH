@@ -42,3 +42,22 @@ test('a version one fixture upgrades without losing its existing jobs', () => {
     fs.rmSync(directory, { recursive: true, force: true });
   }
 });
+
+test('closing a persistent database checkpoints and truncates its WAL', () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'vela-db-checkpoint-'));
+  const databasePath = path.join(directory, 'vela.sqlite');
+  try {
+    const database = new VelaDatabase(databasePath);
+    database.connection.exec('CREATE TABLE checkpoint_probe(value TEXT NOT NULL);');
+    database.connection.prepare('INSERT INTO checkpoint_probe(value) VALUES (?)').run('durable');
+    database.close();
+
+    const walPath = `${databasePath}-wal`;
+    assert.ok(!fs.existsSync(walPath) || fs.statSync(walPath).size === 0);
+    const reopened = new DatabaseSync(databasePath, { readOnly: true });
+    assert.equal(reopened.prepare('SELECT value FROM checkpoint_probe').get().value, 'durable');
+    reopened.close();
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});

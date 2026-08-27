@@ -119,7 +119,7 @@ export interface GptConnectionResult {
 export interface ComfyConnectionResult {
   ok: true;
   type: 'comfy';
-  state: 'online-idle' | 'online-busy' | 'queue-full';
+  state: 'offline' | 'online-idle' | 'online-busy' | 'queue-full';
   baseUrl: string;
   websocketUrl: string;
   websocket?: { ok: boolean; url: string };
@@ -143,6 +143,10 @@ export interface ComfyConnectionResult {
     total: number;
     maxConcurrency: number;
     full: boolean;
+  };
+  power?: {
+    managed: boolean;
+    remoteState: string;
   };
   checkedAt: string;
 }

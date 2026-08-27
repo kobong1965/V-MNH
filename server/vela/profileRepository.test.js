@@ -161,6 +161,32 @@ test('profile list marks credentials unreadable instead of crashing after a key 
   }
 });
 
+test('unreadable AutoDL credentials can be replaced without decrypting the old envelope', () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'vela-autodl-key-repair-'));
+  const database = new VelaDatabase(path.join(directory, 'vela.sqlite'));
+  try {
+    const oldRepository = new ProfileRepository(database, new SecretProtector({ key: Buffer.alloc(32, 1) }));
+    const created = oldRepository.create({
+      type: 'comfy', name: 'AutoDL repair', platform: 'autodl', baseUrl: 'http://127.0.0.1:18188',
+      transport: 'ssh', sshHost: 'connect.example.autodl.com', sshPrivateKeyPath: 'C:\\key',
+      authType: 'none', autoPowerEnabled: true, autodlInstanceUuid: 'pro-76576c61fdf1',
+      autodlDeveloperToken: 'old-token'
+    });
+    const repository = new ProfileRepository(database, new SecretProtector({ key: Buffer.alloc(32, 2) }));
+    assert.equal(repository.get(created.id).autoPowerCredentialStatus, 'unreadable');
+
+    const renamed = repository.update(created.id, { notes: 'public edit is preserved' });
+    assert.equal(renamed.autoPowerCredentialStatus, 'unreadable');
+
+    const repaired = repository.update(created.id, { autodlDeveloperToken: 'replacement-token' });
+    assert.equal(repaired.autoPowerCredentialStatus, 'ready');
+    assert.equal(repository.getWithSecret(created.id).secret.autodlDeveloperToken, 'replacement-token');
+  } finally {
+    database.close();
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 test('AutoDL Pro power settings keep the developer token encrypted and separate from Comfy auth', () => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'vela-autodl-power-profile-'));
   const database = new VelaDatabase(path.join(directory, 'vela.sqlite'));

@@ -95,6 +95,7 @@ const INITIAL_FORM: ComfyFormState = {
 };
 
 const stateLabels: Record<ComfyConnectionResult['state'], string> = {
+  offline: '云端 · 已关机',
   'online-idle': '在线 · 空闲',
   'online-busy': '在线 · 运行中',
   'queue-full': '在线 · 队列已满'
@@ -236,6 +237,10 @@ export function VelaComfySection({ profiles, onProfilesChanged, onMessage, showH
       const result = await testVelaProfile(profile.id);
       if (!('type' in result) || result.type !== 'comfy') throw new Error('连接返回的数据类型不正确');
       setResults((current) => ({ ...current, [profile.id]: result }));
+      if (result.state === 'offline') {
+        onMessage('AutoDL 实例当前已关机；自动开关机配置正常，生成任务会按需启动。');
+        return;
+      }
       const gpuName = result.system.gpu?.name || '未识别显卡';
       onMessage(`ComfyUI 已连接：${gpuName}，运行 ${result.queue.running}，排队 ${result.queue.pending}。`);
     } catch (error) {
@@ -288,9 +293,19 @@ export function VelaComfySection({ profiles, onProfilesChanged, onMessage, showH
             </div>
             {result && (
               <div className="vela-comfy-diagnostics" role="status">
-                <strong>{result.system.gpu?.name || '未读取到 GPU'}</strong>
-                <span>显存 {formatVram(result.system.gpu?.vramFree || 0)} 可用 / {formatVram(result.system.gpu?.vramTotal || 0)} 总计</span>
-                <span>队列：运行 {result.queue.running} · 等待 {result.queue.pending} · WebSocket {result.websocket?.ok ? '正常' : '未检测'}</span>
+                {result.state === 'offline' ? (
+                  <>
+                    <strong>AutoDL 实例已关机</strong>
+                    <span>生成任务会按需自动启动实例；全面检测不会开机或产生算力费用。</span>
+                    <span>云端状态：{result.power?.remoteState || 'stopped'}</span>
+                  </>
+                ) : (
+                  <>
+                    <strong>{result.system.gpu?.name || '未读取到 GPU'}</strong>
+                    <span>显存 {formatVram(result.system.gpu?.vramFree || 0)} 可用 / {formatVram(result.system.gpu?.vramTotal || 0)} 总计</span>
+                    <span>队列：运行 {result.queue.running} · 等待 {result.queue.pending} · WebSocket {result.websocket?.ok ? '正常' : '未检测'}</span>
+                  </>
+                )}
               </div>
             )}
             {profile.platform === 'autodl' && (

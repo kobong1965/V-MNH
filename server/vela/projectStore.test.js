@@ -30,6 +30,23 @@ test('ProjectStore creates the approved directory structure and lists projects',
     assert.ok(fs.existsSync(path.join(directory, 'assets')));
     assert.ok(fs.existsSync(path.join(directory, 'outputs', 'images')));
     assert.equal(store.listProjects()[0].nodeCount, 1);
+    assert.equal(store.listProjects()[0].source, 'vela');
+  });
+});
+
+test('ProjectStore classifies Storyworks imports for the short-drama home section', () => {
+  withTemporaryStore((store) => {
+    const prefixed = store.saveProject({ ...draft('编导车间故事'), id: 'storyworks-script-001' });
+    const referenced = store.saveProject({
+      ...draft('分享包故事'),
+      nodes: [{ id: 'character', type: 'Image', kind: 'storyworks-reference', x: 0, y: 0 }]
+    });
+    const ordinary = store.saveProject(draft('普通项目'));
+    const byId = new Map(store.listProjects().map((project) => [project.id, project]));
+
+    assert.equal(byId.get(prefixed.id).source, 'storyworks');
+    assert.equal(byId.get(referenced.id).source, 'storyworks');
+    assert.equal(byId.get(ordinary.id).source, 'vela');
   });
 });
 
@@ -53,6 +70,27 @@ test('ProjectStore preserves image annotations and styled group labels', () => {
     assert.equal(loaded.groups[0].label, '买家秀首图');
     assert.equal(loaded.groups[0].labelColor, '#aa3322');
     assert.equal(loaded.groups[0].labelFontSize, 28);
+  });
+});
+
+test('ProjectStore migrates every legacy H3 first-frame connection to R2V material references', () => {
+  withTemporaryStore((store) => {
+    const project = store.saveProject({
+      ...draft('旧 H3 画布'),
+      nodes: [
+        { id: 'person', type: 'Image', kind: 'storyworks-reference', sourceAssetId: 'C001', x: 0, y: 0, resultUrl: '/person.png' },
+        { id: 'scene', type: 'Image', kind: 'storyworks-reference', sourceAssetId: 'S001', x: 0, y: 100, resultUrl: '/scene.png' },
+        { id: 'first-frame', type: 'Image', kind: 'gpt-image', x: 200, y: 0, parentIds: ['person', 'scene'] },
+        { id: 'video', type: 'Video', kind: 'h3-video', x: 400, y: 0, parentIds: ['first-frame'], videoGenerationMode: 'image-to-video', h3Acceleration: 'turbo-8', h3FrameFit: 'ai-expand' }
+      ]
+    });
+    const video = store.getProject(project.id).nodes.find((node) => node.id === 'video');
+    assert.equal(video.videoGenerationMode, 'reference-to-video');
+    assert.deepEqual(video.parentIds, ['person', 'scene']);
+    assert.deepEqual(video.requiredReferenceNodeIds, ['person', 'scene']);
+    assert.deepEqual(video.requiredAssetIds, ['C001', 'S001']);
+    assert.equal(video.h3Acceleration, 'turbo-4');
+    assert.equal(video.h3FrameFit, undefined);
   });
 });
 

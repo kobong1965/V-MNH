@@ -1,4 +1,5 @@
-import { ChevronDown, ChevronUp, ListChecks, RotateCcw, X } from 'lucide-react';
+import { ChevronDown, ChevronUp, Crosshair, ListChecks, RotateCcw, X } from 'lucide-react';
+import { useMemo, useState } from 'react';
 
 import { getVelaJobErrorMessage, type VelaJob, type VelaJobStatus } from '../services/jobService';
 import type { VelaProfile } from '../services/profileService';
@@ -8,9 +9,11 @@ interface VelaTaskCenterProps {
   jobs: VelaJob[];
   profiles: VelaProfile[];
   error?: string | null;
+  projectId?: string | null;
   onToggle: () => void;
   onRetry: (jobId: string) => void | Promise<void>;
   onCancel: (jobId: string) => void | Promise<void>;
+  onFocusNode?: (nodeId: string) => void;
 }
 
 const STATUS_TEXT: Record<VelaJobStatus, string> = {
@@ -31,14 +34,23 @@ export function VelaTaskCenter({
   jobs,
   profiles,
   error,
+  projectId,
   onToggle,
   onRetry,
-  onCancel
+  onCancel,
+  onFocusNode
 }: VelaTaskCenterProps) {
-  if (!isOpen) return null;
-  const runningCount = jobs.filter((job) => RUNNING.has(job.status)).length;
-  const failedCount = jobs.filter((job) => job.status === 'failed').length;
+  const [filter, setFilter] = useState<'all' | 'active' | 'failed'>('all');
+  const projectJobs = useMemo(() => projectId ? jobs.filter((job) => job.projectId === projectId) : jobs, [jobs, projectId]);
+  const visibleJobs = useMemo(() => projectJobs.filter((job) => (
+    filter === 'active' ? RUNNING.has(job.status) || job.status === 'queued'
+      : filter === 'failed' ? job.status === 'failed'
+        : true
+  )), [filter, projectJobs]);
+  const runningCount = projectJobs.filter((job) => RUNNING.has(job.status) || job.status === 'queued').length;
+  const failedCount = projectJobs.filter((job) => job.status === 'failed').length;
   const profileNames = new Map(profiles.map((profile) => [profile.id, profile.name]));
+  if (!isOpen) return null;
 
   return (
     <section className="vela-task-center vela-panel" data-open={isOpen} aria-label="任务中心">
@@ -48,19 +60,25 @@ export function VelaTaskCenter({
           任务中心
         </span>
         <span className="vela-task-counts vela-utility-text">
-          运行 {runningCount} · 失败 {failedCount} · 共 {jobs.length}
+          当前项目 · 运行 {runningCount} · 失败 {failedCount} · 共 {projectJobs.length}
         </span>
         {isOpen ? <ChevronDown size={16} aria-hidden="true" /> : <ChevronUp size={16} aria-hidden="true" />}
       </button>
 
       {isOpen && (
-        <div className="vela-task-list" role="list">
+        <div className="vela-task-body">
+          <div className="vela-task-filters" role="tablist" aria-label="任务筛选">
+            {([['all', `全部 ${projectJobs.length}`], ['active', `进行中 ${runningCount}`], ['failed', `失败 ${failedCount}`]] as const).map(([value, label]) => (
+              <button type="button" role="tab" aria-selected={filter === value} data-active={filter === value || undefined} onClick={() => setFilter(value)} key={value}>{label}</button>
+            ))}
+          </div>
+          <div className="vela-task-list" role="list">
           {error && <div className="vela-task-error" role="status">{error}</div>}
-          {jobs.length === 0 ? (
+          {visibleJobs.length === 0 ? (
             <div className="vela-task-empty" role="status">
-              还没有持久化任务。从 GPT 图片或 H3 视频节点开始生成后，任务会保存在本地数据库。
+              当前筛选没有任务。GPT 图片或 H3 视频任务会按项目保存在本地数据库。
             </div>
-          ) : jobs.map((job) => (
+          ) : visibleJobs.map((job) => (
             <article
               className="vela-task-item"
               data-running={RUNNING.has(job.status) || undefined}
@@ -80,6 +98,9 @@ export function VelaTaskCenter({
               <span className="vela-task-output vela-utility-text">
                 {job.progress === null ? '—' : `${Math.round(job.progress * 100)}%`}
               </span>
+              <button className="vela-button vela-icon-button" onClick={() => onFocusNode?.(job.nodeId)} aria-label="定位画布节点" title="定位画布节点">
+                <Crosshair size={15} aria-hidden="true" />
+              </button>
               {job.status === 'failed' || job.status === 'cancelled' ? (
                 <button className="vela-button vela-icon-button" onClick={() => void onRetry(job.id)} aria-label="重试任务" title="重试任务">
                   <RotateCcw size={15} aria-hidden="true" />
@@ -97,6 +118,7 @@ export function VelaTaskCenter({
               )}
             </article>
           ))}
+          </div>
         </div>
       )}
     </section>

@@ -75,12 +75,16 @@ export interface NodeData {
   frameInputs?: { nodeId: string; order: 'start' | 'end' }[]; // For frame-to-frame: connected image nodes
   videoModel?: string; // Video model version (e.g., 'veo-3.1', 'kling-v2-1')
   videoDuration?: number; // Video duration in seconds (e.g., 5, 6, 8, 10)
-  videoGenerationMode?: 'text-to-video' | 'image-to-video'; // API video node submission mode
+  videoGenerationMode?: 'text-to-video' | 'image-to-video' | 'reference-to-video'; // H3 is always R2V; older values remain readable
+  sourceAssetId?: string; // Storyworks asset id carried by read-only material nodes
+  requiredAssetIds?: string[]; // Complete people/scene/prop contract for a Storyworks shot
+  requiredReferenceNodeIds?: string[]; // Exact material nodes that must be linked before H3 submission
   h3Acceleration?: 'standard' | 'turbo-8' | 'turbo-4'; // MiniMax H3 sampling profile
   h3Upscale?: 'off' | 'auto'; // Real-ESRGAN AI super resolution for 1080p/2K output
   h3UpscaleQuality?: 'LOW' | 'MEDIUM' | 'HIGH' | 'ULTRA';
-  h3FrameFit?: 'ai-expand' | 'crop'; // Adapt mismatched reference ratios without stretching
+  h3FrameFit?: 'direct' | 'ai-expand' | 'crop'; // 'crop' is retained for legacy projects and treated as direct
   h3OutpaintProfileId?: string; // GPT image-edit profile used to generatively extend H3 keyframes
+  h3ReferenceImageSize?: 'match' | 'max'; // Ref2VA identity/detail strategy
   generateAudio?: boolean; // Whether to generate native audio (Kling 2.6, Veo 3.1)
   inputUrl?: string; // Input URL for video generation (image-to-video)
 

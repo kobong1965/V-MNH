@@ -62,7 +62,7 @@ import { VelaHome } from './vela/components/VelaHome';
 import { VelaDesktopHeader } from './vela/components/VelaDesktopHeader';
 import { useVelaJobs } from './vela/hooks/useVelaJobs';
 import { useVelaProfiles } from './vela/hooks/useVelaProfiles';
-import { createVelaJobGroup, getVelaJobErrorMessage } from './vela/services/jobService';
+import { AUTO_COMFY_PROFILE_ID, createVelaJobGroup, getVelaJobErrorMessage } from './vela/services/jobService';
 import { saveVelaProject, saveVelaProjectMedia } from './vela/services/projectService';
 import {
   loadVelaPreferences,
@@ -112,6 +112,7 @@ const getProjectMediaPath = (url: string, projectId: string): string | null => {
 const VELA_P1_UI = true;
 const VELA_SCRIPT_NODE_KINDS = new Set(['video-director', 'competitor-script-analyzer']);
 const VELA_TEXT_OUTPUT_NODE_KINDS = new Set(['gpt-prompt-optimizer', ...VELA_SCRIPT_NODE_KINDS]);
+const VELA_REFERENCE_TEXT_NODE_KINDS = new Set(['storyworks-reference']);
 const VELA_GENERATION_NODE_KINDS = new Set(['gpt-prompt-optimizer', ...VELA_SCRIPT_NODE_KINDS, 'gpt-image', 'gpt-video', 'h3-video', 'wan-video-process']);
 
 export default function App() {
@@ -413,8 +414,11 @@ export default function App() {
       if (isGptNode && !node.profileId && !fakeGptEnabled) {
         throw new Error(node.kind === 'gpt-video' ? '请先在 API 页面添加视频账户，并在节点中选择账户' : '请先添加 GPT 账户，并在节点属性中选择账户');
       }
-      if (isComfyNode && !node.profileId) {
-        throw new Error(isWanNode ? '请先在 API 页面添加 Wan ComfyUI 算力，并在处理节点中选择该算力' : '请先在 API 页面添加 AutoDL ComfyUI 算力，并在 H3 节点中选择该算力');
+      if (isWanNode && !node.profileId) {
+        throw new Error('请先在 API 页面添加 Wan ComfyUI 算力，并在处理节点中选择该算力');
+      }
+      if (isH3Node && !velaProfiles.some((profile) => profile.type === 'comfy')) {
+        throw new Error('请先在 API 页面添加 AutoDL MiniMax H3 算力');
       }
       const selectedGptProfile = velaProfiles.find((profile) => profile.id === node.profileId && profile.type === 'gpt');
       if (isCompetitorAnalyzer && selectedGptProfile?.type === 'gpt' && !selectedGptProfile.models.analysis) {
@@ -427,13 +431,17 @@ export default function App() {
         errorMessage: undefined
       });
       const videoGenerationMode = ['gpt-video', 'h3-video'].includes(node.kind)
-        ? node.videoGenerationMode || ((node.parentIds || []).length > 0 ? 'image-to-video' : 'text-to-video')
+        ? isH3Node ? 'reference-to-video' : node.videoGenerationMode || ((node.parentIds || []).length > 0 ? 'image-to-video' : 'text-to-video')
         : undefined;
       const connectedParents = (node.parentIds || [])
         .map((parentId) => nodes.find((candidate) => candidate.id === parentId))
         .filter((parent): parent is NodeData => Boolean(parent));
       const connectedPrompt = connectedParents
-        .filter((parent) => parent.kind === 'prompt' && parent.prompt?.trim())
+        .filter((parent) => (
+          parent.kind === 'prompt'
+          || VELA_TEXT_OUTPUT_NODE_KINDS.has(parent.kind || '')
+          || VELA_REFERENCE_TEXT_NODE_KINDS.has(parent.kind || '')
+        ) && parent.prompt?.trim())
         .map((parent) => parent.prompt.trim())
         .join('\n\n');
       const referenceNodes = (isScriptNode
@@ -446,6 +454,21 @@ export default function App() {
         : undefined;
       if (['gpt-video', 'h3-video'].includes(node.kind) && videoGenerationMode === 'image-to-video' && referenceNodes.length === 0) {
         throw new Error('图生视频需要先连接至少一张可用的参考图片');
+      }
+      if (isH3Node) {
+        if (referenceNodes.length < 1) throw new Error('H3 R2V 需要先连接至少一张可用参考图');
+        if (referenceNodes.length > 9) throw new Error(`H3 R2V 最多支持 9 张参考图，当前连接了 ${referenceNodes.length} 张`);
+        const requiredNodeIds = node.requiredReferenceNodeIds ?? [];
+        const linkedParentIds = new Set(node.parentIds ?? []);
+        const readyReferenceIds = new Set(referenceNodes.map((reference) => reference.id));
+        const missingNodeIds = requiredNodeIds.filter((nodeId) => !linkedParentIds.has(nodeId) || !readyReferenceIds.has(nodeId));
+        if (missingNodeIds.length) throw new Error(`本镜头有 ${missingNodeIds.length} 个必需人物、场景或道具素材未连接或未就绪：${missingNodeIds.join('、')}`);
+        const requiredAssetIds = node.requiredAssetIds ?? [];
+        const linkedAssetIds = referenceNodes.map((reference) => reference.sourceAssetId).filter((assetId): assetId is string => Boolean(assetId));
+        const missingAssetIds = requiredAssetIds.filter((assetId) => !linkedAssetIds.includes(assetId));
+        if (missingAssetIds.length || (requiredAssetIds.length > 0 && linkedAssetIds.length !== requiredAssetIds.length)) {
+          throw new Error(`H3 R2V 必须连接本视频片段的全部素材，缺少：${missingAssetIds.join('、') || '未识别的素材节点'}`);
+        }
       }
       if (isScriptNode && referenceNodes.length === 0) {
         throw new Error(isCompetitorAnalyzer ? '竞品视频分析需要至少连接一张当前产品图' : '视频编导需要至少连接一张产品图');
@@ -529,6 +552,9 @@ export default function App() {
         ecommerceWorkflowId: isWanNode ? node.backendWorkflowId : undefined,
         workflowInputs: isWanNode ? workflowInputs : undefined,
         referenceUrls,
+        referenceNodeIds: isH3Node ? referenceNodes.map((reference) => reference.id) : undefined,
+        referenceAssetIds: isH3Node ? referenceNodes.map((reference) => reference.sourceAssetId).filter(Boolean) : undefined,
+        requiredReferenceCount: isH3Node ? (node.requiredReferenceNodeIds?.length || referenceUrls.length) : undefined,
         competitorFrameUrls: isCompetitorAnalyzer ? competitorFrameUrls : undefined,
         directorPersona: node.kind === 'video-director' ? resolveVideoDirectorPersona(node) : undefined,
         aspectRatio: node.aspectRatio || '16:9',
@@ -537,11 +563,10 @@ export default function App() {
         imageBatchMode: node.imageBatchMode,
         duration: ['gpt-video', 'h3-video'].includes(node.kind) ? Math.max(4, Math.min(180, Math.round(node.videoDuration || 5))) : undefined,
         videoGenerationMode,
-        h3Acceleration: isH3Node ? node.h3Acceleration || 'turbo-8' : undefined,
+        h3Acceleration: isH3Node ? node.h3Acceleration === 'standard' ? 'standard' : 'turbo-4' : undefined,
         h3Upscale: isH3Node ? node.h3Upscale || 'auto' : undefined,
         h3UpscaleQuality: isH3Node ? node.h3UpscaleQuality || 'HIGH' : undefined,
-        h3FrameFit: isH3Node ? node.h3FrameFit || 'ai-expand' : undefined,
-        h3OutpaintProfileId: isH3Node ? node.h3OutpaintProfileId : undefined
+        h3ReferenceImageSize: isH3Node ? node.h3ReferenceImageSize || 'match' : undefined
       };
 
       // A remote video task may briefly report an unrecognized state even though it is
@@ -564,7 +589,7 @@ export default function App() {
           .find((job) => {
             if (
               job.nodeId !== node.id
-              || job.profileId !== node.profileId
+              || (node.profileId && job.profileId !== node.profileId)
               || job.status !== 'failed'
               || !job.promptId
               || !resumableVideoErrorCodes.has(job.error?.code || '')
@@ -580,8 +605,7 @@ export default function App() {
               h3Acceleration?: unknown;
               h3Upscale?: unknown;
               h3UpscaleQuality?: unknown;
-              h3FrameFit?: unknown;
-              h3OutpaintProfileId?: unknown;
+              h3ReferenceImageSize?: unknown;
               ecommerceWorkflowId?: unknown;
               workflowInputs?: unknown;
             };
@@ -594,8 +618,7 @@ export default function App() {
               && payload.h3Acceleration === requestedPayload.h3Acceleration
               && payload.h3Upscale === requestedPayload.h3Upscale
               && payload.h3UpscaleQuality === requestedPayload.h3UpscaleQuality
-              && payload.h3FrameFit === requestedPayload.h3FrameFit
-              && payload.h3OutpaintProfileId === requestedPayload.h3OutpaintProfileId
+              && payload.h3ReferenceImageSize === requestedPayload.h3ReferenceImageSize
               && payload.ecommerceWorkflowId === requestedPayload.ecommerceWorkflowId
               && JSON.stringify(payload.workflowInputs || []) === JSON.stringify(requestedPayload.workflowInputs || [])
               && JSON.stringify(payload.referenceUrls || []) === JSON.stringify(requestedPayload.referenceUrls);
@@ -609,7 +632,7 @@ export default function App() {
       const created = await createVelaJobGroup({
         projectId,
         nodeId: node.id,
-        profileId: useFake ? 'fake-local' : node.profileId!,
+        profileId: useFake ? 'fake-local' : isH3Node && !node.profileId ? AUTO_COMFY_PROFILE_ID : node.profileId!,
         providerType: useFake ? 'fake' : isComfyNode ? 'comfy' : 'gpt',
         payload: requestedPayload,
         count: isWanNode || VELA_TEXT_OUTPUT_NODE_KINDS.has(node.kind) ? 1 : Math.max(1, Math.min(['gpt-video', 'h3-video'].includes(node.kind) ? 4 : 10, node.outputCount || 1)),
@@ -1460,7 +1483,20 @@ export default function App() {
   // handleContextMenuCreateAsset, handleContextMenuSelect, handleToolbarAdd
 
 
-  const activeTaskCount = velaJobs.filter(job => ['submitting', 'running', 'reconnecting', 'downloading'].includes(job.status)).length;
+  const activeTaskCount = velaJobs.filter(job => (!workflowId || job.projectId === workflowId) && ['queued', 'submitting', 'running', 'reconnecting', 'downloading'].includes(job.status)).length;
+  const focusTaskNode = React.useCallback((nodeId: string) => {
+    const node = nodes.find((candidate) => candidate.id === nodeId);
+    if (!node) return;
+    const zoom = Math.max(0.55, Math.min(1, viewport.zoom));
+    const width = node.canvasWidth || 360;
+    const height = node.canvasHeight || 420;
+    setSelectedNodeIds([node.id]);
+    setViewport({
+      x: window.innerWidth / 2 - (node.x + width / 2) * zoom,
+      y: window.innerHeight / 2 - (node.y + height / 2) * zoom,
+      zoom
+    });
+  }, [nodes, setSelectedNodeIds, setViewport, viewport.zoom]);
   const generatedAssets = React.useMemo<VelaGeneratedAsset[]>(() => {
     const seen = new Set<string>();
     const assets: VelaGeneratedAsset[] = [];
@@ -1789,7 +1825,8 @@ export default function App() {
                     .map(parent => ({
                       id: parent!.id,
                       url: (parent!.type === NodeType.VIDEO ? parent!.lastFrame : parent!.resultUrl) || parent!.resultUrl!,
-                      type: parent!.type
+                      type: parent!.type,
+                      sourceAssetId: parent!.sourceAssetId
                     }));
                 })()}
                 onUpdate={updateNodeWithSync}
@@ -1939,9 +1976,11 @@ export default function App() {
         jobs={velaJobs}
         profiles={velaProfiles}
         error={velaJobsError}
+        projectId={workflowId}
         onToggle={() => setIsTaskCenterOpen(current => !current)}
         onRetry={retryVelaJob}
         onCancel={cancelVelaJob}
+        onFocusNode={focusTaskNode}
       />
       {/* Context Menu */}
       <ContextMenu
