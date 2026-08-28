@@ -2,15 +2,36 @@ export const VELA_SCHEMA_VERSION = 1;
 export const VELA_EXPORT_VERSION = 1;
 export const MAX_BATCH_SIZE = 50;
 export const AUTO_COMFY_PROFILE_ID = 'auto-comfy';
+export const VELA_CONTROL_PROTOCOL_VERSION = 2;
+export const VELA_VIDEO_PROVIDER_CONTRACT_VERSION = 1;
+
+export const VELA_CONTROL_CAPABILITIES = Object.freeze({
+  durableVideoProvider: Object.freeze({
+    contractVersion: VELA_VIDEO_PROVIDER_CONTRACT_VERSION,
+    createOrReturnByExternalKey: true,
+    createOrReturnMethod: 'PUT',
+    createOrReturnPath: '/api/vela/jobs/by-external-key/{externalKey}',
+    lookupMethod: 'GET',
+    lookupPath: '/api/vela/jobs/by-external-key/{externalKey}',
+    externalKeyField: 'path.externalKey',
+    contractFingerprintField: 'body.contractFingerprint',
+    contractFingerprint: 'sha256-lowercase-hex',
+    canonicalization: 'vela-external-h3-draft-v1',
+    maxJobsPerExternalKey: 1,
+    terminalSubmissionUncertain: true
+  })
+});
 
 export const JOB_STATUSES = Object.freeze([
   'queued',
+  'preparing',
   'submitting',
   'running',
   'reconnecting',
   'downloading',
   'succeeded',
   'failed',
+  'submission_uncertain',
   'cancelled'
 ]);
 
@@ -146,4 +167,20 @@ export const validateJobGroupDraft = (group) => {
     throw new ContractValidationError('seedMode 必须是 fixed、increment 或 random', '$.seedMode');
   }
   return group;
+};
+
+export const validateExternalJobContract = ({ externalKey, contractFingerprint }) => {
+  validateExternalJobKey(externalKey);
+  if (typeof contractFingerprint !== 'string' || !/^[a-f0-9]{64}$/.test(contractFingerprint)) {
+    throw new ContractValidationError('必须是 64 位小写 SHA-256 十六进制字符串', '$.contractFingerprint');
+  }
+  return { externalKey, contractFingerprint };
+};
+
+export const validateExternalJobKey = (externalKey) => {
+  assertString(externalKey, '$.externalKey', { max: 256 });
+  if (!/^[A-Za-z0-9][A-Za-z0-9._:@-]{0,255}$/.test(externalKey)) {
+    throw new ContractValidationError('只能包含字母、数字、点、下划线、冒号、@ 和连字号', '$.externalKey');
+  }
+  return externalKey;
 };

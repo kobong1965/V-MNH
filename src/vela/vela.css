@@ -461,6 +461,7 @@ textarea {
 }
 
 .vela-state-label[data-status="loading"],
+.vela-task-state[data-status="preparing"],
 .vela-task-state[data-status="submitting"],
 .vela-task-state[data-status="running"],
 .vela-task-state[data-status="reconnecting"],
@@ -474,7 +475,8 @@ textarea {
 }
 
 .vela-state-label[data-status="error"],
-.vela-task-state[data-status="failed"] {
+.vela-task-state[data-status="failed"],
+.vela-task-state[data-status="submission_uncertain"] {
   color: var(--vela-danger);
 }
 

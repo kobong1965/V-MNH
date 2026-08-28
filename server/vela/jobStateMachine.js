@@ -1,13 +1,15 @@
 import { JOB_STATUSES } from '../../shared/vela-contracts.js';
 
 export const LEGAL_JOB_TRANSITIONS = Object.freeze({
-  queued: ['submitting', 'cancelled'],
-  submitting: ['running', 'queued', 'failed'],
+  queued: ['preparing', 'failed', 'cancelled'],
+  preparing: ['queued', 'submitting', 'running', 'failed', 'cancelled'],
+  submitting: ['running', 'failed', 'submission_uncertain'],
   running: ['downloading', 'reconnecting', 'failed', 'cancelled'],
   reconnecting: ['running', 'downloading', 'failed', 'cancelled'],
   downloading: ['succeeded', 'reconnecting', 'failed'],
   succeeded: [],
   failed: ['queued'],
+  submission_uncertain: [],
   cancelled: ['queued']
 });
 
@@ -21,7 +23,8 @@ export const assertJobTransition = (from, to) => {
 };
 
 export const getRestartRecoveryStatus = (job) => {
-  if (job.status === 'submitting') return job.promptId ? 'reconnecting' : 'queued';
+  if (job.status === 'preparing') return 'queued';
+  if (job.status === 'submitting') return job.promptId ? 'reconnecting' : 'submission_uncertain';
   if (job.status === 'running') return 'reconnecting';
   if (job.status === 'downloading') {
     return job.promptId && ['gpt-video', 'h3-video'].includes(job.payload?.nodeKind) ? 'reconnecting' : 'failed';

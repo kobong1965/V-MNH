@@ -1,6 +1,6 @@
 const SHANGHAI_OFFSET_MS = 8 * 60 * 60 * 1000;
 const GPU_ACTIVE_STATUSES = new Set(['running', 'reconnecting']);
-const ACTIVE_JOB_STATUSES = new Set(['queued', 'submitting', 'running', 'reconnecting', 'downloading']);
+const ACTIVE_JOB_STATUSES = new Set(['queued', 'preparing', 'submitting', 'running', 'reconnecting', 'downloading']);
 const RESOLUTION_ORDER = ['480p', '720p', '1080p', '2K'];
 const PRESET_ORDER = ['turbo-4', 'turbo-8', 'standard'];
 
@@ -121,7 +121,7 @@ export class H3UsageAnalytics {
       if (!byPreset.has(presetKey)) byPreset.set(presetKey, createBucket(presetKey));
       const buckets = [byResolution.get(resolutionKey), byPreset.get(presetKey)];
       const isSuccessful = row.status === 'succeeded';
-      const isFailed = row.status === 'failed';
+      const isFailed = ['failed', 'submission_uncertain'].includes(row.status);
       const isActive = ACTIVE_JOB_STATUSES.has(row.status);
       const generatedSeconds = isSuccessful ? Math.max(0, Number(payload.duration) || 0) : 0;
       const gpuSeconds = gpuSecondsForEvents(eventStatement.all(row.id), now);

@@ -351,6 +351,7 @@ test('restart during an authenticated video download resumes and completes the o
       payload: { nodeKind: 'gpt-video', prompt: '重启续传', duration: 5, aspectRatio: '16:9', resolution: '720p', referenceUrls: [] },
       seed: 1
     }]);
+    firstRuntime.jobs.transition(jobId, 'preparing');
     firstRuntime.jobs.transition(jobId, 'submitting');
     firstRuntime.jobs.transition(jobId, 'running', { promptId: originalTaskId, progress: 0.8 });
     firstRuntime.jobs.transition(jobId, 'downloading', { progress: 0.9 });

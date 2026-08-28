@@ -1,7 +1,11 @@
 import express from 'express';
 import fs from 'node:fs';
 
-import { ContractValidationError } from '../../shared/vela-contracts.js';
+import {
+  ContractValidationError,
+  VELA_CONTROL_CAPABILITIES,
+  VELA_CONTROL_PROTOCOL_VERSION
+} from '../../shared/vela-contracts.js';
 import { ProviderError } from '../providers/openAiCompatibleProvider.js';
 import { ComfyUiError } from '../providers/comfyUiProvider.js';
 import { AutoDlPowerError } from '../providers/autodlPowerProvider.js';
@@ -17,13 +21,20 @@ const runtime = (req) => {
 const handleError = (res, error) => {
   const message = error instanceof Error ? error.message : 'Unknown error';
   const providerError = error instanceof ProviderError || error instanceof ComfyUiError || error instanceof AutoDlPowerError;
-  const status = providerError
+  const explicitStatus = Number(error?.status);
+  const status = !providerError && Number.isInteger(explicitStatus) && explicitStatus >= 400 && explicitStatus <= 599
+    ? explicitStatus
+    : providerError
     ? error.code === 'AUTH_FAILED' ? 401
       : ['MODEL_NOT_FOUND', 'CREDENTIAL_UNREADABLE', 'CREDENTIAL_MISSING'].includes(error.code) ? 422
         : 502
     : error instanceof ContractValidationError || /invalid|unsupported|required|cannot|不能为空|not found|不支持|无效|上传内容/i.test(message) ? 400 : 500;
   res.status(status).json(redactSecrets({
     error: message,
+    ...(!providerError && typeof error?.code === 'string' ? { code: error.code } : {}),
+    ...(!providerError && typeof error?.expectedFingerprint === 'string'
+      ? { details: { expectedFingerprint: error.expectedFingerprint } }
+      : {}),
     ...(providerError ? {
       code: error.code,
       retryable: error.retryable,
@@ -32,6 +43,14 @@ const handleError = (res, error) => {
     } : {})
   }));
 };
+
+router.get('/vela/capabilities', (_req, res) => {
+  res.json({
+    service: 'vela-control',
+    protocolVersion: VELA_CONTROL_PROTOCOL_VERSION,
+    capabilities: VELA_CONTROL_CAPABILITIES
+  });
+});
 
 router.get('/vela/profiles', (req, res) => {
   try { res.json(runtime(req).profiles.list({ type: req.query.type })); }
@@ -147,7 +166,7 @@ router.delete('/vela/projects/:id', (req, res) => {
     const service = runtime(req);
     const activeJobs = service.jobs.listJobs({ limit: 2000 }).filter((job) => (
       job.projectId === req.params.id
-      && ['queued', 'submitting', 'running', 'reconnecting', 'downloading'].includes(job.status)
+      && ['queued', 'preparing', 'submitting', 'running', 'reconnecting', 'downloading'].includes(job.status)
     ));
     if (activeJobs.length) {
       return res.status(409).json({ error: `项目仍有 ${activeJobs.length} 个生成任务，完成或取消后才能删除。` });
@@ -261,7 +280,8 @@ router.get('/vela/jobs', (req, res) => {
       status: req.query.status,
       profileId: req.query.profileId,
       groupId: req.query.groupId,
-      limit: req.query.limit
+      limit: req.query.limit,
+      newestFirst: req.query.order === 'recent'
     }));
   } catch (error) { handleError(res, error); }
 });
@@ -269,6 +289,22 @@ router.get('/vela/jobs', (req, res) => {
 router.post('/vela/jobs', (req, res) => {
   try { res.status(202).json(runtime(req).createJobGroup(req.body)); }
   catch (error) { handleError(res, error); }
+});
+
+router.get('/vela/jobs/by-external-key/:key', (req, res) => {
+  try {
+    const result = runtime(req).getJobGroupByExternalKey(req.params.key);
+    if (!result) return res.status(404).json({ error: '外部任务不存在' });
+    res.json(result);
+  } catch (error) { handleError(res, error); }
+});
+
+router.put('/vela/jobs/by-external-key/:key', (req, res) => {
+  try {
+    const { contractFingerprint, ...draft } = req.body || {};
+    const result = runtime(req).createOrGetJobGroup(req.params.key, contractFingerprint, draft);
+    res.status(result.created ? 202 : 200).json(result);
+  } catch (error) { handleError(res, error); }
 });
 
 router.get('/vela/jobs/:id', (req, res) => {

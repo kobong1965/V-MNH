@@ -38,6 +38,7 @@ export interface NodeData {
   parentIds?: string[]; // For connecting lines (supports multiple inputs)
   groupId?: string; // ID of the group this node belongs to
   errorMessage?: string;
+  submissionBlocked?: boolean; // A prior paid submission has no durable remote ID and must be reconciled manually
   generationProgress?: number; // 0-100 progress reported by a durable generation job
   uploadProgress?: number; // 0-100 while a local file is being read or persisted
   uploadSource?: 'canvas-drop'; // Enables retry guidance for files dropped onto the canvas

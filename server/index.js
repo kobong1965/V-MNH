@@ -23,6 +23,7 @@ import velaDataRoutes from './routes/vela-data.js';
 import { VelaRuntime } from './vela/runtime.js';
 import { createPairingService, isLoopbackRequest } from './vela/pairingService.js';
 import { getRuntimeDiscoveryUserDataDirectory, writeRuntimeDiscovery } from '../electron/serverRuntime.js';
+import { VELA_CONTROL_CAPABILITIES, VELA_CONTROL_PROTOCOL_VERSION } from '../shared/vela-contracts.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -91,7 +92,13 @@ app.use(cors());
 app.use(express.json({ limit: '512mb' }));
 
 app.get('/api/vela/health', (_req, res) => {
-    res.json({ ok: true, service: 'vela-control', version: 1 });
+    res.json({
+        ok: true,
+        service: 'vela-control',
+        version: 1,
+        protocolVersion: VELA_CONTROL_PROTOCOL_VERSION,
+        capabilities: VELA_CONTROL_CAPABILITIES
+    });
 });
 
 const localConnectionAction = (req, res, action) => {

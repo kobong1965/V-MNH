@@ -404,6 +404,12 @@ export default function App() {
     try {
       const projectId = workflowId || await handleSaveWorkflow();
       if (!projectId) throw new Error('无法保存当前项目，请保存后重试');
+      const uncertainSubmission = velaJobs.find((job) => (
+        job.projectId === projectId && job.nodeId === node.id && job.status === 'submission_uncertain'
+      ));
+      if (uncertainSubmission || node.submissionBlocked) {
+        throw new Error('该节点存在提交待核对任务。请先核对远端记录和扣费，系统不会重新提交。');
+      }
       const isScriptNode = VELA_SCRIPT_NODE_KINDS.has(node.kind);
       const isCompetitorAnalyzer = node.kind === 'competitor-script-analyzer';
       const isGptNode = node.kind.startsWith('gpt-') || isScriptNode;
@@ -655,9 +661,15 @@ export default function App() {
     setNodes((currentNodes) => {
       let changed = false;
       const nextNodes = currentNodes.map((node) => {
-        const nodeJobs = velaJobs.filter((job) => (
-          job.nodeId === node.id
-          && (!VELA_GENERATION_NODE_KINDS.has(node.kind || '') || !node.profileId || job.profileId === node.profileId)
+        const projectNodeJobs = velaJobs.filter((job) => (
+          job.nodeId === node.id && (!workflowId || job.projectId === workflowId)
+        ));
+        const uncertainJob = projectNodeJobs.find((job) => job.status === 'submission_uncertain');
+        const nodeJobs = projectNodeJobs.filter((job) => (
+          job.status === 'submission_uncertain'
+          || !VELA_GENERATION_NODE_KINDS.has(node.kind || '')
+          || !node.profileId
+          || job.profileId === node.profileId
         ));
         if (nodeJobs.length === 0) return node;
 
@@ -675,10 +687,12 @@ export default function App() {
         });
         const job = [...groupJobs].sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))[0];
         if (!job) return node;
-        const activeStatuses = new Set(['queued', 'submitting', 'running', 'reconnecting', 'downloading']);
+        const activeStatuses = new Set(['queued', 'preparing', 'submitting', 'running', 'reconnecting', 'downloading']);
         const hasActiveJobs = groupJobs.some((candidate) => activeStatuses.has(candidate.status));
         const succeededJobs = orderedJobs.filter((candidate) => candidate.status === 'succeeded');
-        const nextStatus = hasActiveJobs
+        const nextStatus = uncertainJob
+          ? NodeStatus.ERROR
+          : hasActiveJobs
           ? NodeStatus.LOADING
           : succeededJobs.length > 0
             ? NodeStatus.SUCCESS
@@ -690,7 +704,9 @@ export default function App() {
         const generationProgress = progressValues.length === 0
           ? undefined
           : Math.max(0, Math.min(100, Math.round((progressValues.reduce((sum, value) => sum + value, 0) / groupJobs.length) * 100)));
-        const errorMessage = job.status === 'failed'
+        const errorMessage = uncertainJob
+          ? getVelaJobErrorMessage(uncertainJob.error)
+          : ['failed', 'submission_uncertain'].includes(job.status)
           ? getVelaJobErrorMessage(job.error)
           : job.status === 'cancelled'
             ? '任务已取消。'
@@ -709,6 +725,7 @@ export default function App() {
 
         if (
           node.status === nextStatus
+          && node.submissionBlocked === Boolean(uncertainJob)
           && node.generationProgress === generationProgress
           && node.errorMessage === errorMessage
           && node.resultUrl === resultUrl
@@ -721,6 +738,7 @@ export default function App() {
         return {
           ...node,
           status: nextStatus,
+          submissionBlocked: Boolean(uncertainJob),
           generationProgress,
           errorMessage,
           resultUrl,
@@ -731,7 +749,7 @@ export default function App() {
       });
       return changed ? nextNodes : currentNodes;
     });
-  }, [velaJobs, setNodes]);
+  }, [velaJobs, workflowId, setNodes]);
 
   // Keep a ref to handleGenerate so setTimeout callbacks can access the latest version
   const handleGenerateRef = React.useRef(handleGenerate);
@@ -1483,7 +1501,7 @@ export default function App() {
   // handleContextMenuCreateAsset, handleContextMenuSelect, handleToolbarAdd
 
 
-  const activeTaskCount = velaJobs.filter(job => (!workflowId || job.projectId === workflowId) && ['queued', 'submitting', 'running', 'reconnecting', 'downloading'].includes(job.status)).length;
+  const activeTaskCount = velaJobs.filter(job => (!workflowId || job.projectId === workflowId) && ['queued', 'preparing', 'submitting', 'running', 'reconnecting', 'downloading'].includes(job.status)).length;
   const focusTaskNode = React.useCallback((nodeId: string) => {
     const node = nodes.find((candidate) => candidate.id === nodeId);
     if (!node) return;

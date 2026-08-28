@@ -1,5 +1,6 @@
 const ACTIVE_JOB_STATUSES = new Set([
   'queued',
+  'preparing',
   'submitting',
   'running',
   'reconnecting',

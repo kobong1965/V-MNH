@@ -40,7 +40,7 @@ const activeJobCount = async () => {
     const response = await fetch(`${serviceBaseUrl}/api/vela/jobs?limit=500`);
     if (!response.ok) return 0;
     const jobs = await response.json();
-    return jobs.filter((job) => ['queued', 'submitting', 'running', 'reconnecting', 'downloading'].includes(job.status)).length;
+    return jobs.filter((job) => ['queued', 'preparing', 'submitting', 'running', 'reconnecting', 'downloading'].includes(job.status)).length;
   } catch { return 0; }
 };
 

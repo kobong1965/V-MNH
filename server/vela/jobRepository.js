@@ -25,6 +25,24 @@ const toJob = (row) => row ? ({
   updatedAt: row.updated_at
 }) : null;
 
+export class JobGroupContractConflictError extends Error {
+  constructor(externalKey) {
+    super(`External job contract conflicts with the existing group: ${externalKey}`);
+    this.name = 'JobGroupContractConflictError';
+    this.status = 409;
+    this.code = 'JOB_CONTRACT_CONFLICT';
+  }
+}
+
+export class JobSubmissionUncertainError extends Error {
+  constructor(projectId, nodeId) {
+    super(`Node ${projectId}/${nodeId} has a submission that requires manual reconciliation`);
+    this.name = 'JobSubmissionUncertainError';
+    this.status = 409;
+    this.code = 'JOB_SUBMISSION_UNCERTAIN';
+  }
+}
+
 export class JobRepository {
   constructor(database, { onEvent } = {}) {
     this.database = database;
@@ -35,40 +53,107 @@ export class JobRepository {
   createGroup(group, jobs) {
     const now = new Date().toISOString();
     return this.database.transaction(() => {
-      this.db.prepare(`
-        INSERT INTO job_groups(id, project_id, node_id, provider_type, profile_id, seed_mode, base_seed, total_count, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(group.id, group.projectId, group.nodeId, group.providerType, group.profileId, group.seedMode, group.baseSeed, jobs.length, now, now);
-
-      const insertJob = this.db.prepare(`
-        INSERT INTO jobs(id, group_id, project_id, node_id, provider_type, profile_id, status, payload_json, seed, workflow_version, priority, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, 'queued', ?, ?, ?, ?, ?, ?)
-      `);
-      for (const job of jobs) {
-        insertJob.run(
-          job.id,
-          group.id,
-          group.projectId,
-          group.nodeId,
-          group.providerType,
-          group.profileId,
-          JSON.stringify(job.payload),
-          job.seed,
-          job.workflowVersion || null,
-          job.priority || 0,
-          now,
-          now
-        );
-      }
+      this.assertNodeSubmissionSafe(group.projectId, group.nodeId);
+      this.insertGroupAndJobs(group, jobs, now);
       return this.getGroup(group.id);
     });
+  }
+
+  insertGroupAndJobs(group, jobs, now = new Date().toISOString()) {
+    this.db.prepare(`
+      INSERT INTO job_groups(
+        id, project_id, node_id, provider_type, profile_id, seed_mode, base_seed, total_count,
+        external_key, contract_fingerprint, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      group.id, group.projectId, group.nodeId, group.providerType, group.profileId,
+      group.seedMode, group.baseSeed, jobs.length, group.externalKey || null,
+      group.contractFingerprint || null, now, now
+    );
+
+    const insertJob = this.db.prepare(`
+      INSERT INTO jobs(id, group_id, project_id, node_id, provider_type, profile_id, status, payload_json, seed, workflow_version, priority, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, 'queued', ?, ?, ?, ?, ?, ?)
+    `);
+    for (const job of jobs) {
+      insertJob.run(
+        job.id,
+        group.id,
+        group.projectId,
+        group.nodeId,
+        group.providerType,
+        group.profileId,
+        JSON.stringify(job.payload),
+        job.seed,
+        job.workflowVersion || null,
+        job.priority || 0,
+        now,
+        now
+      );
+    }
+  }
+
+  createOrGetExternalGroup(group, jobs) {
+    if (!group?.externalKey || !group?.contractFingerprint || jobs.length !== 1) {
+      throw new Error('External job groups require one job, an external key, and a contract fingerprint');
+    }
+    const now = new Date().toISOString();
+    return this.database.transaction(() => {
+      const existing = this.db.prepare('SELECT * FROM job_groups WHERE external_key = ?').get(group.externalKey);
+      if (existing) {
+        const conflicts = existing.contract_fingerprint !== group.contractFingerprint
+          || existing.project_id !== group.projectId
+          || existing.node_id !== group.nodeId
+          || existing.provider_type !== group.providerType;
+        if (conflicts) throw new JobGroupContractConflictError(group.externalKey);
+        return {
+          created: false,
+          group: this.getGroup(existing.id),
+          jobs: this.listJobs({ groupId: existing.id, limit: 1 })
+        };
+      }
+      this.assertNodeSubmissionSafe(group.projectId, group.nodeId);
+      this.insertGroupAndJobs(group, jobs, now);
+      return {
+        created: true,
+        group: this.getGroup(group.id),
+        jobs: this.listJobs({ groupId: group.id, limit: 1 })
+      };
+    });
+  }
+
+  getGroupByExternalKey(externalKey) {
+    const row = this.db.prepare('SELECT id FROM job_groups WHERE external_key = ?').get(externalKey);
+    return row ? this.getGroup(row.id) : null;
+  }
+
+  getExternalGroupBundle(externalKey) {
+    const group = this.getGroupByExternalKey(externalKey);
+    if (!group) return null;
+    const jobs = this.listJobs({ groupId: group.id, limit: 2 });
+    if (jobs.length !== 1) throw new Error(`External job group ${group.id} does not contain exactly one job`);
+    return { group, job: jobs[0] };
+  }
+
+  findSubmissionUncertain(projectId, nodeId) {
+    return toJob(this.db.prepare(`
+      SELECT * FROM jobs
+      WHERE project_id = ? AND node_id = ? AND status = 'submission_uncertain'
+      ORDER BY updated_at DESC
+      LIMIT 1
+    `).get(projectId, nodeId));
+  }
+
+  assertNodeSubmissionSafe(projectId, nodeId) {
+    const uncertain = this.findSubmissionUncertain(projectId, nodeId);
+    if (uncertain) throw new JobSubmissionUncertainError(projectId, nodeId);
   }
 
   getJob(jobId) {
     return toJob(this.db.prepare('SELECT * FROM jobs WHERE id = ?').get(jobId));
   }
 
-  listJobs({ status, profileId, groupId, limit = 500 } = {}) {
+  listJobs({ status, profileId, groupId, limit = 500, newestFirst = false } = {}) {
     const clauses = [];
     const values = [];
     if (status) { clauses.push('status = ?'); values.push(status); }
@@ -78,7 +163,7 @@ export class JobRepository {
     return this.db.prepare(`
       SELECT * FROM jobs
       ${clauses.length ? `WHERE ${clauses.join(' AND ')}` : ''}
-      ORDER BY priority DESC, created_at ASC
+      ORDER BY ${newestFirst ? 'updated_at DESC, created_at DESC' : 'priority DESC, created_at ASC'}
       LIMIT ?
     `).all(...values).map(toJob);
   }
@@ -91,6 +176,7 @@ export class JobRepository {
         COUNT(*) AS total,
         SUM(CASE WHEN status = 'succeeded' THEN 1 ELSE 0 END) AS succeeded,
         SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed,
+        SUM(CASE WHEN status = 'submission_uncertain' THEN 1 ELSE 0 END) AS submission_uncertain,
         SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) AS cancelled
       FROM jobs WHERE group_id = ?
     `).get(groupId);
@@ -102,9 +188,12 @@ export class JobRepository {
       profileId: group.profile_id,
       seedMode: group.seed_mode,
       baseSeed: group.base_seed,
+      externalKey: group.external_key || null,
+      contractFingerprint: group.contract_fingerprint || null,
       totalCount: counts.total,
       succeededCount: counts.succeeded,
       failedCount: counts.failed,
+      submissionUncertainCount: counts.submission_uncertain,
       cancelledCount: counts.cancelled,
       createdAt: group.created_at,
       updatedAt: group.updated_at
@@ -124,6 +213,7 @@ export class JobRepository {
       retryCount: patch.retryCount ?? current.retryCount
     };
     this.database.transaction(() => {
+      if (nextStatus === 'queued') this.assertNodeSubmissionSafe(current.projectId, current.nodeId);
       this.db.prepare(`
         UPDATE jobs SET status = ?, progress = ?, prompt_id = ?, error_json = ?, output_json = ?, retry_count = ?, updated_at = ?
         WHERE id = ?
@@ -166,6 +256,7 @@ export class JobRepository {
   retry(jobId) {
     const current = this.getJob(jobId);
     if (!current) throw new Error(`Job not found: ${jobId}`);
+    this.assertNodeSubmissionSafe(current.projectId, current.nodeId);
     const completedComfyPrompt = current.providerType === 'comfy'
       && ['EXECUTION_FAILED', 'OUTPUT_NOT_FOUND'].includes(current.error?.code);
     return this.transition(jobId, 'queued', {
@@ -177,13 +268,54 @@ export class JobRepository {
   }
 
   recoverAfterRestart() {
-    const recoverable = this.listJobs({ limit: 2000 })
-      .filter((job) => ['queued', 'submitting', 'running', 'reconnecting', 'downloading'].includes(job.status));
+    const recoverable = this.db.prepare(`
+      SELECT * FROM jobs
+      WHERE status IN ('queued', 'preparing', 'submitting', 'running', 'reconnecting', 'downloading')
+      ORDER BY priority DESC, created_at ASC
+    `).all().map(toJob);
     const recovered = [];
+
+    // First make every paid submission whose remote id was not persisted terminal.
+    // This pass must finish before any queued/preparing row is considered, otherwise
+    // row order could requeue an older sibling before a later uncertain submit is seen.
     for (const job of recoverable) {
-      const nextStatus = getRestartRecoveryStatus(job);
-      if (nextStatus !== job.status) recovered.push(this.transition(job.id, nextStatus));
-      else recovered.push(job);
+      if (getRestartRecoveryStatus(job) !== 'submission_uncertain') continue;
+      recovered.push(this.transition(job.id, 'submission_uncertain', {
+        error: {
+          code: 'SUBMISSION_UNCERTAIN',
+          message: '远端可能已受理该任务，但本机在持久化任务 ID 前中断。为避免重复扣费，不会自动重新提交。',
+          retryable: false,
+          safeToRetry: false
+        }
+      }));
+    }
+
+    const uncertainNodes = new Set(this.db.prepare(`
+      SELECT DISTINCT project_id, node_id
+      FROM jobs
+      WHERE status = 'submission_uncertain'
+    `).all().map((row) => `${row.project_id}\u0000${row.node_id}`));
+
+    for (const job of recoverable) {
+      const current = this.getJob(job.id);
+      if (!current || current.status === 'submission_uncertain') continue;
+      const nodeKey = `${current.projectId}\u0000${current.nodeId}`;
+      if (uncertainNodes.has(nodeKey) && ['queued', 'preparing'].includes(current.status)) {
+        recovered.push(this.transition(job.id, 'failed', {
+          error: {
+            code: 'JOB_SUBMISSION_UNCERTAIN',
+            message: '同一节点存在需要人工核对的提交，该等待任务已停止以避免重复扣费。',
+            retryable: false,
+            safeToRetry: false
+          }
+        }));
+        continue;
+      }
+      const nextStatus = getRestartRecoveryStatus(current);
+      if (nextStatus !== current.status) {
+        recovered.push(this.transition(current.id, nextStatus));
+      }
+      else recovered.push(current);
     }
     return recovered;
   }

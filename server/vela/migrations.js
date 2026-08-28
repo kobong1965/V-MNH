@@ -1,4 +1,4 @@
-export const DATABASE_SCHEMA_VERSION = 2;
+export const DATABASE_SCHEMA_VERSION = 3;
 
 export const MIGRATIONS = [
   {
@@ -72,6 +72,16 @@ export const MIGRATIONS = [
     sql: `
       ALTER TABLE jobs ADD COLUMN priority INTEGER NOT NULL DEFAULT 0;
       CREATE INDEX IF NOT EXISTS idx_jobs_queue_order ON jobs(profile_id, status, priority DESC, created_at);
+    `
+  },
+  {
+    version: 3,
+    name: 'external-job-contracts',
+    sql: `
+      ALTER TABLE job_groups ADD COLUMN external_key TEXT;
+      ALTER TABLE job_groups ADD COLUMN contract_fingerprint TEXT;
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_job_groups_external_key
+        ON job_groups(external_key) WHERE external_key IS NOT NULL;
     `
   }
 ];

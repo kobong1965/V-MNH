@@ -18,16 +18,18 @@ interface VelaTaskCenterProps {
 
 const STATUS_TEXT: Record<VelaJobStatus, string> = {
   queued: '等待算力',
+  preparing: '准备素材',
   submitting: '正在提交',
   running: '生成中',
   reconnecting: '正在恢复',
   downloading: '下载中',
   succeeded: '已完成',
   failed: '失败',
+  submission_uncertain: '提交待核对',
   cancelled: '已取消'
 };
 
-const RUNNING = new Set<VelaJobStatus>(['submitting', 'running', 'reconnecting', 'downloading']);
+const RUNNING = new Set<VelaJobStatus>(['preparing', 'submitting', 'running', 'reconnecting', 'downloading']);
 
 export function VelaTaskCenter({
   isOpen,
@@ -44,11 +46,11 @@ export function VelaTaskCenter({
   const projectJobs = useMemo(() => projectId ? jobs.filter((job) => job.projectId === projectId) : jobs, [jobs, projectId]);
   const visibleJobs = useMemo(() => projectJobs.filter((job) => (
     filter === 'active' ? RUNNING.has(job.status) || job.status === 'queued'
-      : filter === 'failed' ? job.status === 'failed'
+      : filter === 'failed' ? ['failed', 'submission_uncertain'].includes(job.status)
         : true
   )), [filter, projectJobs]);
   const runningCount = projectJobs.filter((job) => RUNNING.has(job.status) || job.status === 'queued').length;
-  const failedCount = projectJobs.filter((job) => job.status === 'failed').length;
+  const failedCount = projectJobs.filter((job) => ['failed', 'submission_uncertain'].includes(job.status)).length;
   const profileNames = new Map(profiles.map((profile) => [profile.id, profile.name]));
   if (!isOpen) return null;
 
@@ -89,7 +91,7 @@ export function VelaTaskCenter({
               <div className="vela-task-copy">
                 <strong>{String(job.payload.prompt || job.providerType)}</strong>
                 <span>{profileNames.get(job.profileId) || job.profileId} · Seed {job.seed} · 重试 {job.retryCount}</span>
-                {job.status === 'failed' && (
+                {['failed', 'submission_uncertain'].includes(job.status) && (
                   <span className="vela-task-reason" title={job.error?.message || undefined}>
                     {getVelaJobErrorMessage(job.error)}
                   </span>
@@ -105,7 +107,7 @@ export function VelaTaskCenter({
                 <button className="vela-button vela-icon-button" onClick={() => void onRetry(job.id)} aria-label="重试任务" title="重试任务">
                   <RotateCcw size={15} aria-hidden="true" />
                 </button>
-              ) : (
+              ) : job.status === 'submission_uncertain' ? null : (
                 <button
                   className="vela-button vela-icon-button"
                   onClick={() => void onCancel(job.id)}

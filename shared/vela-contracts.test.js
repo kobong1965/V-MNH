@@ -4,6 +4,7 @@ import test from 'node:test';
 import {
   ContractValidationError,
   VELA_SCHEMA_VERSION,
+  validateExternalJobContract,
   validateJobGroupDraft,
   validateProjectDocument,
   validatePublicProfile
@@ -57,5 +58,21 @@ test('job group contract enforces the approved batch boundary', () => {
   assert.throws(
     () => validateJobGroupDraft({ projectId: 'p', nodeId: 'n', count: 51, seedMode: 'random' }),
     /1-50/
+  );
+});
+
+test('external job identity requires a URL-safe key and a lowercase SHA-256 fingerprint', () => {
+  const valid = validateExternalJobContract({
+    externalKey: 'storyworks:project-1:unit-2:take-3',
+    contractFingerprint: 'a'.repeat(64)
+  });
+  assert.equal(valid.externalKey, 'storyworks:project-1:unit-2:take-3');
+  assert.throws(
+    () => validateExternalJobContract({ externalKey: 'storyworks/unit', contractFingerprint: 'a'.repeat(64) }),
+    /externalKey/
+  );
+  assert.throws(
+    () => validateExternalJobContract({ externalKey: 'storyworks:unit', contractFingerprint: 'A'.repeat(64) }),
+    /contractFingerprint/
   );
 });

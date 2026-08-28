@@ -9,6 +9,8 @@ import express from 'express';
 import velaDataRoutes from './vela-data.js';
 import { ProviderError } from '../providers/openAiCompatibleProvider.js';
 import { VelaRuntime } from '../vela/runtime.js';
+import { computeExternalH3ContractFingerprint } from '../vela/externalJobContract.js';
+import { AUTO_COMFY_PROFILE_ID } from '../../shared/vela-contracts.js';
 
 const createServer = async (runtimeOptions = {}) => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'vela-routes-'));
@@ -374,6 +376,109 @@ test('job API persists a batch and streams it through the fake lifecycle', async
   } finally {
     await fixture.close();
   }
+});
+
+test('capability discovery advertises the durable external-key video contract', async () => {
+  const fixture = await createServer();
+  try {
+    const result = await requestJson(`${fixture.baseUrl}/capabilities`);
+    assert.equal(result.response.status, 200);
+    assert.equal(result.data.protocolVersion, 2);
+    assert.equal(result.data.capabilities.durableVideoProvider.contractVersion, 1);
+    assert.equal(result.data.capabilities.durableVideoProvider.createOrReturnMethod, 'PUT');
+    assert.equal(result.data.capabilities.durableVideoProvider.lookupMethod, 'GET');
+    assert.equal(result.data.capabilities.durableVideoProvider.externalKeyField, 'path.externalKey');
+    assert.equal(result.data.capabilities.durableVideoProvider.contractFingerprintField, 'body.contractFingerprint');
+    assert.equal(result.data.capabilities.durableVideoProvider.maxJobsPerExternalKey, 1);
+    assert.equal(result.data.capabilities.durableVideoProvider.terminalSubmissionUncertain, true);
+  } finally {
+    await fixture.close();
+  }
+});
+
+test('external-key job API atomically creates once, returns the same job, and rejects contract drift', async () => {
+  const fixture = await createServer();
+  const externalKey = 'storyworks:project-1:unit-7:take-2';
+  const url = `${fixture.baseUrl}/jobs/by-external-key/${encodeURIComponent(externalKey)}`;
+  const draft = {
+    projectId: 'project-1', nodeId: 'unit-7-take-2', profileId: AUTO_COMFY_PROFILE_ID, providerType: 'comfy',
+    payload: { nodeKind: 'h3-video', prompt: '候选 take 2', duration: 5, aspectRatio: '16:9', resolution: '720p', videoGenerationMode: 'reference-to-video', referenceUrls: ['/asset/person-v3.png'], requiredReferenceCount: 1 },
+    count: 1, seedMode: 'fixed', seed: 17
+  };
+  try {
+    fixture.runtime.createProfile({ type: 'comfy', name: 'H3', baseUrl: 'http://127.0.0.1:18188', transport: 'direct', authType: 'none', workflowVersion: 'minimax-h3-r2v-v1' });
+    const contractFingerprint = computeExternalH3ContractFingerprint(draft);
+    const requestDraft = { ...draft, contractFingerprint };
+    const [first, second] = await Promise.all([
+      requestJson(url, { method: 'PUT', body: JSON.stringify(requestDraft) }),
+      requestJson(url, { method: 'PUT', body: JSON.stringify(requestDraft) })
+    ]);
+    assert.deepEqual(new Set([first.response.status, second.response.status]), new Set([200, 202]));
+    assert.deepEqual(new Set([first.data.created, second.data.created]), new Set([false, true]));
+    assert.equal(first.data.group.id, second.data.group.id);
+    assert.equal(first.data.jobs[0].id, second.data.jobs[0].id);
+    assert.equal(first.data.group.externalKey, externalKey);
+    assert.equal(first.data.group.contractFingerprint, contractFingerprint);
+
+    const exact = await requestJson(url);
+    assert.equal(exact.response.status, 200);
+    assert.equal(exact.data.group.id, first.data.group.id);
+    assert.equal(exact.data.job.id, first.data.jobs[0].id);
+
+    const stored = fixture.runtime.database.connection.prepare('SELECT COUNT(*) AS count FROM jobs WHERE group_id = ?').get(first.data.group.id);
+    assert.equal(stored.count, 1);
+
+    const conflict = await requestJson(url, {
+      method: 'PUT',
+      body: JSON.stringify({ ...draft, prompt: undefined, payload: { ...draft.payload, prompt: 'different take' }, contractFingerprint: computeExternalH3ContractFingerprint({ ...draft, payload: { ...draft.payload, prompt: 'different take' } }) })
+    });
+    assert.equal(conflict.response.status, 409);
+    assert.equal(conflict.data.code, 'JOB_CONTRACT_CONFLICT');
+    assert.equal(fixture.runtime.database.connection.prepare('SELECT COUNT(*) AS count FROM jobs').get().count, 1);
+
+    const oversized = await requestJson(`${fixture.baseUrl}/jobs/by-external-key/storyworks:other`, {
+      method: 'PUT',
+      body: JSON.stringify({ ...requestDraft, count: 2 })
+    });
+    assert.equal(oversized.response.status, 400);
+  } finally {
+    await fixture.close();
+  }
+});
+
+test('exact external-key lookup finds a new job after more than 2000 older jobs without creating work', async () => {
+  const fixture = await createServer();
+  const externalKey = 'storyworks:exact:newest-unit:take-1';
+  try {
+    const db = fixture.runtime.database.connection;
+    fixture.runtime.database.transaction(() => {
+      const insertGroup = db.prepare(`INSERT INTO job_groups(id, project_id, node_id, provider_type, profile_id, seed_mode, base_seed, total_count, created_at, updated_at) VALUES (?, 'legacy-project', ?, 'fake', 'local', 'fixed', 1, 1, ?, ?)`);
+      const insertJob = db.prepare(`INSERT INTO jobs(id, group_id, project_id, node_id, provider_type, profile_id, status, payload_json, seed, priority, created_at, updated_at) VALUES (?, ?, 'legacy-project', ?, 'fake', 'local', 'succeeded', '{}', 1, 0, ?, ?)`);
+      for (let index = 0; index < 2001; index += 1) {
+        const groupId = `legacy-group-${index}`;
+        const nodeId = `legacy-node-${index}`;
+        const createdAt = new Date(index * 1000).toISOString();
+        insertGroup.run(groupId, nodeId, createdAt, createdAt);
+        insertJob.run(`legacy-job-${index}`, groupId, nodeId, createdAt, createdAt);
+      }
+    });
+    const before = db.prepare('SELECT COUNT(*) AS count FROM jobs').get().count;
+    const created = fixture.runtime.jobs.createOrGetExternalGroup({
+      id: 'exact-group', projectId: 'new-project', nodeId: 'new-node', providerType: 'comfy', profileId: 'resolved-h3', seedMode: 'fixed', baseSeed: 9,
+      externalKey, contractFingerprint: 'd'.repeat(64)
+    }, [{ id: 'exact-job', payload: { nodeKind: 'h3-video' }, seed: 9 }]);
+    assert.equal(created.created, true);
+
+    const exact = await requestJson(`${fixture.baseUrl}/jobs/by-external-key/${encodeURIComponent(externalKey)}`);
+    assert.equal(exact.response.status, 200);
+    assert.equal(exact.data.group.id, 'exact-group');
+    assert.equal(exact.data.job.id, 'exact-job');
+    assert.equal(db.prepare('SELECT COUNT(*) AS count FROM jobs').get().count, before + 1);
+
+    const missing = await requestJson(`${fixture.baseUrl}/jobs/by-external-key/${encodeURIComponent('storyworks:missing:key')}`);
+    assert.equal(missing.response.status, 404);
+    assert.equal(db.prepare('SELECT COUNT(*) AS count FROM jobs').get().count, before + 1);
+  } finally { await fixture.close(); }
 });
 
 test('job API rejects plaintext secrets before persistence', async () => {

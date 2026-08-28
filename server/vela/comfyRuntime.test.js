@@ -8,6 +8,7 @@ import sharp from 'sharp';
 import { VelaRuntime } from './runtime.js';
 import { SecretProtector } from './secretProtector.js';
 import { AUTO_COMFY_PROFILE_ID } from '../../shared/vela-contracts.js';
+import { computeExternalH3ContractFingerprint } from './externalJobContract.js';
 
 const saveReference = async (runtime, projectId, name, color) => {
   const data = await sharp({ create: { width: 128, height: 128, channels: 3, background: color } }).png().toBuffer();
@@ -53,6 +54,67 @@ test('Comfy H3 R2V uploads every reference, persists prompt id and downloads the
     assert.deepEqual(submittedGraph['6'].inputs['ref_images.ref_image_2'], ['22', 0]);
     assert.equal(submittedGraph['10'].inputs.steps, 4);
   } finally { runtime.close(); fs.rmSync(directory, { recursive: true, force: true }); }
+});
+
+test('an uncertain H3 submit is terminal and an external-key replay never sends a second POST', async () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'vela-comfy-submit-uncertain-'));
+  let submissions = 0;
+  const provider = {
+    uploadImage: async () => 'vela/reference.png',
+    submitPrompt: async () => {
+      submissions += 1;
+      const error = new Error('socket closed after request bytes were sent');
+      error.code = 'NETWORK_ERROR';
+      error.retryable = true;
+      throw error;
+    },
+    close: () => {}
+  };
+  const runtime = new VelaRuntime({
+    dataDirectory: directory,
+    projectsDirectory: path.join(directory, 'projects'),
+    secretProtector: new SecretProtector({ key: Buffer.alloc(32, 21) }),
+    comfyProvider: provider,
+    mediaFetch
+  });
+  try {
+    const project = runtime.projectStore.saveProject({ name: 'Uncertain submit', nodes: [], groups: [], viewport: { x: 0, y: 0, zoom: 1 } });
+    const reference = await saveReference(runtime, project.id, 'reference.png', { r: 30, g: 60, b: 90 });
+    runtime.createProfile({ type: 'comfy', name: 'H3', baseUrl: 'http://127.0.0.1:18188', transport: 'direct', authType: 'none', workflowVersion: 'minimax-h3-r2v-v1' });
+    const externalKey = 'storyworks:uncertain:unit-1:take-1';
+    const draft = {
+      projectId: project.id,
+      nodeId: 'unit-1-take-1',
+      profileId: AUTO_COMFY_PROFILE_ID,
+      providerType: 'comfy',
+      payload: {
+        nodeKind: 'h3-video', prompt: '<Picture 1> actor moves', duration: 5, aspectRatio: '16:9', resolution: '720p',
+        videoGenerationMode: 'reference-to-video', referenceUrls: [reference.url], requiredReferenceCount: 1
+      },
+      count: 1,
+      seedMode: 'fixed',
+      seed: 23
+    };
+    const fingerprint = computeExternalH3ContractFingerprint(draft);
+
+    const created = runtime.createOrGetJobGroup(externalKey, fingerprint, draft);
+    const replayed = runtime.createOrGetJobGroup(externalKey, fingerprint, draft);
+    assert.equal(created.created, true);
+    assert.equal(replayed.created, false);
+    assert.equal(replayed.jobs[0].id, created.jobs[0].id);
+    await runtime.scheduler.waitForIdle();
+
+    const job = runtime.jobs.getJob(created.jobs[0].id);
+    assert.equal(submissions, 1);
+    assert.equal(job.status, 'submission_uncertain');
+    assert.equal(job.error.code, 'SUBMISSION_UNCERTAIN');
+    assert.equal(job.error.safeToRetry, false);
+    assert.throws(() => runtime.retryJob(job.id), /requires manual reconciliation/);
+    assert.equal(submissions, 1);
+  } finally {
+    runtime.close();
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
 });
 
 test('AutoDL Pro H3 R2V job powers on once before submitting the Comfy prompt', async () => {

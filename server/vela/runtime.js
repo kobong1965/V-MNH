@@ -4,7 +4,8 @@ import path from 'node:path';
 import { expandJobGroup } from './batch.js';
 import { VelaDatabase } from './database.js';
 import { EventHub } from './eventHub.js';
-import { JobRepository } from './jobRepository.js';
+import { JobGroupContractConflictError, JobRepository } from './jobRepository.js';
+import { assertExternalH3ContractFingerprint } from './externalJobContract.js';
 import { getShanghaiDayWindow, H3UsageAnalytics } from './h3UsageAnalytics.js';
 import { ProjectMediaStore } from './mediaStore.js';
 import { ProfileRepository } from './profileRepository.js';
@@ -28,7 +29,11 @@ import {
 import { CloudPowerManager } from './cloudPowerManager.js';
 import { injectWanWorkflowInputs } from './wanWorkflowRuntime.js';
 import { PortableBackupService } from './portableBackup.js';
-import { AUTO_COMFY_PROFILE_ID } from '../../shared/vela-contracts.js';
+import {
+  AUTO_COMFY_PROFILE_ID,
+  validateExternalJobContract,
+  validateExternalJobKey
+} from '../../shared/vela-contracts.js';
 
 const delay = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 const MODEL_CACHE_TTL_MS = 30_000;
@@ -177,7 +182,8 @@ export class VelaRuntime {
       await delay(this.fakeStepDelay);
       return true;
     };
-    if (!await move('queued', 'submitting', { progress: 0 })) return;
+    if (!await move('queued', 'preparing', { progress: 0 })) return;
+    if (!await move('preparing', 'submitting', { progress: 0.05 })) return;
     if (!await move('submitting', 'running', { promptId: `fake-${crypto.randomUUID()}`, progress: 0.2 })) return;
     if (!await move('running', 'downloading', { progress: 0.9 })) return;
     await move('downloading', 'succeeded', {
@@ -190,9 +196,9 @@ export class VelaRuntime {
     if (!['gpt', 'comfy'].includes(job.providerType)) return false;
     if (this.projectStore.getProject(job.projectId)) return false;
     let current = this.jobs.getJob(job.id);
-    if (!current || !['queued', 'submitting', 'running', 'reconnecting', 'downloading'].includes(current.status)) return true;
-    if (current.status === 'queued') current = this.jobs.transition(job.id, 'submitting', { progress: 0 });
-    if (['submitting', 'running', 'reconnecting', 'downloading'].includes(current.status)) {
+    if (!current || !['queued', 'preparing', 'submitting', 'running', 'reconnecting', 'downloading'].includes(current.status)) return true;
+    if (current.status === 'queued') current = this.jobs.transition(job.id, 'preparing', { progress: 0 });
+    if (['preparing', 'submitting', 'running', 'reconnecting', 'downloading'].includes(current.status)) {
       this.jobs.transition(job.id, 'failed', {
         error: {
           code: 'PROJECT_NOT_FOUND',
@@ -209,12 +215,25 @@ export class VelaRuntime {
   async executeGptJob(job) {
     let credentials = this.profiles.get(job.profileId);
     let resolvedModel;
+    let submissionAttempted = false;
     const requestId = `gpt-${crypto.randomUUID()}`;
     const startedAt = Date.now();
+    const beginSubmission = () => {
+      const current = this.jobs.getJob(job.id);
+      if (current?.status !== 'preparing') throw new Error(`Job ${job.id} is not ready to submit`);
+      this.jobs.transition(job.id, 'submitting', { progress: 0.05 });
+      submissionAttempted = true;
+    };
+    const markSynchronousResponse = () => {
+      const current = this.jobs.getJob(job.id);
+      if (current?.status === 'submitting') {
+        this.jobs.transition(job.id, 'running', { promptId: requestId, progress: 0.75 });
+      }
+    };
     try {
       const startingJob = this.jobs.getJob(job.id);
       if (startingJob?.status === 'queued') {
-        this.jobs.transition(job.id, 'submitting', { progress: 0 });
+        this.jobs.transition(job.id, 'preparing', { progress: 0 });
       } else if (startingJob?.status !== 'reconnecting') {
         return startingJob;
       }
@@ -257,7 +276,7 @@ export class VelaRuntime {
           // A retry with a durable remote task ID must only resume polling.
           // Re-submitting here could create and charge for a duplicate video.
           const current = this.jobs.getJob(job.id);
-          if (current && ['submitting', 'reconnecting'].includes(current.status)) {
+          if (current && ['preparing', 'submitting', 'reconnecting'].includes(current.status)) {
             this.jobs.transition(job.id, 'running', { promptId: job.promptId, progress: 0.1 });
           }
           result = await this.gptProvider.pollVideoTask(
@@ -267,6 +286,7 @@ export class VelaRuntime {
             { onProgress: onVideoProgress }
           );
         } else {
+          beginSubmission();
           result = await this.gptProvider.generateVideo(credentials, credentials.secret.apiKey, {
             prompt: job.payload.prompt,
             seconds: job.payload.duration,
@@ -282,6 +302,10 @@ export class VelaRuntime {
             },
             onProgress: onVideoProgress
           });
+          const submittedJob = this.jobs.getJob(job.id);
+          if (submittedJob?.status === 'submitting' && result?.taskId) {
+            this.jobs.transition(job.id, 'running', { promptId: result.taskId, progress: 0.75 });
+          }
         }
         const current = this.jobs.getJob(job.id);
         if (!current || current.status !== 'running') {
@@ -296,15 +320,16 @@ export class VelaRuntime {
         }, authenticatedDownloadOptions(result, credentials, credentials.secret.apiKey));
         return this.jobs.transition(job.id, 'succeeded', { progress: 1, output: { media } });
       }
-      this.jobs.transition(job.id, 'running', { promptId: requestId, progress: 0.1 });
       if (job.payload.nodeKind === 'gpt-prompt-optimizer') {
         const reference = job.payload.referenceUrls?.[0]
           ? this.media.readReference(job.projectId, job.payload.referenceUrls[0])
           : null;
+        beginSubmission();
         const optimized = await this.gptProvider.optimizePrompt(credentials, credentials.secret.apiKey, {
           prompt: job.payload.prompt,
           imageDataUrl: reference ? `data:${reference.mime};base64,${reference.data.toString('base64')}` : undefined
         });
+        markSynchronousResponse();
         this.jobs.transition(job.id, 'downloading', { progress: 0.95 });
         return this.jobs.transition(job.id, 'succeeded', { progress: 1, output: optimized });
       }
@@ -316,12 +341,14 @@ export class VelaRuntime {
           }
           return `data:${reference.mime};base64,${reference.data.toString('base64')}`;
         });
+        beginSubmission();
         const scripted = await this.gptProvider.generateDirectorScript(credentials, credentials.secret.apiKey, {
           brief: job.payload.sourceBrief || job.payload.prompt,
           persona: job.payload.directorPersona,
           productImageDataUrls,
           model: resolvedModel
         });
+        markSynchronousResponse();
         this.jobs.transition(job.id, 'downloading', { progress: 0.95 });
         return this.jobs.transition(job.id, 'succeeded', { progress: 1, output: scripted });
       }
@@ -333,11 +360,13 @@ export class VelaRuntime {
           }
           return `data:${reference.mime};base64,${reference.data.toString('base64')}`;
         });
+        beginSubmission();
         const analyzed = await this.gptProvider.analyzeCompetitorScript(credentials, credentials.secret.apiKey, {
           brief: job.payload.sourceBrief || job.payload.prompt,
           competitorFrameDataUrls: toImageDataUrls(job.payload.competitorFrameUrls, 12),
           productImageDataUrls: toImageDataUrls(job.payload.referenceUrls, 8)
         });
+        markSynchronousResponse();
         this.jobs.transition(job.id, 'downloading', { progress: 0.95 });
         return this.jobs.transition(job.id, 'succeeded', { progress: 1, output: analyzed });
       }
@@ -353,9 +382,11 @@ export class VelaRuntime {
         size: job.payload.nativeImageParameters === true ? job.payload.size : undefined,
         quality: job.payload.nativeImageParameters === true ? job.payload.quality : undefined
       };
+      beginSubmission();
       const results = referenceImages.length
         ? await this.gptProvider.editImages(credentials, credentials.secret.apiKey, { ...imageInput, referenceImages })
         : await this.gptProvider.generateImages(credentials, credentials.secret.apiKey, imageInput);
+      markSynchronousResponse();
       this.jobs.transition(job.id, 'downloading', { progress: 0.8 });
       const media = await this.media.saveProviderImage(job.projectId, results[0], {
         profileId: job.profileId,
@@ -373,8 +404,15 @@ export class VelaRuntime {
           : undefined)
       });
       const current = this.jobs.getJob(job.id);
-      if (current && ['submitting', 'running', 'downloading', 'reconnecting'].includes(current.status)) {
-        this.jobs.transition(job.id, 'failed', { error: redactSecrets({
+      if (current && ['preparing', 'submitting', 'running', 'downloading', 'reconnecting'].includes(current.status)) {
+        const submissionUncertain = submissionAttempted && current.status === 'submitting' && !current.promptId;
+        this.jobs.transition(job.id, submissionUncertain ? 'submission_uncertain' : 'failed', { error: redactSecrets(submissionUncertain ? {
+          code: 'SUBMISSION_UNCERTAIN',
+          message: '付费请求已发送，但本机未持久化到远程任务 ID。为避免重复扣费，该任务已停止且不能重提。',
+          retryable: false,
+          safeToRetry: false,
+          details
+        } : {
           code: error instanceof ProviderError ? error.code : 'GPT_JOB_FAILED',
           message: error instanceof Error ? error.message : 'GPT 任务失败',
           status: error?.status,
@@ -430,11 +468,12 @@ export class VelaRuntime {
 
   async executeComfyJob(job) {
     let profile = this.profiles.get(job.profileId);
+    let submissionAttempted = false;
     const startedAt = Date.now();
     try {
       const startingJob = this.jobs.getJob(job.id);
       if (startingJob?.status === 'queued') {
-        this.jobs.transition(job.id, 'submitting', { progress: 0 });
+        this.jobs.transition(job.id, 'preparing', { progress: 0 });
       } else if (startingJob?.status !== 'reconnecting') {
         return startingJob;
       }
@@ -530,6 +569,10 @@ export class VelaRuntime {
             filenamePrefix: `vela/minimax-h3-${job.id}`
           });
         }
+        const prepared = this.jobs.getJob(job.id);
+        if (prepared?.status !== 'preparing') return prepared;
+        this.jobs.transition(job.id, 'submitting', { progress: 0.05 });
+        submissionAttempted = true;
         const submitted = await this.comfyProvider.submitPrompt(profile, profile.secret || {}, graph);
         promptId = submitted.promptId;
         clientId = submitted.clientId;
@@ -539,7 +582,7 @@ export class VelaRuntime {
         }
       } else {
         const current = this.jobs.getJob(job.id);
-        if (current && ['submitting', 'reconnecting'].includes(current.status)) {
+        if (current && ['preparing', 'submitting', 'reconnecting'].includes(current.status)) {
           this.jobs.transition(job.id, 'running', { promptId, progress: Math.max(0.1, current.progress || 0) });
         }
       }
@@ -581,8 +624,18 @@ export class VelaRuntime {
           ? `wan2.2-animate:${job.payload?.ecommerceWorkflowId || 'unknown'}`
           : MINIMAX_H3_MODEL_FILES.diffusion
       });
-      if (current && ['submitting', 'running', 'downloading', 'reconnecting'].includes(current.status)) {
-        this.jobs.transition(job.id, 'failed', { error: redactSecrets({
+      if (current && ['preparing', 'submitting', 'running', 'downloading', 'reconnecting'].includes(current.status)) {
+        const submissionUncertain = submissionAttempted && current.status === 'submitting' && !current.promptId;
+        this.jobs.transition(job.id, submissionUncertain ? 'submission_uncertain' : 'failed', { error: redactSecrets(submissionUncertain ? {
+          code: 'SUBMISSION_UNCERTAIN',
+          message: '提交请求已发送，但本机未持久化到远程任务 ID。为避免重复扣费，该任务已停止且不能自动或手动重提。',
+          retryable: false,
+          safeToRetry: false,
+          details: {
+            ...details,
+            causeCode: error instanceof ComfyUiError ? error.code : 'COMFY_JOB_FAILED'
+          }
+        } : {
           code: error instanceof ComfyUiError ? error.code : 'COMFY_JOB_FAILED',
           message: error instanceof Error ? error.message : 'ComfyUI 任务失败',
           status: error?.status,
@@ -853,6 +906,7 @@ export class VelaRuntime {
   }
 
   createJobGroup(draft) {
+    this.jobs.assertNodeSubmissionSafe(draft?.projectId, draft?.nodeId);
     const resolvedDraft = this.resolveJobProfile(draft);
     const expanded = expandJobGroup(resolvedDraft);
     const group = this.jobs.createGroup(expanded.group, expanded.jobs);
@@ -862,6 +916,44 @@ export class VelaRuntime {
       this.scheduler.enqueue(job);
     }
     return { group, jobs };
+  }
+
+  createOrGetJobGroup(externalKey, contractFingerprint, draft) {
+    validateExternalJobContract({ externalKey, contractFingerprint });
+    const normalizedDraft = assertExternalH3ContractFingerprint(draft, contractFingerprint);
+
+    const existing = this.jobs.getGroupByExternalKey(externalKey);
+    if (existing) {
+      const conflicts = existing.contractFingerprint !== contractFingerprint
+        || existing.projectId !== normalizedDraft.projectId
+        || existing.nodeId !== normalizedDraft.nodeId
+        || existing.providerType !== normalizedDraft.providerType;
+      if (conflicts) throw new JobGroupContractConflictError(externalKey);
+      return {
+        created: false,
+        group: existing,
+        jobs: this.jobs.listJobs({ groupId: existing.id, limit: 1 })
+      };
+    }
+
+    this.jobs.assertNodeSubmissionSafe(normalizedDraft.projectId, normalizedDraft.nodeId);
+    const resolvedDraft = this.resolveJobProfile(normalizedDraft);
+    const expanded = expandJobGroup(resolvedDraft);
+    expanded.group.externalKey = externalKey;
+    expanded.group.contractFingerprint = contractFingerprint;
+    const result = this.jobs.createOrGetExternalGroup(expanded.group, expanded.jobs);
+    if (result.created) {
+      for (const job of result.jobs) {
+        if (job.providerType === 'comfy') this.powerManager.noteWorkStarted(job.profileId, job.id);
+        this.scheduler.enqueue(job);
+      }
+    }
+    return result;
+  }
+
+  getJobGroupByExternalKey(externalKey) {
+    validateExternalJobKey(externalKey);
+    return this.jobs.getExternalGroupBundle(externalKey);
   }
 
   resolveJobProfile(draft) {
@@ -896,7 +988,7 @@ export class VelaRuntime {
     const job = this.jobs.getJob(jobId);
     if (!job) throw new Error(`Job not found: ${jobId}`);
     if (job.status === 'queued') this.scheduler.cancelQueued(jobId);
-    if (!['queued', 'running', 'reconnecting'].includes(job.status)) {
+    if (!['queued', 'preparing', 'running', 'reconnecting'].includes(job.status)) {
       throw new Error(`Job ${job.status} cannot be cancelled`);
     }
     const cancelled = this.jobs.transition(jobId, 'cancelled');
@@ -908,6 +1000,9 @@ export class VelaRuntime {
   }
 
   retryFailedGroup(groupId) {
+    const group = this.jobs.getGroup(groupId);
+    if (!group) throw new Error(`Job group not found: ${groupId}`);
+    this.jobs.assertNodeSubmissionSafe(group.projectId, group.nodeId);
     const failed = this.jobs.listJobs({ groupId, limit: 2000 }).filter((job) => job.status === 'failed');
     return failed.map((job) => this.retryJob(job.id));
   }

@@ -1,6 +1,6 @@
 export type VelaJobStatus =
-  | 'queued' | 'submitting' | 'running' | 'reconnecting'
-  | 'downloading' | 'succeeded' | 'failed' | 'cancelled';
+  | 'queued' | 'preparing' | 'submitting' | 'running' | 'reconnecting'
+  | 'downloading' | 'succeeded' | 'failed' | 'submission_uncertain' | 'cancelled';
 
 export const AUTO_COMFY_PROFILE_ID = 'auto-comfy';
 
@@ -47,6 +47,10 @@ export const getVelaJobErrorMessage = (error: VelaJob['error']): string => {
   const account = error.details?.profileName ? `“${error.details.profileName}”` : '当前账户';
   const host = error.details?.endpointHost || '中转站';
   const networkCode = error.details?.networkCode;
+
+  if (error.code === 'SUBMISSION_UNCERTAIN') {
+    return message || '远端可能已受理任务，但本机未保存到任务 ID。为避免重复扣费，不会重新提交。';
+  }
 
   if (error.code === 'MODEL_NOT_FOUND') {
     return message || `${account}配置的模型已不在中转站模型列表中，请到 API 设置重新测试并更换模型或账户。`;
@@ -138,7 +142,7 @@ const parseResponse = async <T>(response: Response): Promise<T> => {
 };
 
 export const listVelaJobs = async (): Promise<VelaJob[]> =>
-  parseResponse<VelaJob[]>(await fetch('/api/vela/jobs?limit=500'));
+  parseResponse<VelaJob[]>(await fetch('/api/vela/jobs?limit=2000&order=recent'));
 
 export const createVelaJobGroup = async (input: {
   projectId: string;
