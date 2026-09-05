@@ -420,19 +420,13 @@ export class VelaRuntime {
       });
       const current = this.jobs.getJob(job.id);
       if (current && ['preparing', 'submitting', 'running', 'downloading', 'reconnecting'].includes(current.status)) {
-        const submissionUncertain = submissionAttempted && current.status === 'submitting' && !current.promptId;
-        this.jobs.transition(job.id, submissionUncertain ? 'submission_uncertain' : 'failed', { error: redactSecrets(submissionUncertain ? {
-          code: 'SUBMISSION_UNCERTAIN',
-          message: '付费请求已发送，但本机未持久化到远程任务 ID。为避免重复扣费，该任务已停止且不能重提。',
-          retryable: false,
-          safeToRetry: false,
-          details
-        } : {
+        const failedDuringSubmission = submissionAttempted && current.status === 'submitting' && !current.promptId;
+        this.jobs.transition(job.id, 'failed', { error: redactSecrets({
           code: error instanceof ProviderError ? error.code : 'GPT_JOB_FAILED',
           message: error instanceof Error ? error.message : 'GPT 任务失败',
           status: error?.status,
-          retryable: Boolean(error?.retryable),
-          safeToRetry: Boolean(error?.safeToRetry),
+          retryable: Boolean(error?.retryable || failedDuringSubmission),
+          safeToRetry: Boolean(error?.safeToRetry || failedDuringSubmission),
           details
         }) });
       }
@@ -640,22 +634,13 @@ export class VelaRuntime {
           : MINIMAX_H3_MODEL_FILES.diffusion
       });
       if (current && ['preparing', 'submitting', 'running', 'downloading', 'reconnecting'].includes(current.status)) {
-        const submissionUncertain = submissionAttempted && current.status === 'submitting' && !current.promptId;
-        this.jobs.transition(job.id, submissionUncertain ? 'submission_uncertain' : 'failed', { error: redactSecrets(submissionUncertain ? {
-          code: 'SUBMISSION_UNCERTAIN',
-          message: '提交请求已发送，但本机未持久化到远程任务 ID。为避免重复扣费，该任务已停止且不能自动或手动重提。',
-          retryable: false,
-          safeToRetry: false,
-          details: {
-            ...details,
-            causeCode: error instanceof ComfyUiError ? error.code : 'COMFY_JOB_FAILED'
-          }
-        } : {
+        const failedDuringSubmission = submissionAttempted && current.status === 'submitting' && !current.promptId;
+        this.jobs.transition(job.id, 'failed', { error: redactSecrets({
           code: error instanceof ComfyUiError ? error.code : 'COMFY_JOB_FAILED',
           message: error instanceof Error ? error.message : 'ComfyUI 任务失败',
           status: error?.status,
-          retryable: Boolean(error?.retryable),
-          safeToRetry: Boolean(error?.safeToRetry || (!current.promptId && error?.retryable)),
+          retryable: Boolean(error?.retryable || failedDuringSubmission),
+          safeToRetry: Boolean(error?.safeToRetry || failedDuringSubmission || (!current.promptId && error?.retryable)),
           details
         }) });
       }
@@ -970,7 +955,6 @@ export class VelaRuntime {
   }
 
   createJobGroup(draft) {
-    this.jobs.assertNodeSubmissionSafe(draft?.projectId, draft?.nodeId);
     const resolvedDraft = this.resolveJobProfile(draft);
     const expanded = expandJobGroup(resolvedDraft);
     const group = this.jobs.createGroup(expanded.group, expanded.jobs);
@@ -1000,7 +984,6 @@ export class VelaRuntime {
       };
     }
 
-    this.jobs.assertNodeSubmissionSafe(normalizedDraft.projectId, normalizedDraft.nodeId);
     const resolvedDraft = this.resolveJobProfile(normalizedDraft);
     const expanded = expandJobGroup(resolvedDraft);
     expanded.group.externalKey = externalKey;
@@ -1066,8 +1049,8 @@ export class VelaRuntime {
   retryFailedGroup(groupId) {
     const group = this.jobs.getGroup(groupId);
     if (!group) throw new Error(`Job group not found: ${groupId}`);
-    this.jobs.assertNodeSubmissionSafe(group.projectId, group.nodeId);
-    const failed = this.jobs.listJobs({ groupId, limit: 2000 }).filter((job) => job.status === 'failed');
+    const failed = this.jobs.listJobs({ groupId, limit: 2000 })
+      .filter((job) => ['failed', 'submission_uncertain'].includes(job.status));
     return failed.map((job) => this.retryJob(job.id));
   }
 

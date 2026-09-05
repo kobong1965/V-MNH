@@ -25,7 +25,7 @@ const STATUS_TEXT: Record<VelaJobStatus, string> = {
   downloading: '下载中',
   succeeded: '已完成',
   failed: '失败',
-  submission_uncertain: '提交待核对',
+  submission_uncertain: '失败',
   cancelled: '已取消'
 };
 
@@ -103,11 +103,11 @@ export function VelaTaskCenter({
               <button className="vela-button vela-icon-button" onClick={() => onFocusNode?.(job.nodeId)} aria-label="定位画布节点" title="定位画布节点">
                 <Crosshair size={15} aria-hidden="true" />
               </button>
-              {job.status === 'failed' || job.status === 'cancelled' ? (
+              {['failed', 'submission_uncertain', 'cancelled'].includes(job.status) ? (
                 <button className="vela-button vela-icon-button" onClick={() => void onRetry(job.id)} aria-label="重试任务" title="重试任务">
                   <RotateCcw size={15} aria-hidden="true" />
                 </button>
-              ) : job.status === 'submission_uncertain' ? null : (
+              ) : (
                 <button
                   className="vela-button vela-icon-button"
                   onClick={() => void onCancel(job.id)}

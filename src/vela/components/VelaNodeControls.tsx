@@ -109,8 +109,7 @@ export function VelaNodeControls({ data, isLoading, profileName, profiles = [], 
     : isCompetitorAnalyzer
       ? connectedImageCount === 0 || connectedVideoCount === 0
       : false;
-  const submissionBlocked = Boolean(data.submissionBlocked);
-  const canSubmit = canGenerate && !submissionBlocked && !needsReferenceImage && !scriptInputMissing && !wanInputMissing;
+  const canSubmit = canGenerate && !needsReferenceImage && !scriptInputMissing && !wanInputMissing;
   const selectedStyle = STYLE_PRESETS.find((preset) => preset.id === data.stylePreset) || STYLE_PRESETS[0];
 
   return (
@@ -291,9 +290,6 @@ export function VelaNodeControls({ data, isLoading, profileName, profiles = [], 
             ? `本镜头还有 ${missingRequiredReferenceNodeIds.length} 个必需的人物、场景或道具素材未连接或未就绪。`
             : 'H3 R2V 需要先连接至少一张参考素材。'
         : '图生视频需要先从图片节点连接至少一张参考图。'}</p>}
-      {submissionBlocked && (
-        <p className="vela-video-mode-hint" role="alert">该节点有一次提交未获得远程任务 ID。请先人工核对远端任务与扣费；核对前禁止再次生成。</p>
-      )}
       {isH3Video && !needsReferenceImage && (
         <p className="vela-video-mode-hint">全部人物、场景和道具参考图会按连线顺序作为 &lt;Picture 1...N&gt; 一起送入 Ref2VA；不会生成首帧。</p>
       )}
@@ -402,8 +398,8 @@ export function VelaNodeControls({ data, isLoading, profileName, profiles = [], 
           type="button"
           className="vela-generate-button"
           disabled={!canSubmit || isLoading}
-          aria-label={submissionBlocked ? '提交待核对，禁止生成' : canSubmit ? '开始生成' : wanInputMissing ? '请连接角色图和动作视频' : scriptInputMissing ? isCompetitorAnalyzer ? '请连接一条对标视频和产品图' : '请连接产品图' : needsReferenceImage ? '请连接全部必需参考素材' : '当前节点无需生成'}
-          title={submissionBlocked ? '请先核对远端任务和扣费，防止重复提交' : canSubmit ? '开始生成' : wanInputMissing ? 'Wan 处理需要一张角色参考图和一条动作参考视频' : scriptInputMissing ? isCompetitorAnalyzer ? '竞品分析需要一条对标视频和至少一张产品图' : '视频编导需要至少一张产品图' : needsReferenceImage ? 'H3 R2V 必须连接全部必需人物、场景和道具参考图' : definition.description}
+          aria-label={canSubmit ? '开始生成' : wanInputMissing ? '请连接角色图和动作视频' : scriptInputMissing ? isCompetitorAnalyzer ? '请连接一条对标视频和产品图' : '请连接产品图' : needsReferenceImage ? '请连接全部必需参考素材' : '当前节点无需生成'}
+          title={canSubmit ? '开始生成' : wanInputMissing ? 'Wan 处理需要一张角色参考图和一条动作参考视频' : scriptInputMissing ? isCompetitorAnalyzer ? '竞品分析需要一条对标视频和至少一张产品图' : '视频编导需要至少一张产品图' : needsReferenceImage ? 'H3 R2V 必须连接全部必需人物、场景和道具参考图' : definition.description}
           onClick={() => canSubmit && onGenerate(data.id)}
         >
           {isLoading ? <Loader2 className="animate-spin" size={18} /> : <ArrowUp size={18} />}

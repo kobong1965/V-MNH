@@ -49,7 +49,7 @@ export const getVelaJobErrorMessage = (error: VelaJob['error']): string => {
   const networkCode = error.details?.networkCode;
 
   if (error.code === 'SUBMISSION_UNCERTAIN') {
-    return message || '远端可能已受理任务，但本机未保存到任务 ID。为避免重复扣费，不会重新提交。';
+    return '未获得生成结果，本次已记为生成失败，可直接重试。';
   }
 
   if (error.code === 'MODEL_NOT_FOUND') {
@@ -75,7 +75,7 @@ export const getVelaJobErrorMessage = (error: VelaJob['error']): string => {
     return `${host}或其上游模型暂时不可用，请稍后重试。`;
   }
   if (error.code === 'TIMEOUT') {
-    return `等待 ${host} 响应超时。为避免重复扣费，未知结果的生成任务不会自动重复提交。`;
+    return `等待 ${host} 响应超时，本次生成失败，可直接重试。`;
   }
   if (error.code === 'VIDEO_POLL_TIMEOUT') {
     return `视频任务仍未完成，远端任务 ID 为 ${error.details?.taskId || '未知'}。软件没有重复提交，可稍后重试查询。`;
@@ -118,7 +118,7 @@ export const getVelaJobErrorMessage = (error: VelaJob['error']): string => {
       return `${host} 拒绝连接，通常是中转站服务未启动或端口不可用。`;
     }
     if (networkCode === 'ECONNRESET' || networkCode === 'UND_ERR_SOCKET') {
-      return `${host} 在请求中途断开连接。为避免重复扣费，本次未自动重复提交。`;
+      return `${host} 在请求中途断开连接，本次生成失败，可直接重试。`;
     }
     return `与 ${host} 的网络连接失败${networkCode ? `（${networkCode}）` : ''}，请稍后重试。`;
   }

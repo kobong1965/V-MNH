@@ -536,7 +536,7 @@ export class OpenAiCompatibleProvider {
     });
     const taskId = taskIdFromBody(body);
     if (!taskId) {
-      throw new ProviderError('视频中转站未返回任务 ID，软件不会自动重复提交以避免重复扣费', {
+      throw new ProviderError('视频中转站未返回任务 ID，本次生成失败，可直接重试', {
         code: 'BAD_RESPONSE',
         safeToRetry: false
       });

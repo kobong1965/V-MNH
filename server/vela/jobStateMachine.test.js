@@ -19,6 +19,8 @@ test('state matrix permits only approved transitions', () => {
   assert.equal(canTransitionJob('preparing', 'running'), true);
   assert.equal(canTransitionJob('submitting', 'running'), true);
   assert.equal(canTransitionJob('submitting', 'queued'), false);
+  assert.equal(canTransitionJob('submission_uncertain', 'failed'), true);
+  assert.equal(canTransitionJob('submission_uncertain', 'queued'), true);
   assert.equal(canTransitionJob('running', 'downloading'), true);
   assert.equal(canTransitionJob('downloading', 'reconnecting'), true);
   assert.equal(canTransitionJob('downloading', 'succeeded'), true);
@@ -26,8 +28,8 @@ test('state matrix permits only approved transitions', () => {
   assert.throws(() => assertJobTransition('queued', 'succeeded'), /Illegal job transition/);
 });
 
-test('restart recovery never blindly resubmits a remote job', () => {
-  assert.equal(getRestartRecoveryStatus({ status: 'submitting', promptId: null }), 'submission_uncertain');
+test('restart recovery marks an interrupted submission as failed without automatically resubmitting it', () => {
+  assert.equal(getRestartRecoveryStatus({ status: 'submitting', promptId: null }), 'failed');
   assert.equal(getRestartRecoveryStatus({ status: 'preparing', promptId: null }), 'queued');
   assert.equal(getRestartRecoveryStatus({ status: 'submitting', promptId: 'remote-1' }), 'reconnecting');
   assert.equal(getRestartRecoveryStatus({ status: 'running', promptId: 'remote-1' }), 'reconnecting');
@@ -36,7 +38,7 @@ test('restart recovery never blindly resubmits a remote job', () => {
   assert.equal(getRestartRecoveryStatus({ status: 'queued' }), 'queued');
 });
 
-test('a crash after submission intent becomes terminal and cannot be retried', () => {
+test('a crash after submission intent becomes failed and can be retried immediately', () => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'vela-job-submission-uncertain-'));
   const database = new VelaDatabase(path.join(directory, 'vela.sqlite'));
   try {
@@ -46,19 +48,18 @@ test('a crash after submission intent becomes terminal and cannot be retried', (
     repository.transition('job-1', 'submitting');
 
     const recovered = repository.recoverAfterRestart()[0];
-    assert.equal(recovered.status, 'submission_uncertain');
-    assert.equal(recovered.error.code, 'SUBMISSION_UNCERTAIN');
-    assert.equal(recovered.error.safeToRetry, false);
-    assert.throws(() => repository.retry('job-1'), /requires manual reconciliation/);
-    assert.equal(repository.getJob('job-1').status, 'submission_uncertain');
+    assert.equal(recovered.status, 'failed');
+    assert.equal(recovered.error.code, 'SUBMISSION_INTERRUPTED');
+    assert.equal(recovered.error.safeToRetry, true);
+    assert.equal(repository.retry('job-1').status, 'queued');
   } finally {
     database.close();
     fs.rmSync(directory, { recursive: true, force: true });
   }
 });
 
-for (const uncertainIsNewer of [false, true]) {
-  test(`restart blocks a sibling preparing job when uncertain submit is ${uncertainIsNewer ? 'newer' : 'older'}`, () => {
+for (const interruptedIsNewer of [false, true]) {
+  test(`restart requeues a sibling preparing job when interrupted submit is ${interruptedIsNewer ? 'newer' : 'older'}`, () => {
     const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'vela-job-recovery-order-'));
     const database = new VelaDatabase(path.join(directory, 'vela.sqlite'));
     try {
@@ -74,21 +75,43 @@ for (const uncertainIsNewer of [false, true]) {
       repository.transition('uncertain-job', 'submitting');
       const older = new Date(0).toISOString();
       const newer = new Date(1000).toISOString();
-      database.connection.prepare('UPDATE jobs SET created_at = ? WHERE id = ?').run(uncertainIsNewer ? older : newer, 'pending-job');
-      database.connection.prepare('UPDATE jobs SET created_at = ? WHERE id = ?').run(uncertainIsNewer ? newer : older, 'uncertain-job');
+      database.connection.prepare('UPDATE jobs SET created_at = ? WHERE id = ?').run(interruptedIsNewer ? older : newer, 'pending-job');
+      database.connection.prepare('UPDATE jobs SET created_at = ? WHERE id = ?').run(interruptedIsNewer ? newer : older, 'uncertain-job');
 
       const recovered = repository.recoverAfterRestart();
-      assert.equal(repository.getJob('uncertain-job').status, 'submission_uncertain');
-      const blocked = repository.getJob('pending-job');
-      assert.equal(blocked.status, 'failed');
-      assert.equal(blocked.error.code, 'JOB_SUBMISSION_UNCERTAIN');
-      assert.equal(recovered.some((job) => job.id === 'pending-job' && job.status === 'queued'), false);
+      assert.equal(repository.getJob('uncertain-job').status, 'failed');
+      assert.equal(repository.getJob('pending-job').status, 'queued');
+      assert.equal(recovered.some((job) => job.id === 'pending-job' && job.status === 'queued'), true);
     } finally {
       database.close();
       fs.rmSync(directory, { recursive: true, force: true });
     }
   });
 }
+
+test('legacy submission-uncertain records become retryable failures on startup', () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'vela-job-legacy-uncertain-'));
+  const database = new VelaDatabase(path.join(directory, 'vela.sqlite'));
+  try {
+    const repository = new JobRepository(database);
+    createQueuedJob(repository);
+    repository.transition('job-1', 'preparing');
+    repository.transition('job-1', 'submitting');
+    repository.transition('job-1', 'submission_uncertain', {
+      error: { code: 'SUBMISSION_UNCERTAIN', details: { endpointHost: 'relay.test' } }
+    });
+
+    const recovered = repository.recoverAfterRestart()[0];
+    assert.equal(recovered.status, 'failed');
+    assert.equal(recovered.error.code, 'SUBMISSION_FAILED');
+    assert.equal(recovered.error.safeToRetry, true);
+    assert.equal(recovered.error.details.endpointHost, 'relay.test');
+    assert.equal(repository.retry('job-1').status, 'queued');
+  } finally {
+    database.close();
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});
 
 test('job state survives database close and reopen', () => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'vela-job-repository-'));

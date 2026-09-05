@@ -726,7 +726,7 @@ test('capability discovery advertises the durable external-key video contract', 
     assert.equal(result.data.capabilities.durableVideoProvider.externalKeyField, 'path.externalKey');
     assert.equal(result.data.capabilities.durableVideoProvider.contractFingerprintField, 'body.contractFingerprint');
     assert.equal(result.data.capabilities.durableVideoProvider.maxJobsPerExternalKey, 1);
-    assert.equal(result.data.capabilities.durableVideoProvider.terminalSubmissionUncertain, true);
+    assert.equal(result.data.capabilities.durableVideoProvider.terminalSubmissionUncertain, false);
     assert.equal(result.data.capabilities.batchImageWorkflows.contractVersion, 2);
     assert.equal(result.data.capabilities.batchImageWorkflows.syncTarget, 'storyworks');
     assert.equal(result.data.capabilities.batchImageWorkflows.multipleSyncTargets, true);

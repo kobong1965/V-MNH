@@ -36,15 +36,6 @@ export class JobGroupContractConflictError extends Error {
   }
 }
 
-export class JobSubmissionUncertainError extends Error {
-  constructor(projectId, nodeId) {
-    super(`Node ${projectId}/${nodeId} has a submission that requires manual reconciliation`);
-    this.name = 'JobSubmissionUncertainError';
-    this.status = 409;
-    this.code = 'JOB_SUBMISSION_UNCERTAIN';
-  }
-}
-
 export class JobRepository {
   constructor(database, { onEvent } = {}) {
     this.database = database;
@@ -55,7 +46,6 @@ export class JobRepository {
   createGroup(group, jobs) {
     const now = new Date().toISOString();
     return this.database.transaction(() => {
-      this.assertNodeSubmissionSafe(group.projectId, group.nodeId);
       this.insertGroupAndJobs(group, jobs, now);
       return this.getGroup(group.id);
     });
@@ -114,7 +104,6 @@ export class JobRepository {
           jobs: this.listJobs({ groupId: existing.id, limit: 1 })
         };
       }
-      this.assertNodeSubmissionSafe(group.projectId, group.nodeId);
       this.insertGroupAndJobs(group, jobs, now);
       return {
         created: true,
@@ -135,20 +124,6 @@ export class JobRepository {
     const jobs = this.listJobs({ groupId: group.id, limit: 2 });
     if (jobs.length !== 1) throw new Error(`External job group ${group.id} does not contain exactly one job`);
     return { group, job: jobs[0] };
-  }
-
-  findSubmissionUncertain(projectId, nodeId) {
-    return toJob(this.db.prepare(`
-      SELECT * FROM jobs
-      WHERE project_id = ? AND node_id = ? AND status = 'submission_uncertain'
-      ORDER BY updated_at DESC
-      LIMIT 1
-    `).get(projectId, nodeId));
-  }
-
-  assertNodeSubmissionSafe(projectId, nodeId) {
-    const uncertain = this.findSubmissionUncertain(projectId, nodeId);
-    if (uncertain) throw new JobSubmissionUncertainError(projectId, nodeId);
   }
 
   getJob(jobId) {
@@ -234,7 +209,6 @@ export class JobRepository {
       retryCount: patch.retryCount ?? current.retryCount
     };
     this.database.transaction(() => {
-      if (nextStatus === 'queued') this.assertNodeSubmissionSafe(current.projectId, current.nodeId);
       this.db.prepare(`
         UPDATE jobs SET status = ?, progress = ?, prompt_id = ?, error_json = ?, output_json = ?, retry_count = ?, updated_at = ?
         WHERE id = ?
@@ -277,7 +251,6 @@ export class JobRepository {
   retry(jobId) {
     const current = this.getJob(jobId);
     if (!current) throw new Error(`Job not found: ${jobId}`);
-    this.assertNodeSubmissionSafe(current.projectId, current.nodeId);
     const completedComfyPrompt = current.providerType === 'comfy'
       && ['EXECUTION_FAILED', 'OUTPUT_NOT_FOUND'].includes(current.error?.code);
     return this.transition(jobId, 'queued', {
@@ -289,52 +262,39 @@ export class JobRepository {
   }
 
   recoverAfterRestart() {
+    const legacyUncertain = this.db.prepare(`
+      SELECT * FROM jobs
+      WHERE status = 'submission_uncertain'
+      ORDER BY priority DESC, created_at ASC
+    `).all().map(toJob);
+    const recovered = legacyUncertain.map((job) => this.transition(job.id, 'failed', {
+      error: {
+        code: 'SUBMISSION_FAILED',
+        message: '未获得生成结果，可直接重新发起。',
+        retryable: true,
+        safeToRetry: true,
+        ...(job.error?.details ? { details: job.error.details } : {})
+      }
+    }));
     const recoverable = this.db.prepare(`
       SELECT * FROM jobs
       WHERE status IN ('queued', 'preparing', 'submitting', 'running', 'reconnecting', 'downloading')
       ORDER BY priority DESC, created_at ASC
     `).all().map(toJob);
-    const recovered = [];
-
-    // First make every paid submission whose remote id was not persisted terminal.
-    // This pass must finish before any queued/preparing row is considered, otherwise
-    // row order could requeue an older sibling before a later uncertain submit is seen.
-    for (const job of recoverable) {
-      if (getRestartRecoveryStatus(job) !== 'submission_uncertain') continue;
-      recovered.push(this.transition(job.id, 'submission_uncertain', {
-        error: {
-          code: 'SUBMISSION_UNCERTAIN',
-          message: '远端可能已受理该任务，但本机在持久化任务 ID 前中断。为避免重复扣费，不会自动重新提交。',
-          retryable: false,
-          safeToRetry: false
-        }
-      }));
-    }
-
-    const uncertainNodes = new Set(this.db.prepare(`
-      SELECT DISTINCT project_id, node_id
-      FROM jobs
-      WHERE status = 'submission_uncertain'
-    `).all().map((row) => `${row.project_id}\u0000${row.node_id}`));
 
     for (const job of recoverable) {
       const current = this.getJob(job.id);
-      if (!current || current.status === 'submission_uncertain') continue;
-      const nodeKey = `${current.projectId}\u0000${current.nodeId}`;
-      if (uncertainNodes.has(nodeKey) && ['queued', 'preparing'].includes(current.status)) {
-        recovered.push(this.transition(job.id, 'failed', {
-          error: {
-            code: 'JOB_SUBMISSION_UNCERTAIN',
-            message: '同一节点存在需要人工核对的提交，该等待任务已停止以避免重复扣费。',
-            retryable: false,
-            safeToRetry: false
-          }
-        }));
-        continue;
-      }
+      if (!current) continue;
       const nextStatus = getRestartRecoveryStatus(current);
       if (nextStatus !== current.status) {
-        recovered.push(this.transition(current.id, nextStatus));
+        recovered.push(this.transition(current.id, nextStatus, nextStatus === 'failed' ? {
+          error: {
+            code: 'SUBMISSION_INTERRUPTED',
+            message: '上次提交中断且未获得生成结果，可直接重新发起。',
+            retryable: true,
+            safeToRetry: true
+          }
+        } : undefined));
       }
       else recovered.push(current);
     }

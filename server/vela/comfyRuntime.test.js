@@ -56,18 +56,24 @@ test('Comfy H3 R2V uploads every reference, persists prompt id and downloads the
   } finally { runtime.close(); fs.rmSync(directory, { recursive: true, force: true }); }
 });
 
-test('an uncertain H3 submit is terminal and an external-key replay never sends a second POST', async () => {
+test('an interrupted H3 submit becomes failed and can be retried immediately', async () => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'vela-comfy-submit-uncertain-'));
   let submissions = 0;
   const provider = {
     uploadImage: async () => 'vela/reference.png',
     submitPrompt: async () => {
       submissions += 1;
-      const error = new Error('socket closed after request bytes were sent');
-      error.code = 'NETWORK_ERROR';
-      error.retryable = true;
-      throw error;
+      if (submissions === 1) {
+        const error = new Error('socket closed after request bytes were sent');
+        error.code = 'NETWORK_ERROR';
+        error.retryable = true;
+        throw error;
+      }
+      return { promptId: 'retried-prompt', clientId: 'retried-client' };
     },
+    waitForPrompt: async () => ({ outputs: { 16: { images: [{ filename: 'retried.mp4', subfolder: 'vela', type: 'output' }] } } }),
+    findVideoOutput: (history) => history.outputs[16].images[0],
+    createViewUrl: () => 'http://127.0.0.1:18188/view?filename=retried.mp4',
     close: () => {}
   };
   const runtime = new VelaRuntime({
@@ -106,11 +112,16 @@ test('an uncertain H3 submit is terminal and an external-key replay never sends 
 
     const job = runtime.jobs.getJob(created.jobs[0].id);
     assert.equal(submissions, 1);
-    assert.equal(job.status, 'submission_uncertain');
-    assert.equal(job.error.code, 'SUBMISSION_UNCERTAIN');
-    assert.equal(job.error.safeToRetry, false);
-    assert.throws(() => runtime.retryJob(job.id), /requires manual reconciliation/);
-    assert.equal(submissions, 1);
+    assert.equal(job.status, 'failed');
+    assert.equal(job.error.code, 'COMFY_JOB_FAILED');
+    assert.equal(job.error.safeToRetry, true);
+
+    runtime.retryJob(job.id);
+    await runtime.scheduler.waitForIdle();
+    const retried = runtime.jobs.getJob(job.id);
+    assert.equal(submissions, 2);
+    assert.equal(retried.status, 'succeeded');
+    assert.equal(retried.promptId, 'retried-prompt');
   } finally {
     runtime.close();
     fs.rmSync(directory, { recursive: true, force: true });

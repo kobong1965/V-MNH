@@ -39,7 +39,7 @@ export const VELA_CONTROL_CAPABILITIES = Object.freeze({
     contractFingerprint: 'sha256-lowercase-hex',
     canonicalization: 'vela-external-h3-draft-v1',
     maxJobsPerExternalKey: 1,
-    terminalSubmissionUncertain: true
+    terminalSubmissionUncertain: false
   })
 });
 
