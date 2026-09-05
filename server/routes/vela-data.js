@@ -10,6 +10,7 @@ import { ProviderError } from '../providers/openAiCompatibleProvider.js';
 import { ComfyUiError } from '../providers/comfyUiProvider.js';
 import { AutoDlPowerError } from '../providers/autodlPowerProvider.js';
 import { redactSecrets } from '../vela/redaction.js';
+import { isMaterialsReadOnlyClient } from '../vela/pairingService.js';
 
 const router = express.Router();
 
@@ -26,6 +27,7 @@ const handleError = (res, error) => {
     ? explicitStatus
     : providerError
     ? error.code === 'AUTH_FAILED' ? 401
+      : error.code === 'INVALID_INPUT' ? 400
       : ['MODEL_NOT_FOUND', 'CREDENTIAL_UNREADABLE', 'CREDENTIAL_MISSING'].includes(error.code) ? 422
         : 502
     : error instanceof ContractValidationError || /invalid|unsupported|required|cannot|不能为空|not found|不支持|无效|上传内容/i.test(message) ? 400 : 500;
@@ -95,6 +97,28 @@ router.post('/vela/profiles/:id/test', async (req, res) => {
   catch (error) { handleError(res, error); }
 });
 
+router.post('/vela/prompt-analysis', async (req, res) => {
+  try { res.json(await runtime(req).analyzeBatchPrompt(req.body)); }
+  catch (error) { handleError(res, error); }
+});
+
+router.get('/vela/prompt-templates', (req, res) => {
+  try { res.json(runtime(req).promptTemplates.list()); }
+  catch (error) { handleError(res, error); }
+});
+
+router.post('/vela/prompt-templates', (req, res) => {
+  try { res.status(201).json(runtime(req).promptTemplates.save(req.body)); }
+  catch (error) { handleError(res, error); }
+});
+
+router.delete('/vela/prompt-templates/:id', (req, res) => {
+  try {
+    if (!runtime(req).promptTemplates.delete(req.params.id)) return res.status(404).json({ error: '提示词模板不存在' });
+    res.status(204).end();
+  } catch (error) { handleError(res, error); }
+});
+
 router.get('/vela/comfy/:id/status', async (req, res) => {
   try { res.json(await runtime(req).getComfyStatus(req.params.id)); }
   catch (error) { handleError(res, error); }
@@ -121,8 +145,92 @@ router.get('/vela/data-dashboard', async (req, res) => {
 });
 
 router.get('/vela/projects', (req, res) => {
-  try { res.json(runtime(req).projectStore.listProjects()); }
+  try {
+    const service = runtime(req);
+    res.json(service.batchWorkflows.decorateProjectSummaries(service.projectStore.listProjects()));
+  }
   catch (error) { handleError(res, error); }
+});
+
+router.get('/vela/batches', (req, res) => {
+  try { res.json(runtime(req).batchWorkflows.listBatches()); }
+  catch (error) { handleError(res, error); }
+});
+
+router.post('/vela/batches', (req, res) => {
+  try { res.status(201).json(runtime(req).batchWorkflows.createBatch(req.body)); }
+  catch (error) { handleError(res, error); }
+});
+
+router.get('/vela/batches/:id', (req, res) => {
+  try {
+    const batch = runtime(req).batchWorkflows.getBatch(req.params.id);
+    if (!batch) return res.status(404).json({ error: '批次不存在' });
+    res.json(batch);
+  } catch (error) { handleError(res, error); }
+});
+
+router.post('/vela/batches/:id/start', (req, res) => {
+  try { res.status(202).json(runtime(req).batchWorkflows.startBatch(req.params.id, req.body)); }
+  catch (error) { handleError(res, error); }
+});
+
+router.post('/vela/batches/:id/sync', (req, res) => {
+  try {
+    const availableTargets = [
+      { id: 'storyworks', name: '编导车间（Storyworks）', kind: 'built-in' },
+      ...(req.app.locals.pairingService?.listClients?.() || []).map((client) => ({ ...client, kind: 'paired' }))
+    ];
+    const requestedIds = req.body?.targetIds === undefined
+      ? ['storyworks']
+      : [...new Set(Array.isArray(req.body.targetIds) ? req.body.targetIds.map(String) : [])];
+    if (!requestedIds.length) throw new Error('请至少选择一个同步软件');
+    const availableById = new Map(availableTargets.map((target) => [target.id, target]));
+    const unknownId = requestedIds.find((id) => !availableById.has(id));
+    if (unknownId) throw new Error(`同步软件无效或已断开：${unknownId}`);
+    const targets = requestedIds.map((id) => availableById.get(id));
+    const { manifestPath: _manifestPath, ...result } = runtime(req).batchWorkflows.syncBatch(req.params.id, { targets });
+    res.json(result);
+  } catch (error) { handleError(res, error); }
+});
+
+router.get('/vela/batches/:id/sync-manifest', (req, res) => {
+  try {
+    const queryTargetId = typeof req.query.targetId === 'string' ? req.query.targetId : '';
+    if (!req.velaClient && queryTargetId && queryTargetId !== 'storyworks') {
+      return res.status(401).json({ error: '读取外部软件同步清单需要对应的连接凭据' });
+    }
+    if (req.velaClient && queryTargetId && queryTargetId !== req.velaClient.id) {
+      const legacyStoryworksRead = queryTargetId === 'storyworks' && !isMaterialsReadOnlyClient(req.velaClient);
+      if (!legacyStoryworksRead) return res.status(403).json({ error: '当前软件不能读取其他软件的同步清单' });
+    }
+    const targetId = queryTargetId
+      || (isMaterialsReadOnlyClient(req.velaClient) ? req.velaClient.id : 'storyworks');
+    const manifest = runtime(req).batchWorkflows.getSyncManifest(req.params.id, targetId);
+    if (!manifest) return res.status(404).json({ error: '该批次尚未同步到当前软件' });
+    res.json(manifest);
+  } catch (error) { handleError(res, error); }
+});
+
+router.get('/vela/sync-inbox', (req, res) => {
+  try {
+    if (!req.velaClient) return res.status(401).json({ error: '同步收件箱仅允许已配对软件读取' });
+    res.json(runtime(req).batchWorkflows.listSyncInbox(req.velaClient.id, {
+      cursor: typeof req.query.cursor === 'string' ? req.query.cursor : '0',
+      limit: typeof req.query.limit === 'string' ? req.query.limit : 500
+    }));
+  } catch (error) { handleError(res, error); }
+});
+
+router.post('/vela/sync-inbox/:batchId/ack', (req, res) => {
+  try {
+    if (!req.velaClient) return res.status(401).json({ error: '同步收件箱仅允许已配对软件确认' });
+    res.json(runtime(req).batchWorkflows.acknowledgeSyncInbox(
+      req.velaClient.id,
+      req.params.batchId,
+      req.body?.sourceKeys
+    ));
+  } catch (error) { handleError(res, error); }
 });
 
 router.post('/vela/projects', (req, res) => {
@@ -142,7 +250,9 @@ router.post('/vela/projects/import', (req, res) => {
 
 router.get('/vela/projects/:id', (req, res) => {
   try {
-    const project = runtime(req).projectStore.getProject(req.params.id);
+    const service = runtime(req);
+    const project = service.batchWorkflows.reconcileProject(req.params.id)
+      || service.projectStore.getProject(req.params.id);
     if (!project) return res.status(404).json({ error: '项目不存在' });
     res.json(project);
   } catch (error) { handleError(res, error); }
@@ -164,12 +274,13 @@ router.patch('/vela/projects/:id', (req, res) => {
 router.delete('/vela/projects/:id', (req, res) => {
   try {
     const service = runtime(req);
-    const activeJobs = service.jobs.listJobs({ limit: 2000 }).filter((job) => (
-      job.projectId === req.params.id
-      && ['queued', 'preparing', 'submitting', 'running', 'reconnecting', 'downloading'].includes(job.status)
-    ));
-    if (activeJobs.length) {
-      return res.status(409).json({ error: `项目仍有 ${activeJobs.length} 个生成任务，完成或取消后才能删除。` });
+    if (!service.projectStore.getProject(req.params.id)) return res.status(404).json({ error: '项目不存在' });
+    const activeJobCount = service.jobs.countActiveJobsForProject(req.params.id);
+    if (activeJobCount) {
+      return res.status(409).json({ error: `项目仍有 ${activeJobCount} 个生成任务，完成或取消后才能删除。` });
+    }
+    if (service.batchWorkflows.hasPendingSyncForProject(req.params.id)) {
+      return res.status(409).json({ error: '项目成品仍在等待同步软件接收，完成同步确认后才能删除。' });
     }
     const deleted = service.projectStore.deleteProject(req.params.id);
     if (!deleted) return res.status(404).json({ error: '项目不存在' });
@@ -250,6 +361,13 @@ router.post('/vela/projects/:id/media', (req, res) => {
 
 router.get('/vela/projects/:id/media/:mediaId/file', (req, res) => {
   try {
+    if (isMaterialsReadOnlyClient(req.velaClient) && !runtime(req).batchWorkflows.isMediaReferencedForTarget(
+      req.velaClient.id,
+      req.params.id,
+      req.params.mediaId
+    )) {
+      return res.status(403).json({ error: '当前素材不在该软件的同步清单中' });
+    }
     const resolved = runtime(req).media.resolveFile(req.params.id, req.params.mediaId);
     if (!resolved || !fs.existsSync(resolved.filePath)) return res.status(404).json({ error: '媒体不存在' });
     res.setHeader('Content-Type', resolved.record.mime || 'application/octet-stream');

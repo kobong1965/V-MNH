@@ -261,6 +261,69 @@ export class OpenAiCompatibleProvider {
     };
   }
 
+  async analyzeImagePrompt(profile, apiKey, {
+    requirement,
+    model,
+    modelSlot = 'prompt',
+    productImages = [],
+    benchmarkImage = null
+  } = {}) {
+    const userRequirement = String(requirement || '').trim();
+    if (!userRequirement) throw new ProviderError('请先填写希望图片如何修改', { code: 'INVALID_INPUT' });
+    if (!model) throw new ProviderError('尚未配置可用的视觉分析模型', { code: 'MODEL_NOT_CONFIGURED' });
+    if (!Array.isArray(productImages) || productImages.length === 0 || productImages.length > 4) {
+      throw new ProviderError('智能分析需要 1-4 张产品图', { code: 'INVALID_INPUT' });
+    }
+
+    const imageParts = productImages.flatMap((image, index) => [
+      { type: 'text', text: `产品图 ${index + 1}：${String(image?.name || `图片 ${index + 1}`).slice(0, 120)}` },
+      { type: 'image_url', image_url: { url: image?.dataUrl } }
+    ]);
+    if (benchmarkImage?.dataUrl) {
+      imageParts.push(
+        { type: 'text', text: `对标图：${String(benchmarkImage.name || '未命名对标图').slice(0, 120)}` },
+        { type: 'image_url', image_url: { url: benchmarkImage.dataUrl } }
+      );
+    }
+    const body = await this.request(profile, apiKey, profile.endpoints?.chat || '/chat/completions', {
+      method: 'POST',
+      safeToRetry: false,
+      timeoutMs: Math.max(180_000, Number(profile.timeoutMs) || 0),
+      body: {
+        model,
+        messages: [
+          {
+            role: 'system',
+            content: [
+              '你是电商商品图的视觉分析师和图生图提示词工程师。先辨认产品图中真实可见的商品、人物、服装、材质、颜色、版型、构图、背景和光线，再结合用户要求编写最终提示词。',
+              '如果提供对标图，只把用户明确要求借鉴的款式、姿势、背景或版式应用到产品图；不要混淆产品图与对标图的身份。',
+              '明确写出必须修改的内容、必须保持不变的内容和禁止出现的内容。不要杜撰图片中看不到的品牌、材质参数、功能、文字或认证。',
+              '只输出一条可直接用于图片编辑模型的中文提示词，不要解释分析过程，不要使用标题、Markdown 或代码块，最长 1800 个汉字。'
+            ].join('\n')
+          },
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'text',
+                text: [
+                  `用户修改需求：${userRequirement}`,
+                  `随后共有 ${productImages.length} 张产品图${benchmarkImage?.dataUrl ? '和 1 张对标图' : '，没有对标图'}。`,
+                  '请严格按照标签理解每张图片的角色，输出最终图生图提示词。'
+                ].join('\n')
+              },
+              ...imageParts
+            ]
+          }
+        ]
+      }
+    });
+    return {
+      text: extractText(body).slice(0, 4000),
+      source: { provider: 'openai-compatible', profileId: profile.id, model, modelSlot }
+    };
+  }
+
   async generateDirectorScript(profile, apiKey, {
     brief,
     persona,

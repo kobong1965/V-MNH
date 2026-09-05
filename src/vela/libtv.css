@@ -1261,6 +1261,23 @@
   overflow: hidden;
 }
 
+.vela-result-collection__item.is-active-reference:not(.is-download-selecting) {
+  border-color: #0d899d;
+  box-shadow: 0 0 0 2px rgba(13, 137, 157, .2), 0 10px 24px rgba(28, 28, 26, .13);
+}
+
+.vela-result-collection__active-label {
+  background: rgba(8, 111, 128, .9);
+  border-radius: 999px;
+  bottom: 8px;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 4px 7px;
+  position: absolute;
+  right: 8px;
+}
+
 .vela-result-collection__primary {
   position: relative;
   z-index: 4;

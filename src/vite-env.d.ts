@@ -1,5 +1,7 @@
 /// <reference types="vite/client" />
 
+declare const __VELA_VERSION__: string;
+
 interface VelaUpdateState {
   supported: boolean;
   currentVersion: string;

@@ -10,7 +10,10 @@ import { SecretProtector } from './secretProtector.js';
 
 test('GPT image job downloads into the project and prompt optimizer preserves source metadata', async () => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'vela-gpt-runtime-'));
-  const imageBytes = Buffer.from('fixture-image-payload');
+  const imageBytes = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+    'base64'
+  );
   const runtime = new VelaRuntime({
     dataDirectory: directory,
     projectsDirectory: path.join(directory, 'projects'),

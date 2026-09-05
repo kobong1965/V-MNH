@@ -211,6 +211,12 @@
   padding: 52px clamp(28px, 5vw, 78px) 64px;
 }
 
+.vela-home-main--batch {
+  min-width: 0;
+  overflow: auto;
+  padding: 0;
+}
+
 .vela-home-heading {
   align-items: flex-end;
   display: flex;

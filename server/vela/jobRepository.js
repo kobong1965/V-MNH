@@ -3,6 +3,8 @@ import crypto from 'node:crypto';
 import { assertJobTransition, getRestartRecoveryStatus } from './jobStateMachine.js';
 
 const parseJson = (value) => value ? JSON.parse(value) : null;
+const ACTIVE_JOB_STATUSES = Object.freeze(['queued', 'preparing', 'submitting', 'running', 'reconnecting', 'downloading']);
+const ACTIVE_JOB_STATUS_PLACEHOLDERS = ACTIVE_JOB_STATUSES.map(() => '?').join(', ');
 
 const toJob = (row) => row ? ({
   id: row.id,
@@ -153,6 +155,15 @@ export class JobRepository {
     return toJob(this.db.prepare('SELECT * FROM jobs WHERE id = ?').get(jobId));
   }
 
+  findLatestNodeJob(projectId, nodeId) {
+    return toJob(this.db.prepare(`
+      SELECT * FROM jobs
+      WHERE project_id = ? AND node_id = ?
+      ORDER BY created_at DESC, updated_at DESC, rowid DESC
+      LIMIT 1
+    `).get(projectId, nodeId));
+  }
+
   listJobs({ status, profileId, groupId, limit = 500, newestFirst = false } = {}) {
     const clauses = [];
     const values = [];
@@ -166,6 +177,16 @@ export class JobRepository {
       ORDER BY ${newestFirst ? 'updated_at DESC, created_at DESC' : 'priority DESC, created_at ASC'}
       LIMIT ?
     `).all(...values).map(toJob);
+  }
+
+  countActiveJobsForProject(projectId) {
+    const normalizedProjectId = String(projectId || '').trim();
+    if (!normalizedProjectId) return 0;
+    return Number(this.db.prepare(`
+      SELECT COUNT(*) AS count
+      FROM jobs
+      WHERE project_id = ? AND status IN (${ACTIVE_JOB_STATUS_PLACEHOLDERS})
+    `).get(normalizedProjectId, ...ACTIVE_JOB_STATUSES).count) || 0;
   }
 
   getGroup(groupId) {

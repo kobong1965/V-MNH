@@ -49,6 +49,7 @@ export interface NodeData {
   workflowEngine?: 'gpt-image' | 'h3-video' | 'wan-video-process';
   outputCount?: number; // Number of generated child jobs requested by this node
   imageBatchMode?: 'independent' | 'pose-variation'; // One image per request; pose mode assigns a distinct action to each batch job
+  requiresGeneratedReference?: boolean; // Prevents a suffix image node from running before its upstream result exists
   jobGroupId?: string; // Durable task group reference (implemented in P2)
   resultUrls?: string[]; // Ordered media results for the active generation batch
   resultCollectionExpanded?: boolean; // Expanded side-by-side batch preview state

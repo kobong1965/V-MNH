@@ -21,7 +21,16 @@ import storyboardRoutes from './routes/storyboard.js';
 import velaGenerationRoutes from './routes/vela-generation.js';
 import velaDataRoutes from './routes/vela-data.js';
 import { VelaRuntime } from './vela/runtime.js';
-import { createPairingService, isLoopbackRequest } from './vela/pairingService.js';
+import {
+    createRemotePairingAttemptLimiter,
+    createPairingService,
+    isLoopbackRequest,
+    isMaterialsReadOnlyClient,
+    isMaterialsReadRouteAllowed,
+    isTrustedVelaRequestOrigin,
+    isValidRemotePairingScopes,
+    VELA_FULL_ACCESS_SCOPE
+} from './vela/pairingService.js';
 import { getRuntimeDiscoveryUserDataDirectory, writeRuntimeDiscovery } from '../electron/serverRuntime.js';
 import { VELA_CONTROL_CAPABILITIES, VELA_CONTROL_PROTOCOL_VERSION } from '../shared/vela-contracts.js';
 
@@ -30,6 +39,11 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = Number.parseInt(process.env.PORT || '3001', 10);
+const TRUSTED_VELA_UI_ORIGINS = (process.env.VELA_TRUSTED_UI_ORIGINS
+    || 'http://127.0.0.1:5173,http://localhost:5173,http://127.0.0.1:4173,http://localhost:4173')
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean);
 const HOST = process.env.VELA_LAN_ENABLED === 'true' ? '0.0.0.0' : '127.0.0.1';
 
 const readEncodedProcessArgument = (name) => {
@@ -68,6 +82,7 @@ const VELA_PROJECTS_DIR = path.resolve(
 );
 
 const pairingService = createPairingService({ dataDirectory: VELA_DATA_DIR });
+const remotePairingLimiter = createRemotePairingAttemptLimiter();
 const advertisedBaseUrls = () => {
     const urls = [`http://127.0.0.1:${PORT}`];
     if (HOST !== '0.0.0.0') return urls;
@@ -85,11 +100,95 @@ const advertisedBaseUrls = () => {
     }
 });
 
-// Enable CORS for all routes (must come before static file serving)
+// The control API is intentionally reachable by native companion apps, but a
+// random web page opened in the user's browser must never inherit localhost
+// privileges. Run this guard before CORS and JSON parsing so rejected callers
+// cannot make the desktop process allocate and parse a large request body.
+app.use('/api/vela', (req, res, next) => {
+    if (!isTrustedVelaRequestOrigin(req, TRUSTED_VELA_UI_ORIGINS)) {
+        return res.status(403).json({ error: '已阻止来自其他网页的本机画布请求。' });
+    }
+    if (req.method === 'OPTIONS') return next();
+
+    const authorization = req.get('authorization') || '';
+    const token = authorization.startsWith('Bearer ') ? authorization.slice(7).trim() : '';
+    if (token) {
+        const client = pairingService.identify(token);
+        if (!client) return res.status(401).json({ error: '画布连接未配对或配对已失效。' });
+        if (!isLoopbackRequest(req) && client.scopes?.includes(VELA_FULL_ACCESS_SCOPE)) {
+            return res.status(403).json({ error: '旧版全权限连接仅允许在 Vela 本机使用，请重新配对为只读素材连接。' });
+        }
+        req.velaClient = client;
+    } else {
+        const isBoundedPairingRequest = req.method === 'POST' && req.path === '/connection/pair';
+        const isPublicHealthRequest = req.method === 'GET' && req.path === '/health';
+        if (HOST === '0.0.0.0' && !isLoopbackRequest(req) && !isBoundedPairingRequest && !isPublicHealthRequest) {
+            return res.status(401).json({ error: '画布连接未配对或配对已失效。' });
+        }
+    }
+    if (isMaterialsReadOnlyClient(req.velaClient) && !isMaterialsReadRouteAllowed(req.method, req.path)) {
+        return res.status(403).json({ error: '当前软件连接仅允许读取已同步素材。' });
+    }
+    return next();
+});
+
+// Enable CORS for all routes (must come before static file serving). Vela's
+// origin and token checks above deliberately run first.
 app.use(cors());
-// Project share packages are transported as base64 JSON. Base64 adds roughly
-// one third to the raw archive size, so allow realistic media-rich projects.
-app.use(express.json({ limit: '512mb' }));
+
+const KIB = 1024;
+const MIB = 1024 * KIB;
+const VELA_PAIRING_JSON_LIMIT = 64 * KIB;
+const VELA_READ_ONLY_JSON_LIMIT = 1 * MIB;
+const VELA_STANDARD_JSON_LIMIT = 272 * MIB;
+const VELA_MIGRATION_JSON_LIMIT = 512 * MIB;
+const velaJsonParsers = {
+    pairing: express.json({ limit: VELA_PAIRING_JSON_LIMIT }),
+    readOnly: express.json({ limit: VELA_READ_ONLY_JSON_LIMIT }),
+    standard: express.json({ limit: VELA_STANDARD_JSON_LIMIT }),
+    migration: express.json({ limit: VELA_MIGRATION_JSON_LIMIT })
+};
+
+const velaJsonPolicy = (req) => {
+    if (req.path.startsWith('/connection')) {
+        return { parser: velaJsonParsers.pairing, limit: VELA_PAIRING_JSON_LIMIT };
+    }
+    if (isMaterialsReadOnlyClient(req.velaClient)) {
+        return { parser: velaJsonParsers.readOnly, limit: VELA_READ_ONLY_JSON_LIMIT };
+    }
+    if (req.path === '/portable-backup/import' || req.path === '/projects/import') {
+        return { parser: velaJsonParsers.migration, limit: VELA_MIGRATION_JSON_LIMIT };
+    }
+    return { parser: velaJsonParsers.standard, limit: VELA_STANDARD_JSON_LIMIT };
+};
+
+// Vela requests use a route/role-specific parser. Content-Length is rejected
+// before body consumption; chunked requests are still bounded by the parser.
+app.use('/api/vela', (req, res, next) => {
+    if (req.method === 'GET' || req.method === 'HEAD') {
+        const declaredLength = Number(req.get('content-length') || 0);
+        const hasTransferEncoding = Boolean(req.get('transfer-encoding'));
+        if (declaredLength > 0 || hasTransferEncoding) {
+            return res.status(413).json({ error: '读取接口不接受请求正文。' });
+        }
+        return next();
+    }
+    const policy = velaJsonPolicy(req);
+    const declaredLength = req.get('content-length');
+    if (declaredLength && Number(declaredLength) > policy.limit) {
+        return res.status(413).json({ error: '请求内容超过当前接口允许的大小。' });
+    }
+    return policy.parser(req, res, next);
+});
+
+// Non-Vela legacy routes still include media-rich project JSON payloads. Keep
+// this parser completely outside the Vela control API so it cannot weaken the
+// route- and role-specific limits above.
+const legacyJsonParser = express.json({ limit: '512mb' });
+app.use((req, res, next) => {
+    if (req.path === '/api/vela' || req.path.startsWith('/api/vela/')) return next();
+    return legacyJsonParser(req, res, next);
+});
 
 app.get('/api/vela/health', (_req, res) => {
     res.json({
@@ -114,22 +213,41 @@ const localConnectionAction = (req, res, action) => {
 
 app.get('/api/vela/connection', (req, res) => localConnectionAction(req, res, () => pairingService.info()));
 app.post('/api/vela/connection/rotate', (req, res) => localConnectionAction(req, res, () => pairingService.rotateCode()));
-app.post('/api/vela/connection/revoke', (req, res) => localConnectionAction(req, res, () => pairingService.revokeAll()));
+app.post('/api/vela/connection/revoke', (req, res) => localConnectionAction(req, res, () => {
+    const clientIds = pairingService.listClients().map((client) => client.id);
+    app.locals.velaRuntime?.batchWorkflows?.cancelSyncTargets(clientIds, 'connection-revoked');
+    return pairingService.revokeAll();
+}));
 app.post('/api/vela/connection/pair', (req, res) => {
+    const remotePairing = !isLoopbackRequest(req);
+    const remoteAddress = req.socket?.remoteAddress || req.ip || 'unknown';
     try {
-        const paired = pairingService.pair(req.body?.code, req.body?.clientName);
+        if (remotePairing && !isValidRemotePairingScopes(req.body?.scopes)) {
+            return res.status(403).json({ error: '局域网软件只能申请读取已同步素材的权限。' });
+        }
+        if (remotePairing) {
+            const attempt = remotePairingLimiter.check(remoteAddress);
+            if (!attempt.allowed) {
+                res.setHeader('Retry-After', String(Math.max(1, Math.ceil(attempt.retryAfterMs / 1000))));
+                return res.status(429).json({ error: '连接码尝试次数过多，请稍后再试。' });
+            }
+        }
+        const paired = pairingService.pair(req.body?.code, req.body?.clientName, {
+            clientKey: req.body?.clientKey,
+            scopes: req.body?.scopes
+        });
+        if (remotePairing) remotePairingLimiter.recordSuccess(remoteAddress);
         res.json({ ok: true, accessToken: paired.token, client: paired.client });
     } catch (error) {
+        if (remotePairing) {
+            const attempt = remotePairingLimiter.recordFailure(remoteAddress);
+            if (!attempt.allowed) {
+                res.setHeader('Retry-After', String(Math.max(1, Math.ceil(attempt.retryAfterMs / 1000))));
+                return res.status(429).json({ error: '连接码尝试次数过多，请稍后再试。' });
+            }
+        }
         res.status(401).json({ error: error instanceof Error ? error.message : '画布配对失败' });
     }
-});
-
-app.use('/api/vela', (req, res, next) => {
-    if (HOST !== '0.0.0.0' || isLoopbackRequest(req)) return next();
-    const authorization = req.get('authorization') || '';
-    const token = authorization.startsWith('Bearer ') ? authorization.slice(7).trim() : '';
-    if (!pairingService.verify(token)) return res.status(401).json({ error: '画布连接未配对或配对已失效。' });
-    next();
 });
 
 // Serve static assets from library with CORS headers for cross-origin image access
@@ -202,10 +320,17 @@ app.locals.FAL_API_KEY = FAL_API_KEY;
 app.locals.IMAGES_DIR = IMAGES_DIR;
 app.locals.VIDEOS_DIR = VIDEOS_DIR;
 app.locals.LIBRARY_DIR = LIBRARY_DIR;
+app.locals.pairingService = pairingService;
 app.locals.velaRuntime = new VelaRuntime({
     dataDirectory: VELA_DATA_DIR,
     projectsDirectory: VELA_PROJECTS_DIR
 });
+// Older builds could revoke or evict a client without resolving its pending
+// outbox. Archive those unreachable manifests once on upgrade so they cannot
+// permanently block project cleanup or pretend that a receiver still exists.
+app.locals.velaRuntime.batchWorkflows.cancelOrphanedSyncTargets(
+    pairingService.listClients().map((client) => client.id)
+);
 
 // Vela P0: development-only fake provider used to prove the canvas can run
 // independently from third-party model APIs. Real provider routing replaces it

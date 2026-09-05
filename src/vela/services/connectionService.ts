@@ -1,8 +1,15 @@
+export interface VelaConnectedClient {
+  id: string;
+  name: string;
+  createdAt: string;
+}
+
 export interface VelaConnectionInfo {
   baseUrls: string[];
   pairingCode: string;
   expiresAt: string;
   connectedClients: number;
+  clients: VelaConnectedClient[];
   lanEnabled: boolean;
   remotePairingRequired: boolean;
 }

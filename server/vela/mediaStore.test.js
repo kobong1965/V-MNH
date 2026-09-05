@@ -3,9 +3,12 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import sharp from 'sharp';
 
 import { ProjectMediaStore } from './mediaStore.js';
 import { ProjectStore } from './projectStore.js';
+
+const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64');
 
 test('provider result download retries transient GET failures before saving the image', async () => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'vela-media-download-'));
@@ -16,7 +19,7 @@ test('provider result download retries transient GET failures before saving the 
     fetchImpl: async () => {
       calls += 1;
       if (calls < 3) return new Response('unavailable', { status: 503 });
-      return new Response(Buffer.from('downloaded-image'), {
+      return new Response(PNG, {
         status: 200,
         headers: { 'Content-Type': 'image/png' }
       });
@@ -29,8 +32,26 @@ test('provider result download retries transient GET failures before saving the 
       value: 'https://cdn.example.test/result.png'
     });
     assert.equal(calls, 3);
-    assert.equal(media.bytes, Buffer.byteLength('downloaded-image'));
+    assert.equal(media.bytes, PNG.length);
     assert.ok(fs.existsSync(mediaStore.resolveFile(project.id, media.id).filePath));
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test('provider image formats outside the sync contract are normalized to PNG', async () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'vela-media-normalize-'));
+  const gif = await sharp(PNG).gif().toBuffer();
+  const projectStore = new ProjectStore({ dataDirectory: directory, projectsDirectory: path.join(directory, 'projects') });
+  const mediaStore = new ProjectMediaStore(projectStore, {
+    fetchImpl: async () => new Response(gif, { status: 200, headers: { 'Content-Type': 'image/gif' } })
+  });
+  try {
+    const project = projectStore.saveProject({ name: 'Media', nodes: [], groups: [], viewport: { x: 0, y: 0, zoom: 1 } });
+    const media = await mediaStore.saveProviderImage(project.id, { kind: 'url', value: 'https://cdn.example.test/result.gif' });
+    assert.equal(media.mime, 'image/png');
+    assert.equal(path.extname(media.relativePath), '.png');
+    assert.deepEqual(fs.readFileSync(mediaStore.resolveFile(project.id, media.id).filePath).subarray(0, 8), PNG.subarray(0, 8));
   } finally {
     fs.rmSync(directory, { recursive: true, force: true });
   }

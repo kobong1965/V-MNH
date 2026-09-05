@@ -19,10 +19,11 @@ interface VelaEcommerceWorkflowsProps {
   onOpenProject: (projectId: string) => void | Promise<void>;
 }
 
-type WorkflowFilter = 'projects' | 'all' | EcommerceWorkflowSummary['category'];
+type WorkflowFilter = 'projects' | 'batch' | 'all' | EcommerceWorkflowSummary['category'];
 
 const FILTERS: Array<{ id: WorkflowFilter; label: string }> = [
   { id: 'projects', label: '项目' },
+  { id: 'batch', label: '批量工厂' },
   { id: 'all', label: '全部' },
   { id: 'commerce', label: '电商视觉' },
   { id: 'outfit', label: '服装换装' },
@@ -74,11 +75,16 @@ export function VelaEcommerceWorkflows({ busyWorkflowId, disabled, projects, cur
         .includes(normalizedQuery);
     });
   }, [filter, query, workflows]);
+  const isProjectFilter = filter === 'projects' || filter === 'batch';
   const visibleProjects = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase('zh-CN');
-    if (!normalizedQuery) return projects;
-    return projects.filter((project) => project.name.toLocaleLowerCase('zh-CN').includes(normalizedQuery));
-  }, [projects, query]);
+    return projects.filter((project) => {
+      const matchesCategory = filter === 'batch' ? project.category === 'batch' : project.category !== 'batch';
+      return matchesCategory && (!normalizedQuery || project.name.toLocaleLowerCase('zh-CN').includes(normalizedQuery));
+    });
+  }, [filter, projects, query]);
+  const projectCount = projects.filter((project) => filter === 'batch' ? project.category === 'batch' : project.category !== 'batch').length;
+  const searchCopy = filter === 'batch' ? '搜索批量项目' : isProjectFilter ? '搜索项目' : '搜索工作流';
 
   const confirmDelete = async () => {
     if (!deleteTarget) return;
@@ -99,7 +105,7 @@ export function VelaEcommerceWorkflows({ busyWorkflowId, disabled, projects, cur
     <section className="vela-commerce" aria-labelledby="vela-commerce-title">
       <header className="vela-commerce-heading">
         <h1 id="vela-commerce-title"><ShoppingBag size={19} aria-hidden="true" />电商工作流</h1>
-        <span className="vela-commerce-count">{filter === 'projects' ? `${projects.length} 个项目` : `${workflows.length} 个工作流`}</span>
+        <span className="vela-commerce-count">{isProjectFilter ? `${projectCount} 个项目` : `${workflows.length} 个工作流`}</span>
       </header>
 
       <div className="vela-commerce-toolbar">
@@ -118,29 +124,29 @@ export function VelaEcommerceWorkflows({ busyWorkflowId, disabled, projects, cur
         </div>
         <label className="vela-commerce-search">
           <Search size={17} aria-hidden="true" />
-          <span className="vela-visually-hidden">{filter === 'projects' ? '搜索项目' : '搜索工作流'}</span>
-          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={filter === 'projects' ? '搜索项目' : '搜索工作流'} />
+          <span className="vela-visually-hidden">{searchCopy}</span>
+          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={searchCopy} />
           {query && (
             <button type="button" aria-label="清空搜索" onClick={() => setQuery('')}><X size={15} aria-hidden="true" /></button>
           )}
         </label>
       </div>
 
-      {filter !== 'projects' && error && (
+      {!isProjectFilter && error && (
         <div className="vela-commerce-message" role="alert">
           <span>{error}</span>
           <button type="button" onClick={() => void refresh()}>重新加载</button>
         </div>
       )}
 
-      {filter === 'projects' ? (
+      {isProjectFilter ? (
         <VelaProjectGallery
           projects={visibleProjects}
           variant="project"
           currentProjectId={currentProjectId}
           disabled={disabled}
-          emptyTitle={projects.length === 0 ? '还没有项目' : '没有匹配的项目'}
-          emptyDescription={projects.length === 0 ? '点击左侧“新建项目”后，项目会显示在这里。' : '请更换搜索关键词。'}
+          emptyTitle={projectCount === 0 ? (filter === 'batch' ? '还没有批量项目' : '还没有项目') : '没有匹配的项目'}
+          emptyDescription={projectCount === 0 ? (filter === 'batch' ? '在左侧“批量工厂”创建后，项目会归类到这里。' : '点击左侧“新建项目”后，项目会显示在这里。') : '请更换搜索关键词。'}
           onOpen={onOpenProject}
         />
       ) : loading ? (

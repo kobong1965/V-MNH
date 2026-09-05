@@ -7,17 +7,46 @@ import test from 'node:test';
 import express from 'express';
 
 import velaDataRoutes from './vela-data.js';
+import velaGenerationRoutes from './vela-generation.js';
 import { ProviderError } from '../providers/openAiCompatibleProvider.js';
 import { VelaRuntime } from '../vela/runtime.js';
 import { computeExternalH3ContractFingerprint } from '../vela/externalJobContract.js';
+import { isMaterialsReadOnlyClient, isMaterialsReadRouteAllowed } from '../vela/pairingService.js';
 import { AUTO_COMFY_PROFILE_ID } from '../../shared/vela-contracts.js';
+
+const VALID_PNG_BYTES = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+  'base64'
+);
+const successfulImageProvider = {
+  listModels: async () => ['gpt-text', 'gpt-image-1.5'],
+  generateImages: async () => [{ kind: 'base64', value: VALID_PNG_BYTES.toString('base64') }],
+  editImages: async () => [{ kind: 'base64', value: VALID_PNG_BYTES.toString('base64') }]
+};
 
 const createServer = async (runtimeOptions = {}) => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'vela-routes-'));
-  const runtime = new VelaRuntime({ dataDirectory: directory, fakeStepDelay: 1, ...runtimeOptions });
+  const { pairedClients = [], tokenClients = {}, ...velaOptions } = runtimeOptions;
+  const runtime = new VelaRuntime({ dataDirectory: directory, fakeStepDelay: 1, ...velaOptions });
   const app = express();
   app.use(express.json({ limit: '5mb' }));
   app.locals.velaRuntime = runtime;
+  app.locals.pairingService = { listClients: () => pairedClients };
+  app.locals.IMAGES_DIR = path.join(directory, 'fake-images');
+  fs.mkdirSync(app.locals.IMAGES_DIR, { recursive: true });
+  app.use('/api/vela', (req, _res, next) => {
+    const authorization = req.get('authorization') || '';
+    const token = authorization.startsWith('Bearer ') ? authorization.slice(7).trim() : '';
+    if (tokenClients[token]) req.velaClient = tokenClients[token];
+    next();
+  });
+  app.use('/api/vela', (req, res, next) => {
+    if (isMaterialsReadOnlyClient(req.velaClient) && !isMaterialsReadRouteAllowed(req.method, req.path)) {
+      return res.status(403).json({ error: '当前软件连接仅允许读取已同步素材。' });
+    }
+    return next();
+  });
+  app.use('/api', velaGenerationRoutes);
   app.use('/api', velaDataRoutes);
   const server = await new Promise((resolve) => {
     const listening = app.listen(0, '127.0.0.1', () => resolve(listening));
@@ -78,12 +107,315 @@ test('project API saves, loads and exports a versioned project', async () => {
   }
 });
 
+test('scoped material clients receive only their inbox and cannot use other Vela routes', async () => {
+  const materialClient = {
+    id: 'xhs-materials-1',
+    name: '小红书素材盘',
+    createdAt: new Date(0).toISOString(),
+    scopes: ['materials:read']
+  };
+  const otherClient = {
+    id: 'other-materials-1',
+    name: '其他素材盘',
+    createdAt: new Date(0).toISOString(),
+    scopes: ['materials:read']
+  };
+  const fixture = await createServer({
+    pairedClients: [materialClient, otherClient],
+    tokenClients: { 'xhs-token': materialClient, 'other-token': otherClient },
+    gptProvider: successfulImageProvider
+  });
+  try {
+    const profile = fixture.runtime.createProfile({
+      type: 'gpt',
+      name: '素材同步测试',
+      baseUrl: 'https://relay.test/v1',
+      apiKey: 'never-return-this-key',
+      models: { prompt: 'gpt-text', image: 'gpt-image-1.5' }
+    });
+    const imageData = `data:image/png;base64,${Buffer.from('sync-inbox-image').toString('base64')}`;
+    const created = await requestJson(`${fixture.baseUrl}/batches`, {
+      method: 'POST',
+      body: JSON.stringify({
+        name: '小红书素材批次',
+        prompt: '保持商品主体',
+        profileId: profile.id,
+        aspectRatio: '3:4',
+        resolution: '2K',
+        outputCount: 1,
+        images: [{ name: 'source.png', data: imageData }]
+      })
+    });
+    const started = await requestJson(`${fixture.baseUrl}/batches/${created.data.id}/start`, {
+      method: 'POST',
+      body: JSON.stringify({ itemIds: created.data.items.map((item) => item.id) })
+    });
+    assert.equal(started.response.status, 202);
+    await fixture.runtime.scheduler.waitForIdle();
+    const synced = await requestJson(`${fixture.baseUrl}/batches/${created.data.id}/sync`, {
+      method: 'POST',
+      body: JSON.stringify({ targetIds: [materialClient.id] })
+    });
+    assert.equal(synced.response.status, 200);
+
+    const unauthenticatedManifest = await requestJson(
+      `${fixture.baseUrl}/batches/${created.data.id}/sync-manifest?targetId=${materialClient.id}`
+    );
+    assert.equal(unauthenticatedManifest.response.status, 401);
+
+    const inbox = await requestJson(`${fixture.baseUrl}/sync-inbox`, {
+      headers: { Authorization: 'Bearer xhs-token' }
+    });
+    assert.equal(inbox.response.status, 200);
+    assert.deepEqual(inbox.data, {
+      version: 1,
+      items: [{ batchId: created.data.id, syncedAt: synced.data.syncedAt }]
+    });
+
+    const manifest = await requestJson(`${fixture.baseUrl}/batches/${created.data.id}/sync-manifest`, {
+      headers: { Authorization: 'Bearer xhs-token' }
+    });
+    assert.equal(manifest.response.status, 200);
+    assert.equal(manifest.data.target, materialClient.id);
+
+    const blockedDeletion = await requestJson(`${fixture.baseUrl}/projects/${created.data.projectId}`, {
+      method: 'DELETE'
+    });
+    assert.equal(blockedDeletion.response.status, 409);
+    assert.match(blockedDeletion.data.error, /等待同步软件接收/);
+
+    const forbiddenMedia = await requestJson(
+      `${fixture.baseUrl}/projects/${created.data.projectId}/media/not-in-manifest/file`,
+      { headers: { Authorization: 'Bearer xhs-token' } }
+    );
+    assert.equal(forbiddenMedia.response.status, 403);
+
+    const forbiddenWrite = await requestJson(`${fixture.baseUrl}/projects`, {
+      method: 'POST',
+      headers: { Authorization: 'Bearer xhs-token' },
+      body: JSON.stringify({ name: '不应创建', nodes: [], groups: [], viewport: { x: 0, y: 0, zoom: 1 } })
+    });
+    assert.equal(forbiddenWrite.response.status, 403);
+    const forbiddenRead = await requestJson(`${fixture.baseUrl}/profiles`, {
+      headers: { Authorization: 'Bearer xhs-token' }
+    });
+    assert.equal(forbiddenRead.response.status, 403);
+    const forbiddenBatchList = await requestJson(`${fixture.baseUrl}/batches`, {
+      headers: { Authorization: 'Bearer xhs-token' }
+    });
+    assert.equal(forbiddenBatchList.response.status, 403);
+    const forbiddenImageGeneration = await requestJson(`${fixture.baseUrl}/generate-image`, {
+      method: 'POST',
+      headers: { Authorization: 'Bearer xhs-token' },
+      body: JSON.stringify({ prompt: '不应执行', aspectRatio: '1:1' })
+    });
+    assert.equal(forbiddenImageGeneration.response.status, 403);
+    const forbiddenVideoGeneration = await requestJson(`${fixture.baseUrl}/generate-video`, {
+      method: 'POST',
+      headers: { Authorization: 'Bearer xhs-token' },
+      body: JSON.stringify({ prompt: '不应执行', aspectRatio: '16:9' })
+    });
+    assert.equal(forbiddenVideoGeneration.response.status, 403);
+
+    const wrongClientManifest = await requestJson(`${fixture.baseUrl}/batches/${created.data.id}/sync-manifest`, {
+      headers: { Authorization: 'Bearer other-token' }
+    });
+    assert.equal(wrongClientManifest.response.status, 404);
+    const wrongClientAck = await requestJson(`${fixture.baseUrl}/sync-inbox/${created.data.id}/ack`, {
+      method: 'POST',
+      headers: { Authorization: 'Bearer other-token' },
+      body: JSON.stringify({ sourceKeys: [] })
+    });
+    assert.equal(wrongClientAck.response.status, 404);
+
+    const acknowledged = await requestJson(`${fixture.baseUrl}/sync-inbox/${created.data.id}/ack`, {
+      method: 'POST',
+      headers: { Authorization: 'Bearer xhs-token' },
+      body: JSON.stringify({ sourceKeys: [] })
+    });
+    assert.equal(acknowledged.response.status, 200);
+    assert.equal(acknowledged.data.acknowledged, 0);
+    const stillPendingInbox = await requestJson(`${fixture.baseUrl}/sync-inbox`, {
+      headers: { Authorization: 'Bearer xhs-token' }
+    });
+    assert.deepEqual(stillPendingInbox.data, {
+      version: 1,
+      items: [{ batchId: created.data.id, syncedAt: synced.data.syncedAt }]
+    });
+    const sourceKeys = manifest.data.items.flatMap((item) => item.outputs.map(
+      (output) => `${manifest.data.batchId}:${item.itemId}:${output.jobId}`
+    ));
+    const completed = await requestJson(`${fixture.baseUrl}/sync-inbox/${created.data.id}/ack`, {
+      method: 'POST',
+      headers: { Authorization: 'Bearer xhs-token' },
+      body: JSON.stringify({ sourceKeys })
+    });
+    assert.equal(completed.response.status, 200);
+    assert.equal(completed.data.acknowledged, sourceKeys.length);
+    const emptyInbox = await requestJson(`${fixture.baseUrl}/sync-inbox`, {
+      headers: { Authorization: 'Bearer xhs-token' }
+    });
+    assert.deepEqual(emptyInbox.data, { version: 1, items: [] });
+    const deletedAfterAcknowledgement = await fetch(`${fixture.baseUrl}/projects/${created.data.projectId}`, {
+      method: 'DELETE'
+    });
+    assert.equal(deletedAfterAcknowledgement.status, 204);
+  } finally {
+    await fixture.close();
+  }
+});
+
+test('full-access clients and the local UI still reach generation routes in their real mount order', async () => {
+  const fullClient = {
+    id: 'legacy-full-client',
+    name: '旧版 Storyworks',
+    createdAt: new Date(0).toISOString(),
+    scopes: ['vela:full']
+  };
+  const fixture = await createServer({ tokenClients: { 'full-token': fullClient } });
+  try {
+    const fullClientResult = await requestJson(`${fixture.baseUrl}/generate-image`, {
+      method: 'POST',
+      headers: { Authorization: 'Bearer full-token' },
+      body: JSON.stringify({ prompt: '全权限客户端测试图', aspectRatio: '1:1' })
+    });
+    assert.equal(fullClientResult.response.status, 200);
+    assert.equal(fullClientResult.data.status, 'succeeded');
+
+    const localUiResult = await requestJson(`${fixture.baseUrl}/generate-video`, {
+      method: 'POST',
+      body: JSON.stringify({ prompt: '本机画布测试视频', aspectRatio: '16:9' })
+    });
+    assert.equal(localUiResult.response.status, 200);
+    assert.equal(localUiResult.data.status, 'succeeded');
+  } finally {
+    await fixture.close();
+  }
+});
+
+test('batch workflow API creates one project with independent workflow groups and publishes manifests to selected software', async () => {
+  const pairedClient = { id: 'client-route-1', name: '我的商品管理软件', createdAt: new Date(0).toISOString() };
+  const fixture = await createServer({
+    pairedClients: [pairedClient],
+    tokenClients: { 'paired-token': pairedClient },
+    gptProvider: successfulImageProvider
+  });
+  try {
+    const profile = fixture.runtime.createProfile({
+      type: 'gpt',
+      name: '批量图片账户',
+      baseUrl: 'https://relay.test/v1',
+      apiKey: 'batch-secret-never-return',
+      models: { prompt: 'gpt-text', image: 'gpt-image-1.5' }
+    });
+    const imageData = `data:image/png;base64,${Buffer.from('batch-route-image').toString('base64')}`;
+    const created = await requestJson(`${fixture.baseUrl}/batches`, {
+      method: 'POST',
+      body: JSON.stringify({
+        name: 'API 黑裤换色',
+        prompt: '把裤子换成黑色',
+        profileId: profile.id,
+        aspectRatio: '3:4',
+        resolution: '2K',
+        outputCount: 2,
+        benchmarkImage: { name: 'benchmark.png', data: imageData },
+        poseVariation: { enabled: true, outputCount: 5, prompt: '只改变人物姿势，其他细节保持不变' },
+        images: [{ name: 'a.png', data: imageData }, { name: 'b.png', data: imageData }]
+      })
+    });
+    assert.equal(created.response.status, 201);
+    assert.equal(created.data.items.length, 2);
+    assert.equal(created.data.items[0].projectId, created.data.items[1].projectId);
+    assert.equal(created.data.projectId, created.data.items[0].projectId);
+    const project = await requestJson(`${fixture.baseUrl}/projects/${created.data.projectId}`);
+    assert.equal(project.response.status, 200);
+    assert.equal(project.data.nodes.length, 8);
+    assert.equal(project.data.groups.length, 2);
+    assert.equal(new Set(project.data.groups.flatMap((group) => group.nodeIds)).size, 8);
+    assert.equal(created.data.poseVariation.outputCount, 5);
+    assert.equal(created.data.items.every((item) => item.benchmarkNodeId && item.poseNodeId), true);
+    assert.equal(project.data.nodes.filter((node) => node.annotationText === '对标图').length, 2);
+    assert.equal(project.data.nodes.filter((node) => node.imageBatchMode === 'pose-variation').length, 2);
+    const projects = await requestJson(`${fixture.baseUrl}/projects`);
+    assert.equal(projects.data.find((item) => item.id === created.data.projectId).category, 'batch');
+    assert.doesNotMatch(JSON.stringify(created.data), /batch-secret-never-return|apiKey/);
+
+    const listed = await requestJson(`${fixture.baseUrl}/batches`);
+    assert.equal(listed.response.status, 200);
+    assert.equal(listed.data[0].id, created.data.id);
+
+    const started = await requestJson(`${fixture.baseUrl}/batches/${created.data.id}/start`, {
+      method: 'POST',
+      body: JSON.stringify({ itemIds: created.data.items.map((item) => item.id) })
+    });
+    assert.equal(started.response.status, 202);
+    await fixture.runtime.scheduler.waitForIdle();
+
+    const synced = await requestJson(`${fixture.baseUrl}/batches/${created.data.id}/sync`, {
+      method: 'POST', body: JSON.stringify({ targetIds: ['storyworks', pairedClient.id] })
+    });
+    assert.equal(synced.response.status, 200);
+    assert.equal(synced.data.target, 'storyworks');
+    assert.equal(synced.data.manifestPath, undefined);
+    assert.deepEqual(synced.data.targets.map((target) => target.name), ['编导车间（Storyworks）', pairedClient.name]);
+
+    const manifest = await requestJson(`${fixture.baseUrl}/batches/${created.data.id}/sync-manifest`);
+    assert.equal(manifest.response.status, 200);
+    assert.equal(manifest.data.items.length, 2);
+    assert.equal(manifest.data.format, 'vela-storyworks-batch');
+    assert.equal(manifest.data.items.every((item) => item.projectId === created.data.projectId), true);
+    assert.equal(manifest.data.items.every((item) => item.groupId), true);
+    const legacyAuthenticatedManifest = await requestJson(
+      `${fixture.baseUrl}/batches/${created.data.id}/sync-manifest`,
+      { headers: { Authorization: 'Bearer paired-token' } }
+    );
+    assert.equal(legacyAuthenticatedManifest.response.status, 200);
+    assert.equal(legacyAuthenticatedManifest.data.target, 'storyworks');
+    const clientManifest = await requestJson(
+      `${fixture.baseUrl}/batches/${created.data.id}/sync-manifest?targetId=${pairedClient.id}`,
+      { headers: { Authorization: 'Bearer paired-token' } }
+    );
+    assert.equal(clientManifest.response.status, 200);
+    assert.equal(clientManifest.data.target, pairedClient.id);
+    assert.equal(clientManifest.data.targetApp.name, pairedClient.name);
+
+    const unknownTarget = await requestJson(`${fixture.baseUrl}/batches/${created.data.id}/sync`, {
+      method: 'POST', body: JSON.stringify({ targetIds: ['missing-client'] })
+    });
+    assert.equal(unknownTarget.response.status, 400);
+  } finally {
+    await fixture.close();
+  }
+});
+
 test('project deletion is blocked while a queued job still owns its output directory', async () => {
   const fixture = await createServer();
   try {
     const created = await requestJson(`${fixture.baseUrl}/projects`, {
       method: 'POST',
       body: JSON.stringify({ name: '进行中项目', nodes: [], groups: [], viewport: { x: 0, y: 0, zoom: 1 } })
+    });
+    const db = fixture.runtime.database.connection;
+    fixture.runtime.database.transaction(() => {
+      const insertGroup = db.prepare(`
+        INSERT INTO job_groups(
+          id, project_id, node_id, provider_type, profile_id, seed_mode, base_seed,
+          total_count, created_at, updated_at
+        ) VALUES (?, ?, ?, 'fake', 'offline-profile', 'fixed', 1, 1, ?, ?)
+      `);
+      const insertJob = db.prepare(`
+        INSERT INTO jobs(
+          id, group_id, project_id, node_id, provider_type, profile_id, status,
+          payload_json, seed, priority, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, 'fake', 'offline-profile', 'succeeded', '{}', 1, 0, ?, ?)
+      `);
+      for (let index = 0; index < 2001; index += 1) {
+        const groupId = `completed-guard-group-${index}`;
+        const nodeId = `completed-guard-node-${index}`;
+        const createdAt = new Date(index * 1000).toISOString();
+        insertGroup.run(groupId, created.data.id, nodeId, createdAt, createdAt);
+        insertJob.run(`completed-guard-job-${index}`, groupId, created.data.id, nodeId, createdAt, createdAt);
+      }
     });
     fixture.runtime.jobs.createGroup({
       id: 'guard-group', projectId: created.data.id, nodeId: 'node-1', providerType: 'fake',
@@ -92,6 +424,8 @@ test('project deletion is blocked while a queued job still owns its output direc
       id: 'guard-job', groupId: 'guard-group', projectId: created.data.id, nodeId: 'node-1', providerType: 'fake',
       profileId: 'offline-profile', payload: { nodeKind: 'gpt-image', prompt: 'guard' }, seed: 1, workflowVersion: null, priority: 0
     }]);
+    assert.equal(fixture.runtime.jobs.listJobs({ limit: 2000 }).some((job) => job.id === 'guard-job'), false);
+    assert.equal(fixture.runtime.jobs.countActiveJobsForProject(created.data.id), 1);
     const response = await fetch(`${fixture.baseUrl}/projects/${created.data.id}`, { method: 'DELETE' });
     assert.equal(response.status, 409);
     assert.match((await response.json()).error, /生成任务/);
@@ -182,9 +516,11 @@ test('data dashboard combines AutoDL balance with today H3 usage without exposin
       autodlDeveloperToken: 'dashboard-token-never-return'
     });
     const now = new Date();
-    const createdAt = new Date(now.getTime() - 120_000).toISOString();
-    const runningAt = new Date(now.getTime() - 90_000).toISOString();
-    const finishedAt = new Date(now.getTime() - 30_000).toISOString();
+    const shanghaiDate = new Date(now.getTime() + 8 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const shanghaiDayStart = Date.parse(`${shanghaiDate}T00:00:00+08:00`);
+    const createdAt = new Date(shanghaiDayStart + 30_000).toISOString();
+    const runningAt = new Date(shanghaiDayStart + 60_000).toISOString();
+    const finishedAt = new Date(shanghaiDayStart + 120_000).toISOString();
     fixture.runtime.database.connection.prepare(`
       INSERT INTO job_groups(id, project_id, node_id, provider_type, profile_id, seed_mode, base_seed, total_count, created_at, updated_at)
       VALUES ('dashboard-group', 'project', 'node', 'comfy', ?, 'fixed', 1, 1, ?, ?)
@@ -391,6 +727,14 @@ test('capability discovery advertises the durable external-key video contract', 
     assert.equal(result.data.capabilities.durableVideoProvider.contractFingerprintField, 'body.contractFingerprint');
     assert.equal(result.data.capabilities.durableVideoProvider.maxJobsPerExternalKey, 1);
     assert.equal(result.data.capabilities.durableVideoProvider.terminalSubmissionUncertain, true);
+    assert.equal(result.data.capabilities.batchImageWorkflows.contractVersion, 2);
+    assert.equal(result.data.capabilities.batchImageWorkflows.syncTarget, 'storyworks');
+    assert.equal(result.data.capabilities.batchImageWorkflows.multipleSyncTargets, true);
+    assert.equal(result.data.capabilities.batchImageWorkflows.independentProjectPerImage, false);
+    assert.equal(result.data.capabilities.batchImageWorkflows.singleProjectWithIndependentWorkflowGroups, true);
+    assert.equal(result.data.capabilities.batchImageWorkflows.inboxPath, '/api/vela/sync-inbox');
+    assert.equal(result.data.capabilities.batchImageWorkflows.acknowledgePath, '/api/vela/sync-inbox/{batchId}/ack');
+    assert.deepEqual(result.data.capabilities.batchImageWorkflows.supportedClientScopes, ['materials:read']);
   } finally {
     await fixture.close();
   }
@@ -526,6 +870,70 @@ test('profile API never returns the key and exposes a connection test result', a
     const tested = await requestJson(`${fixture.baseUrl}/profiles/${created.data.id}/test`, { method: 'POST' });
     assert.equal(tested.response.status, 200);
     assert.deepEqual(tested.data.models, ['prompt-model', 'image-model']);
+  } finally {
+    await fixture.close();
+  }
+});
+
+test('batch prompt analysis uses the selected model slot and prompt templates persist through the API', async () => {
+  const calls = [];
+  const fixture = await createServer({
+    gptProvider: {
+      analyzeImagePrompt: async (profile, apiKey, input) => {
+        calls.push({ profile, apiKey, input });
+        return {
+          text: '保留人物与背景，只把裤子替换成对标图款式。',
+          source: { provider: 'openai-compatible', profileId: profile.id, model: input.model, modelSlot: input.modelSlot }
+        };
+      }
+    }
+  });
+  try {
+    const profile = fixture.runtime.createProfile({
+      type: 'gpt', name: '视觉账户', baseUrl: 'https://relay.test/v1', apiKey: 'sk-analysis-secret',
+      models: { prompt: 'gpt-5.6', image: 'gpt-image-2', analysis: 'qwen3-vl-plus' }
+    });
+    const analyzed = await requestJson(`${fixture.baseUrl}/prompt-analysis`, {
+      method: 'POST',
+      body: JSON.stringify({
+        profileId: profile.id,
+        modelSlot: 'analysis',
+        requirement: '只换裤子',
+        productImages: [{ name: 'product.png', data: `data:image/png;base64,${VALID_PNG_BYTES.toString('base64')}` }],
+        benchmarkImage: { name: 'benchmark.png', data: `data:image/png;base64,${VALID_PNG_BYTES.toString('base64')}` }
+      })
+    });
+    assert.equal(analyzed.response.status, 200);
+    assert.equal(calls[0].apiKey, 'sk-analysis-secret');
+    assert.equal(calls[0].input.model, 'qwen3-vl-plus');
+    assert.equal(calls[0].input.productImages.length, 1);
+    assert.doesNotMatch(JSON.stringify(analyzed.data), /sk-analysis-secret/);
+
+    const tooManyImages = await requestJson(`${fixture.baseUrl}/prompt-analysis`, {
+      method: 'POST',
+      body: JSON.stringify({
+        profileId: profile.id,
+        modelSlot: 'prompt',
+        requirement: '只换裤子',
+        productImages: Array.from({ length: 5 }, (_, index) => ({
+          name: `product-${index}.png`,
+          data: `data:image/png;base64,${VALID_PNG_BYTES.toString('base64')}`
+        }))
+      })
+    });
+    assert.equal(tooManyImages.response.status, 400);
+    assert.equal(calls.length, 1);
+
+    const saved = await requestJson(`${fixture.baseUrl}/prompt-templates`, {
+      method: 'POST',
+      body: JSON.stringify({ name: '换裤模板', text: analyzed.data.text })
+    });
+    assert.equal(saved.response.status, 201);
+    const listed = await requestJson(`${fixture.baseUrl}/prompt-templates`);
+    assert.equal(listed.data.length, 1);
+    assert.equal(listed.data[0].text, analyzed.data.text);
+    const deleted = await fetch(`${fixture.baseUrl}/prompt-templates/${saved.data.id}`, { method: 'DELETE' });
+    assert.equal(deleted.status, 204);
   } finally {
     await fixture.close();
   }

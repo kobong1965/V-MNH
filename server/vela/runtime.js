@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import path from 'node:path';
 
 import { expandJobGroup } from './batch.js';
+import { BatchWorkflowStore } from './batchWorkflowStore.js';
 import { VelaDatabase } from './database.js';
 import { EventHub } from './eventHub.js';
 import { JobGroupContractConflictError, JobRepository } from './jobRepository.js';
@@ -9,6 +10,7 @@ import { assertExternalH3ContractFingerprint } from './externalJobContract.js';
 import { getShanghaiDayWindow, H3UsageAnalytics } from './h3UsageAnalytics.js';
 import { ProjectMediaStore } from './mediaStore.js';
 import { ProfileRepository } from './profileRepository.js';
+import { PromptTemplateStore } from './promptTemplateStore.js';
 import { ProjectStore } from './projectStore.js';
 import { WorkflowTemplateStore } from './workflowTemplateStore.js';
 import { EcommerceWorkflowStore } from './ecommerceWorkflowStore.js';
@@ -110,6 +112,7 @@ export class VelaRuntime {
       dataDirectory: this.dataDirectory,
       projectMediaStore: this.media
     });
+    this.promptTemplates = new PromptTemplateStore({ dataDirectory: this.dataDirectory });
     this.database = new VelaDatabase(path.join(this.dataDirectory, 'database', 'vela.sqlite'));
     this.secretProtector = secretProtector || new SecretProtector({
       keyPath: path.join(this.dataDirectory, 'secrets', 'profile-master.key')
@@ -166,6 +169,18 @@ export class VelaRuntime {
         console.info('[Vela Cloud Power]', safeLogJson(event));
         this.eventHub.publish(event);
       }
+    });
+    this.batchWorkflows = new BatchWorkflowStore({
+      dataDirectory: this.dataDirectory,
+      projectStore: this.projectStore,
+      mediaStore: this.media,
+      profileRepository: this.profiles,
+      createJobGroup: (draft) => this.createJobGroup(draft),
+      listJobs: (options = {}) => this.jobs.listJobs({
+        ...options,
+        limit: Math.min(2000, Math.max(1, Number(options.limit) || 2000))
+      }),
+      findLatestNodeJob: (projectId, nodeId) => this.jobs.findLatestNodeJob(projectId, nodeId)
     });
     this.recover();
   }
@@ -702,6 +717,55 @@ export class VelaRuntime {
       });
     }
     return configuredModel;
+  }
+
+  async analyzeBatchPrompt(draft = {}) {
+    const profile = this.profiles.getWithSecret(String(draft.profileId || ''));
+    if (!profile || profile.type !== 'gpt') {
+      throw new ProviderError('所选视觉分析账户不存在', { code: 'INVALID_INPUT' });
+    }
+    if (profile.credentialStatus === 'unreadable') {
+      throw new ProviderError(`账户“${profile.name}”的已保存密钥无法解密，请重新输入 API Key 并保存`, {
+        code: 'CREDENTIAL_UNREADABLE',
+        details: { profileName: profile.name, endpointHost: endpointHost(profile.baseUrl) }
+      });
+    }
+    if (!profile.secret?.apiKey) {
+      throw new ProviderError(`账户“${profile.name}”尚未保存 API Key`, {
+        code: 'CREDENTIAL_MISSING',
+        details: { profileName: profile.name, endpointHost: endpointHost(profile.baseUrl) }
+      });
+    }
+    const modelSlot = draft.modelSlot === 'analysis' ? 'analysis' : draft.modelSlot === 'prompt' ? 'prompt' : '';
+    if (!modelSlot) throw new ProviderError('视觉模型类型无效', { code: 'INVALID_INPUT' });
+    const model = String(profile.models?.[modelSlot] || '').trim();
+    if (!model) {
+      throw new ProviderError(`账户“${profile.name}”尚未配置${modelSlot === 'analysis' ? 'Qwen 分析' : '提示词'}模型`, {
+        code: 'MODEL_NOT_CONFIGURED',
+        details: { profileName: profile.name, endpointHost: endpointHost(profile.baseUrl), modelType: modelSlot }
+      });
+    }
+    const productImages = Array.isArray(draft.productImages) ? draft.productImages.slice(0, 5) : [];
+    if (productImages.length === 0 || productImages.length > 4) {
+      throw new ProviderError('智能分析需要 1-4 张产品图', { code: 'INVALID_INPUT' });
+    }
+    const normalizeImage = (image, label) => {
+      const dataUrl = String(image?.data || '');
+      if (!/^data:image\/[a-z0-9.+-]+;base64,/i.test(dataUrl)) {
+        throw new ProviderError(`${label}不是有效的图片内容`, { code: 'INVALID_INPUT' });
+      }
+      if (dataUrl.length > 46 * 1024 * 1024) {
+        throw new ProviderError(`${label}不能超过 32MB`, { code: 'INVALID_INPUT' });
+      }
+      return { name: String(image?.name || label).slice(0, 120), dataUrl };
+    };
+    return this.gptProvider.analyzeImagePrompt(profile, profile.secret.apiKey, {
+      requirement: String(draft.requirement || '').slice(0, 4000),
+      model,
+      modelSlot,
+      productImages: productImages.map((image, index) => normalizeImage(image, `产品图 ${index + 1}`)),
+      benchmarkImage: draft.benchmarkImage ? normalizeImage(draft.benchmarkImage, '对标图') : null
+    });
   }
 
   createProfile(draft) {

@@ -121,7 +121,7 @@ export default function App() {
   // ============================================================================
 
   const [hasApiKey] = useState(true); // Backend handles API key
-  const [appView, setAppView] = useState<'home' | 'canvas' | 'dashboard' | 'api' | 'settings'>('home');
+  const [appView, setAppView] = useState<'home' | 'canvas' | 'batch' | 'dashboard' | 'api' | 'settings'>('home');
   const [contextMenu, setContextMenu] = useState<ContextMenuState>({
     isOpen: false,
     x: 0,
@@ -455,6 +455,9 @@ export default function App() {
         : isWanNode || videoGenerationMode === 'text-to-video'
           ? []
           : connectedParents.filter((parent) => parent.type === NodeType.IMAGE && Boolean(parent.resultUrl))) as NodeData[];
+      if (node.kind === 'gpt-image' && node.requiresGeneratedReference && referenceNodes.length === 0) {
+        throw new Error('姿势裂变需要先生成并确认上一个主图结果，再启动当前后缀节点');
+      }
       const competitorVideoNode = isCompetitorAnalyzer
         ? connectedParents.find((parent) => parent.type === NodeType.VIDEO && Boolean(parent.resultUrl))
         : undefined;
@@ -715,7 +718,9 @@ export default function App() {
           .map((candidate) => (candidate.output as { media?: { url?: string } } | null)?.media?.url)
           .filter((url): url is string => Boolean(url));
         const uniqueResultUrls = [...new Set(resultUrls)];
-        const resultUrl = uniqueResultUrls[0] || node.resultUrl;
+        const resultUrl = node.resultUrl && uniqueResultUrls.includes(node.resultUrl)
+          ? node.resultUrl
+          : uniqueResultUrls[0] || node.resultUrl;
         const prompt = job.status === 'succeeded' && output?.text && VELA_TEXT_OUTPUT_NODE_KINDS.has(node.kind || '')
           ? output.text
           : node.prompt;

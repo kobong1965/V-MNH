@@ -1,0 +1,77 @@
+.vela-prompt-workbench { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.vela-prompt-workbench__label-row { align-items: center; display: flex; gap: 12px; justify-content: space-between; }
+.vela-prompt-workbench__label-row > label { color: #656a64; font-size: 12px; font-weight: 600; }
+.vela-prompt-workbench__library { align-items: center; display: flex; gap: 6px; }
+.vela-prompt-workbench__library select { min-width: 190px; }
+.vela-prompt-workbench button { align-items: center; background: #fff; border: 1px solid #d7dcd6; border-radius: 7px; color: #343a35; cursor: pointer; display: inline-flex; font: inherit; font-size: 12px; font-weight: 650; gap: 5px; justify-content: center; min-height: 34px; padding: 7px 10px; }
+.vela-prompt-workbench button:hover:not(:disabled) { border-color: #8ebec5; color: #087e91; }
+.vela-prompt-workbench button:disabled { cursor: not-allowed; opacity: .5; }
+.vela-prompt-workbench button:focus-visible,
+.vela-prompt-workbench input:focus-visible,
+.vela-prompt-workbench select:focus-visible,
+.vela-prompt-workbench textarea:focus-visible { outline: 2px solid #0aa9c2; outline-offset: 2px; }
+.vela-prompt-workbench__icon-button { min-width: 34px; padding: 7px !important; }
+.vela-prompt-workbench__save-row { align-items: center; background: #f5f7f4; border: 1px solid #dfe3de; border-radius: 8px; display: flex; gap: 6px; padding: 7px; }
+.vela-prompt-workbench__save-row input { flex: 1; min-width: 0; }
+.vela-prompt-workbench > textarea { line-height: 1.65; min-height: 94px; resize: vertical; }
+
+.vela-prompt-workbench__analyst { background: #f1f8f7; border: 1px solid #cbdedb; border-left: 4px solid #09abc6; border-radius: 9px; overflow: hidden; }
+.vela-prompt-workbench__analyst > header { align-items: center; display: flex; justify-content: space-between; min-height: 48px; padding: 8px 10px 8px 12px; }
+.vela-prompt-workbench__analyst > header > div { align-items: center; color: #087e91; display: flex; gap: 9px; }
+.vela-prompt-workbench__analyst > header span { display: flex; flex-direction: column; gap: 2px; }
+.vela-prompt-workbench__analyst > header strong { color: #1b2c2c; font-size: 13px; }
+.vela-prompt-workbench__analyst > header small { color: #687a78; font-size: 11px; font-weight: 500; }
+.vela-prompt-workbench__analyst > header button { background: transparent; border: 0; color: #5d6e6b; min-height: 30px; padding: 4px 6px; }
+.vela-prompt-workbench__analyst[data-open="true"] > header button svg { transform: rotate(180deg); }
+.vela-prompt-workbench__analyst-body { border-top: 1px solid #d6e5e2; padding: 11px 12px 12px; }
+.vela-prompt-workbench__analysis-grid { display: grid; gap: 10px; grid-template-columns: minmax(240px, .75fr) minmax(360px, 1.5fr); }
+.vela-prompt-workbench__analysis-grid label { display: flex; flex-direction: column; gap: 5px; }
+.vela-prompt-workbench__analysis-grid label > span { color: #5d6a67; font-size: 11px; font-weight: 650; }
+.vela-prompt-workbench__analysis-grid textarea { line-height: 1.5; min-height: 66px; resize: vertical; }
+.vela-prompt-workbench__evidence { align-items: center; display: flex; gap: 10px; margin-top: 10px; }
+.vela-prompt-workbench__evidence > span { align-items: center; color: #425b58; display: inline-flex; font-size: 11px; font-weight: 650; gap: 5px; }
+.vela-prompt-workbench__evidence > small { color: #7a8784; font-size: 11px; }
+.vela-prompt-workbench__evidence > button { background: #14201e; border-color: #14201e; color: #fff; margin-left: auto; }
+.vela-prompt-workbench__evidence > button:hover:not(:disabled) { background: #087e91; border-color: #087e91; color: #fff; }
+.vela-prompt-workbench__feedback { color: #35665d; font-size: 11px; margin: 0; }
+.vela-prompt-workbench__feedback[data-error="true"] { color: #a0382c; }
+
+.vela-prompt-workbench__preview { background: #fff; border: 1px solid #9dcfd4; border-radius: 9px; overflow: hidden; }
+.vela-prompt-workbench__preview > header { align-items: center; background: #edf8f8; display: flex; justify-content: space-between; padding: 8px 10px; }
+.vela-prompt-workbench__preview > header > div { align-items: center; color: #087e91; display: flex; gap: 7px; }
+.vela-prompt-workbench__preview > header strong { color: #20302e; font-size: 12px; }
+.vela-prompt-workbench__preview > header span { background: #fff; border: 1px solid #cae0df; border-radius: 999px; color: #61736f; font: 600 10px ui-monospace, monospace; padding: 3px 7px; }
+.vela-prompt-workbench__preview > header button { background: transparent; border: 0; min-height: 28px; padding: 4px; }
+.vela-prompt-workbench__preview > p { color: #29332f; font-size: 12px; line-height: 1.65; margin: 0; max-height: 150px; overflow: auto; padding: 10px 12px; white-space: pre-wrap; }
+.vela-prompt-workbench__preview > footer { align-items: center; border-top: 1px solid #e1e9e7; display: flex; justify-content: space-between; padding: 8px 10px; }
+.vela-prompt-workbench__preview > footer span { color: #7a817c; font-size: 11px; }
+.vela-prompt-workbench__preview > footer button { background: #08a9c3; border-color: #08a9c3; color: #fff; }
+.vela-prompt-workbench__preview > footer button:hover { background: #087e91; border-color: #087e91; color: #fff; }
+
+.vela-home-shell[data-theme="dark"] .vela-prompt-workbench button { background: #202521; border-color: #424842; color: #e8ece7; }
+.vela-home-shell[data-theme="dark"] .vela-prompt-workbench__save-row { background: #202420; border-color: #3c423c; }
+.vela-home-shell[data-theme="dark"] .vela-prompt-workbench__analyst { background: #182523; border-color: #35504c; border-left-color: #12b6d1; }
+.vela-home-shell[data-theme="dark"] .vela-prompt-workbench__analyst > header strong,
+.vela-home-shell[data-theme="dark"] .vela-prompt-workbench__preview > header strong,
+.vela-home-shell[data-theme="dark"] .vela-prompt-workbench__preview > p { color: #edf1ec; }
+.vela-home-shell[data-theme="dark"] .vela-prompt-workbench__analyst > header small,
+.vela-home-shell[data-theme="dark"] .vela-prompt-workbench__analysis-grid label > span,
+.vela-home-shell[data-theme="dark"] .vela-prompt-workbench__evidence > span { color: #a9b8b4; }
+.vela-home-shell[data-theme="dark"] .vela-prompt-workbench__analyst-body { border-color: #35504c; }
+.vela-home-shell[data-theme="dark"] .vela-prompt-workbench__preview { background: #1c211d; border-color: #3a6a6c; }
+.vela-home-shell[data-theme="dark"] .vela-prompt-workbench__preview > header { background: #20302e; }
+.vela-home-shell[data-theme="dark"] .vela-prompt-workbench__preview > header span { background: #171b18; border-color: #42514d; color: #b7c2be; }
+.vela-home-shell[data-theme="dark"] .vela-prompt-workbench__preview > footer { border-color: #3a413b; }
+
+@media (max-width: 820px) {
+  .vela-prompt-workbench__label-row { align-items: stretch; flex-direction: column; }
+  .vela-prompt-workbench__library { flex-wrap: wrap; }
+  .vela-prompt-workbench__library select { flex: 1; min-width: 180px; }
+  .vela-prompt-workbench__analysis-grid { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 520px) {
+  .vela-prompt-workbench__evidence { align-items: stretch; flex-direction: column; }
+  .vela-prompt-workbench__evidence > button { margin-left: 0; width: 100%; }
+  .vela-prompt-workbench__preview > footer { align-items: stretch; flex-direction: column; gap: 8px; }
+}

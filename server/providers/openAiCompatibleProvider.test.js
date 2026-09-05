@@ -158,6 +158,39 @@ test('prompt and image responses are normalized for the canvas', async () => {
   assert.equal(images[0].kind, 'base64');
 });
 
+test('batch prompt analysis labels product and benchmark images and uses the selected vision model', async () => {
+  let requestBody;
+  const provider = new OpenAiCompatibleProvider({
+    fetchImpl: async (_url, options) => {
+      requestBody = JSON.parse(options.body);
+      return response(200, { choices: [{ message: { content: '只把裤子替换为对标图的黑色直筒裤，其他内容保持不变。' } }] });
+    }
+  });
+  const analyzed = await provider.analyzeImagePrompt(profile(), 'secret-key', {
+    requirement: '把我的裤子换成对标款式，人物和背景不变',
+    model: 'qwen3-vl-plus',
+    modelSlot: 'analysis',
+    productImages: [
+      { name: 'front.jpg', dataUrl: 'data:image/jpeg;base64,ZnJvbnQ=' },
+      { name: 'side.jpg', dataUrl: 'data:image/jpeg;base64,c2lkZQ==' }
+    ],
+    benchmarkImage: { name: 'reference.png', dataUrl: 'data:image/png;base64,cmVm' }
+  });
+
+  assert.equal(requestBody.model, 'qwen3-vl-plus');
+  assert.equal(requestBody.messages[1].content.filter((part) => part.type === 'image_url').length, 3);
+  assert.match(requestBody.messages[1].content[0].text, /2 张产品图.*1 张对标图/);
+  assert.match(requestBody.messages[1].content[1].text, /产品图 1.*front\.jpg/);
+  assert.match(requestBody.messages[1].content[5].text, /对标图.*reference\.png/);
+  assert.equal(analyzed.text, '只把裤子替换为对标图的黑色直筒裤，其他内容保持不变。');
+  assert.deepEqual(analyzed.source, {
+    provider: 'openai-compatible',
+    profileId: 'gpt-main',
+    model: 'qwen3-vl-plus',
+    modelSlot: 'analysis'
+  });
+});
+
 test('video director and Qwen competitor analysis use separate configured models', async () => {
   const requests = [];
   const provider = new OpenAiCompatibleProvider({

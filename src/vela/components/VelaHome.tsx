@@ -3,6 +3,7 @@ import {
   Clapperboard,
   Download,
   Home,
+  Layers3,
   Loader2,
   MoreHorizontal,
   PackageOpen,
@@ -25,6 +26,7 @@ import {
 import type { VelaProfile } from '../services/profileService';
 import type { AppearanceMode, CanvasColorMode } from '../services/settingsService';
 import { VelaApiSettings } from './VelaApiSettings';
+import { VelaBatchFactory } from './VelaBatchFactory';
 import { VelaDataDashboard } from './VelaDataDashboard';
 import { VelaEcommerceWorkflows } from './VelaEcommerceWorkflows';
 import { ProjectThumbnail, VelaProjectGallery } from './VelaProjectGallery';
@@ -32,14 +34,14 @@ import { VelaSettings } from './VelaSettings';
 import './VelaHome.css';
 
 interface VelaHomeProps {
-  page: 'home' | 'dashboard' | 'api' | 'settings';
+  page: 'home' | 'batch' | 'dashboard' | 'api' | 'settings';
   theme: 'light' | 'dark';
   currentProjectId?: string;
   onCreate: () => Promise<void>;
   onCreateWorkflow: (workflowId: string) => Promise<void>;
   onOpen: (projectId: string) => Promise<void>;
   onProjectDeleted: (projectId: string) => void;
-  onNavigate: (page: 'home' | 'dashboard' | 'api' | 'settings') => void;
+  onNavigate: (page: 'home' | 'batch' | 'dashboard' | 'api' | 'settings') => void;
   profiles: VelaProfile[];
   profilesError?: string | null;
   onProfilesChanged: () => void | Promise<unknown>;
@@ -242,6 +244,7 @@ export function VelaHome({
 
         <nav className="vela-home-nav" aria-label="项目导航">
           <button type="button" data-active={page === 'home' || undefined} onClick={() => onNavigate('home')}><Home size={18} aria-hidden="true" />首页</button>
+          <button type="button" data-active={page === 'batch' || undefined} onClick={() => onNavigate('batch')}><Layers3 size={18} aria-hidden="true" />批量工厂</button>
           <button type="button" data-active={page === 'dashboard' || undefined} onClick={() => onNavigate('dashboard')}><BarChart3 size={18} aria-hidden="true" />数据台</button>
         </nav>
 
@@ -312,7 +315,11 @@ export function VelaHome({
             onOpen={runOpen}
           />
         </section>
-      </main> : page === 'dashboard' ? (
+      </main> : page === 'batch' ? (
+        <div className="vela-home-main vela-home-main--batch">
+          <VelaBatchFactory profiles={profiles} onOpenProject={runOpen} onOpenApi={() => onNavigate('api')} onProjectsChanged={refresh} />
+        </div>
+      ) : page === 'dashboard' ? (
         <main className="vela-home-main vela-home-main--settings">
           <VelaDataDashboard />
         </main>

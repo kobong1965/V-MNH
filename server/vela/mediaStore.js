@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import sharp from 'sharp';
 
 import { atomicWriteFile, atomicWriteJson } from './projectStore.js';
 import { ProviderError } from '../providers/openAiCompatibleProvider.js';
@@ -191,11 +192,26 @@ export class ProjectMediaStore {
   async saveProviderImage(projectId, result, metadata = {}, downloadOptions = {}) {
     const directory = this.projectStore.findProjectDirectory(projectId);
     if (!directory) throw new Error(`Project not found: ${projectId}`);
-    const { data, mime } = await this.materializeProviderResult(result, {
+    const materialized = await this.materializeProviderResult(result, {
       allowBase64: true,
       fallbackMime: 'image/png',
       ...downloadOptions
     });
+    let data = materialized.data;
+    let mime = String(materialized.mime || '').toLowerCase();
+    try {
+      const image = sharp(data, { animated: false, limitInputPixels: 80_000_000 });
+      const imageMetadata = await image.metadata();
+      const detectedMime = ({ jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp' })[imageMetadata.format];
+      if (detectedMime) {
+        mime = detectedMime;
+      } else {
+        data = await image.png().toBuffer();
+        mime = 'image/png';
+      }
+    } catch (error) {
+      throw new Error(`生成结果不是可读取的图片：${error instanceof Error ? error.message : '图片解码失败'}`);
+    }
     if (!data.length || data.length > MAX_IMAGE_BYTES) throw new Error('图片文件为空或超过 50MB');
     const id = crypto.randomUUID();
     const relativePath = `outputs/images/${id}.${extensionForMime(mime) || 'png'}`;

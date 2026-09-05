@@ -54,7 +54,7 @@ const statusLabels: Record<VelaUpdateState['status'], string> = {
 export function VelaSettings({ appearance, canvas, resolvedAppearance, onAppearanceChange, onCanvasChange }: VelaSettingsProps) {
   const bridge = window.velaDesktop?.updater;
   const [updateState, setUpdateState] = useState<VelaUpdateState>({
-    supported: Boolean(bridge), currentVersion: '0.5.0', status: 'idle', owner: 'kobong1965', repo: 'V-MNH', privateRepository: false, tokenConfigured: false
+    supported: Boolean(bridge), currentVersion: __VELA_VERSION__, status: 'idle', owner: 'kobong1965', repo: 'V-MNH', privateRepository: false, tokenConfigured: false
   });
   const [updateForm, setUpdateForm] = useState({ owner: 'kobong1965', repo: 'V-MNH', privateRepository: false, token: '' });
   const [savingUpdateConfig, setSavingUpdateConfig] = useState(false);
@@ -189,7 +189,7 @@ export function VelaSettings({ appearance, canvas, resolvedAppearance, onAppeara
 
       <section className="vela-settings-section" aria-labelledby="storyworks-connection-title">
         <div className="vela-settings-section-heading">
-          <div><Link2 size={19} /><div><h2 id="storyworks-connection-title">Storyworks 手动连接</h2><p>把画布 API 地址和一次性连接码填入 Storyworks，即可手动绑定两端。</p></div></div>
+          <div><Link2 size={19} /><div><h2 id="storyworks-connection-title">外部软件连接</h2><p>把画布 API 地址和一次性连接码填入您自己制作的软件，即可绑定多个同步目标。</p></div></div>
           <span>{connectionInfo ? `${connectionInfo.connectedClients} 个已连接` : '正在读取'}</span>
         </div>
         {connectionInfo ? (
@@ -216,12 +216,12 @@ export function VelaSettings({ appearance, canvas, resolvedAppearance, onAppeara
             </div>
             <div className="vela-update-actions">
               <button type="button" disabled={connectionBusy} onClick={() => void runConnectionAction(rotateVelaPairingCode, '已生成新的连接码，旧连接码立即失效。')}><RotateCcw size={15} /> 换一个连接码</button>
-              <button type="button" data-primary="true" disabled={connectionBusy || connectionInfo.connectedClients === 0} onClick={() => void runConnectionAction(revokeVelaConnections, '已断开所有 Storyworks 连接。')}><ShieldCheck size={15} /> 断开全部连接</button>
+              <button type="button" data-primary="true" disabled={connectionBusy || connectionInfo.connectedClients === 0} onClick={() => void runConnectionAction(revokeVelaConnections, '已断开所有外部软件连接。')}><ShieldCheck size={15} /> 断开全部连接</button>
             </div>
           </div>
         ) : <div className="vela-settings-empty"><LoaderCircle className="vela-spin" size={20} /><strong>正在读取连接服务</strong><span>画布其他功能不受影响。</span></div>}
         {connectionMessage && <p className="vela-settings-note" role="status">{connectionMessage}</p>}
-        <p className="vela-settings-note">连接码只用于交换访问令牌；Storyworks 会用 Windows 加密保存令牌，项目文件和日志均不保存连接码。</p>
+        <p className="vela-settings-note">连接码只用于交换访问令牌；外部软件应使用 Windows 加密保存令牌，项目文件和日志均不保存连接码。</p>
       </section>
 
       <section className="vela-settings-section" aria-labelledby="portable-backup-title">

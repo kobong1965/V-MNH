@@ -74,11 +74,14 @@ export const NodeContent: React.FC<NodeContentProps> = ({
     const isVideoType = data.type === NodeType.VIDEO || data.type === NodeType.LOCAL_VIDEO_MODEL;
     // Helper: Check if node is local model
     const isLocalModel = data.type === NodeType.LOCAL_IMAGE_MODEL || data.type === NodeType.LOCAL_VIDEO_MODEL;
-    const resultUrls = data.resultUrls?.filter(Boolean).length
+    const storedResultUrls = data.resultUrls?.filter(Boolean).length
         ? data.resultUrls.filter(Boolean)
         : data.resultUrl
             ? [data.resultUrl]
             : [];
+    const resultUrls = !resultSelectionMode && data.resultUrl && storedResultUrls.includes(data.resultUrl)
+        ? [data.resultUrl, ...storedResultUrls.filter((url) => url !== data.resultUrl)]
+        : storedResultUrls;
     const hasResultCollection = isImageType && resultUrls.length > 1;
     const isResultCollectionExpanded = hasResultCollection && Boolean(data.resultCollectionExpanded);
     const resizableTextHeight = isResizableTextNode(data) ? getCanvasNodeHeight(data) : undefined;
@@ -157,18 +160,25 @@ export const NodeContent: React.FC<NodeContentProps> = ({
                                 {resultUrls.map((url, index) => (
                                     <button
                                         type="button"
-                                        className={`vela-result-collection__item ${resultSelectionMode ? 'is-download-selecting' : ''} ${selectedResultIndexes.includes(index) ? 'is-download-selected' : ''}`}
+                                        className={`vela-result-collection__item ${resultSelectionMode ? 'is-download-selecting' : ''} ${selectedResultIndexes.includes(index) ? 'is-download-selected' : ''} ${url === data.resultUrl ? 'is-active-reference' : ''}`}
                                         key={`${url}-${index}`}
                                         style={getAspectRatioStyle()}
                                         onPointerDown={(event) => event.stopPropagation()}
-                                        onClick={() => resultSelectionMode ? onToggleResultSelection?.(index) : onExpand?.(url)}
+                                        onClick={() => {
+                                            if (resultSelectionMode) onToggleResultSelection?.(index);
+                                            else {
+                                                onUpdate?.(data.id, { resultUrl: url });
+                                                onExpand?.(url);
+                                            }
+                                        }}
                                         aria-pressed={resultSelectionMode ? selectedResultIndexes.includes(index) : undefined}
                                         aria-label={resultSelectionMode
                                             ? `${selectedResultIndexes.includes(index) ? '取消选择' : '选择'}第 ${index + 1} 张图片`
-                                            : `查看第 ${index + 1} 张图片大图`}
+                                            : `选第 ${index + 1} 张作为后续工作流输入并查看大图`}
                                     >
                                         <img src={url} alt={`生成结果 ${index + 1}`} draggable={false} />
                                         <span className="vela-result-collection__index">{index + 1}</span>
+                                        {!resultSelectionMode && url === data.resultUrl && <span className="vela-result-collection__active-label">后续输入</span>}
                                         {resultSelectionMode && (
                                             <span className="vela-result-collection__select-indicator" aria-hidden="true">
                                                 {selectedResultIndexes.includes(index) && <Check size={16} strokeWidth={3} />}

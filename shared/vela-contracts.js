@@ -6,6 +6,27 @@ export const VELA_CONTROL_PROTOCOL_VERSION = 2;
 export const VELA_VIDEO_PROVIDER_CONTRACT_VERSION = 1;
 
 export const VELA_CONTROL_CAPABILITIES = Object.freeze({
+  batchImageWorkflows: Object.freeze({
+    contractVersion: 2,
+    listMethod: 'GET',
+    listPath: '/api/vela/batches',
+    manifestMethod: 'GET',
+    manifestPath: '/api/vela/batches/{batchId}/sync-manifest',
+    manifestTargetQuery: 'targetId',
+    inboxMethod: 'GET',
+    inboxPath: '/api/vela/sync-inbox',
+    inboxPagination: 'cursor',
+    inboxPageSize: 500,
+    acknowledgeMethod: 'POST',
+    acknowledgePath: '/api/vela/sync-inbox/{batchId}/ack',
+    supportedClientScopes: Object.freeze(['materials:read']),
+    syncTarget: 'storyworks',
+    multipleSyncTargets: true,
+    independentProjectPerImage: false,
+    singleProjectWithIndependentWorkflowGroups: true,
+    maxOutputsPerItem: 20,
+    maxOutputsPerManifest: 1000
+  }),
   durableVideoProvider: Object.freeze({
     contractVersion: VELA_VIDEO_PROVIDER_CONTRACT_VERSION,
     createOrReturnByExternalKey: true,
