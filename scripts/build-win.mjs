@@ -1,7 +1,12 @@
-import { copyFileSync, mkdirSync, mkdtempSync, readdirSync, rmSync } from 'node:fs';
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { basename, join, resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
+
+import {
+  assertProjectOwnedNodeModules,
+  verifyPackagedRuntime
+} from '../electron/packagedRuntimeVerifier.js';
 
 const wait = (milliseconds) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds);
 
@@ -21,8 +26,11 @@ function copyArtifact(source, destination) {
 }
 
 const projectRoot = resolve(import.meta.dirname, '..');
-const releaseDir = join(projectRoot, 'release');
-const temporaryOutput = mkdtempSync(join(tmpdir(), 'vela-electron-release-'));
+const packageJson = JSON.parse(readFileSync(join(projectRoot, 'package.json'), 'utf8'));
+const releaseDir = resolve(process.env.VELA_RELEASE_DIR || join(projectRoot, 'release'));
+const temporaryRoot = resolve(process.env.VELA_BUILD_TEMP_DIR || tmpdir());
+mkdirSync(temporaryRoot, { recursive: true });
+const temporaryOutput = mkdtempSync(join(temporaryRoot, 'vela-electron-release-'));
 const commandOptions = {
   cwd: projectRoot,
   stdio: 'inherit',
@@ -37,6 +45,7 @@ function run(command, args) {
 }
 
 try {
+  assertProjectOwnedNodeModules(projectRoot);
   run(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['run', 'build']);
   run(process.platform === 'win32' ? 'npx.cmd' : 'npx', [
     'electron-builder',
@@ -45,14 +54,19 @@ try {
     `--config.directories.output=${temporaryOutput}`,
   ]);
 
-  mkdirSync(releaseDir, { recursive: true });
-  const artifacts = readdirSync(temporaryOutput).filter(
-    (name) => name === 'latest.yml' || /^Vela-Setup-.*-x64\.exe(?:\.blockmap)?$/.test(name),
+  const runtime = verifyPackagedRuntime(join(temporaryOutput, 'win-unpacked', 'resources', 'app'));
+  console.log(
+    `Packaged runtime verified: electron-updater ${runtime.updaterVersion}, `
+    + `${runtime.dependencies.length} dependencies resolvable inside the app`
   );
+
+  mkdirSync(releaseDir, { recursive: true });
+  const installerName = `Vela-Setup-${packageJson.version}-x64.exe`;
+  const artifacts = [installerName, `${installerName}.blockmap`, 'latest.yml'];
 
   for (const artifact of artifacts) {
     const source = join(temporaryOutput, artifact);
-    copyArtifact(source, join(releaseDir, basename(source)));
+    copyArtifact(source, join(releaseDir, artifact));
   }
 
   console.log(`Windows installer copied to ${releaseDir}`);
