@@ -155,6 +155,29 @@ export const VELA_NODE_CATALOG: readonly VelaNodeDefinition[] = [
   }
 ] as const;
 
+/**
+ * The canvas quick-add menu is intentionally organized around the three things
+ * a creator wants to add, rather than exposing every implementation node.
+ * Existing projects may still contain any kind from VELA_NODE_CATALOG.
+ */
+export const VELA_QUICK_ADD_CATALOG: readonly VelaNodeDefinition[] = [
+  {
+    ...VELA_NODE_CATALOG.find((definition) => definition.kind === 'prompt')!,
+    label: '提示词',
+    description: '编写提示词并使用已保存模板'
+  },
+  {
+    ...VELA_NODE_CATALOG.find((definition) => definition.kind === 'gpt-image')!,
+    label: '图片',
+    description: '生成图片，参考图可直接拖入画布'
+  },
+  {
+    ...VELA_NODE_CATALOG.find((definition) => definition.kind === 'gpt-video')!,
+    label: '视频',
+    description: '生成视频，模型和模式在节点内选择'
+  }
+] as const;
+
 const NODE_DEFINITIONS = new Map(
   VELA_NODE_CATALOG.map((definition) => [definition.kind, definition])
 );

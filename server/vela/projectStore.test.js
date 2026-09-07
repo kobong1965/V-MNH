@@ -73,6 +73,32 @@ test('ProjectStore preserves image annotations and styled group labels', () => {
   });
 });
 
+test('partial canvas saves preserve existing project settings', () => {
+  withTemporaryStore((store) => {
+    const project = store.saveProject({
+      ...draft('批量项目'),
+      settings: {
+        batchWorkflow: {
+          batchId: 'batch-1',
+          itemIds: ['item-1'],
+          workflowCount: 1
+        }
+      }
+    });
+
+    const saved = store.saveProject({
+      id: project.id,
+      name: '批量项目',
+      nodes: [{ id: 'n2', type: 'Text', x: 30, y: 40 }],
+      groups: [],
+      viewport: { x: 12, y: 24, zoom: 0.8 }
+    });
+
+    assert.deepEqual(saved.settings, project.settings);
+    assert.equal(saved.nodes[0].id, 'n2');
+  });
+});
+
 test('ProjectStore migrates every legacy H3 first-frame connection to R2V material references', () => {
   withTemporaryStore((store) => {
     const project = store.saveProject({

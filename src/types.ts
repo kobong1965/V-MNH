@@ -56,6 +56,9 @@ export interface NodeData {
   annotationText?: string; // User-facing note shown above an image node
   annotationColor?: string; // CSS color for the user-facing node note
   annotationFontSize?: number; // Canvas-space font size for the user-facing node note
+  promptTemplateId?: string; // Selected reusable prompt-template id
+  promptEffectImageUrl?: string; // Project-managed preview image copied from/uploaded for the template
+  promptEffectImageName?: string;
 
   // Video director and competitor analysis nodes
   sourceBrief?: string; // Product selling points, audience and additional requirements

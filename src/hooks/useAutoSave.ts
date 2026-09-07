@@ -5,8 +5,9 @@
  * if there are unsaved changes and no active generations.
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { NodeData } from '../types';
+import { shouldAttemptAutoSave } from '../vela/saveState';
 
 interface UseAutoSaveOptions {
     isDirty: boolean;
@@ -22,25 +23,16 @@ export const useAutoSave = ({
     interval = 2000
 }: UseAutoSaveOptions) => {
     const [lastSaveTime, setLastSaveTime] = useState<number>(Date.now());
-    const isSavingRef = useRef<boolean>(false);
-
     useEffect(() => {
         const saveAfterQuietPeriod = async () => {
-            // Only save if dirty and we have nodes
-            if (!isDirty || nodes.length === 0) return;
-
-            // Don't save if already in the middle of a save operation
-            if (isSavingRef.current) return;
+            if (!shouldAttemptAutoSave(isDirty)) return;
 
             try {
-                isSavingRef.current = true;
                 console.log('[Auto-Save] Saving after 2 second debounce...');
                 await onSave();
                 setLastSaveTime(Date.now());
             } catch (error) {
                 console.error('[Auto-Save] Failed to auto-save:', error);
-            } finally {
-                isSavingRef.current = false;
             }
         };
 

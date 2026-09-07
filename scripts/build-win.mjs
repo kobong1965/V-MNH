@@ -1,4 +1,4 @@
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -30,11 +30,14 @@ const packageJson = JSON.parse(readFileSync(join(projectRoot, 'package.json'), '
 const releaseDir = resolve(process.env.VELA_RELEASE_DIR || join(projectRoot, 'release'));
 const temporaryRoot = resolve(process.env.VELA_BUILD_TEMP_DIR || tmpdir());
 mkdirSync(temporaryRoot, { recursive: true });
-const temporaryOutput = mkdtempSync(join(temporaryRoot, 'vela-electron-release-'));
+const temporaryWorkspace = mkdtempSync(join(temporaryRoot, 'vela-electron-release-'));
+const temporaryOutput = join(temporaryWorkspace, 'package');
+const rendererOutput = join(temporaryWorkspace, 'renderer');
+const builderConfigPath = join(temporaryWorkspace, 'electron-builder.json');
 const commandOptions = {
   cwd: projectRoot,
   stdio: 'inherit',
-  shell: process.platform === 'win32',
+  shell: false,
 };
 
 function run(command, args) {
@@ -46,12 +49,31 @@ function run(command, args) {
 
 try {
   assertProjectOwnedNodeModules(projectRoot);
-  run(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['run', 'build']);
-  run(process.platform === 'win32' ? 'npx.cmd' : 'npx', [
-    'electron-builder',
+  process.env.VELA_VITE_CACHE_DIR = join(temporaryWorkspace, 'vite-cache');
+  const npmCli = process.env.npm_execpath;
+  if (!npmCli) throw new Error('npm_execpath is unavailable; run packaging through npm run build:win');
+  run(process.execPath, [
+    npmCli, 'run', 'build', '--', '--outDir', rendererOutput, '--emptyOutDir'
+  ]);
+  const configuredFiles = Array.isArray(packageJson.build?.files) ? packageJson.build.files : [];
+  const builderConfig = {
+    ...packageJson.build,
+    directories: {
+      ...packageJson.build?.directories,
+      output: temporaryOutput
+    },
+    files: [
+      { from: rendererOutput, to: 'dist', filter: ['**/*'] },
+      ...configuredFiles.filter((entry) => typeof entry !== 'string' || !entry.startsWith('dist/'))
+    ]
+  };
+  writeFileSync(builderConfigPath, `${JSON.stringify(builderConfig, null, 2)}\n`, 'utf8');
+  run(process.execPath, [
+    join(projectRoot, 'node_modules', 'electron-builder', 'out', 'cli', 'cli.js'),
+    '--config',
+    builderConfigPath,
     '--win',
-    'nsis',
-    `--config.directories.output=${temporaryOutput}`,
+    'nsis'
   ]);
 
   const runtime = verifyPackagedRuntime(join(temporaryOutput, 'win-unpacked', 'resources', 'app'));
@@ -70,8 +92,8 @@ try {
   }
 
   console.log(`Windows installer copied to ${releaseDir}`);
-  rmSync(temporaryOutput, { recursive: true, force: true });
+  rmSync(temporaryWorkspace, { recursive: true, force: true });
 } catch (error) {
-  console.error(`Windows packaging workspace retained at ${temporaryOutput}`);
+  console.error(`Windows packaging workspace retained at ${temporaryWorkspace}`);
   throw error;
 }

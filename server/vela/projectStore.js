@@ -214,7 +214,7 @@ export class ProjectStore {
       nodes: Array.isArray(draft.nodes) ? draft.nodes : [],
       groups: Array.isArray(draft.groups) ? draft.groups : [],
       viewport: draft.viewport || { x: 0, y: 0, zoom: 1 },
-      settings: draft.settings || {}
+      settings: draft.settings ?? previous?.settings ?? {}
     }));
 
     atomicWriteJson(projectPath, project, this.hooks);

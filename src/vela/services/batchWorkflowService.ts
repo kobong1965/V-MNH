@@ -78,6 +78,12 @@ export interface PromptTemplate {
   id: string;
   name: string;
   text: string;
+  effectImage?: {
+    name: string;
+    mime: 'image/png' | 'image/jpeg' | 'image/webp';
+    bytes: number;
+    url: string;
+  };
   createdAt: string;
   updatedAt: string;
 }
@@ -144,7 +150,11 @@ export const analyzeBatchPrompt = async (input: BatchPromptAnalysisInput): Promi
 export const listPromptTemplates = async (): Promise<PromptTemplate[]> =>
   parseResponse<PromptTemplate[]>(await fetch('/api/vela/prompt-templates'));
 
-export const savePromptTemplate = async (input: { name: string; text: string }): Promise<PromptTemplate> =>
+export const savePromptTemplate = async (input: {
+  name: string;
+  text: string;
+  effectImage?: { name: string; data: string };
+}): Promise<PromptTemplate> =>
   parseResponse<PromptTemplate>(await fetch('/api/vela/prompt-templates', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

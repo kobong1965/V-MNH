@@ -3,7 +3,6 @@ import {
   Type,
   Image as ImageIcon,
   Video,
-  Film,
   Upload,
   Trash2,
   Plus,
@@ -14,12 +13,9 @@ import {
   Files,
   Layers,
   ChevronRight,
-  WandSparkles,
-  UserRoundCog,
-  ScanSearch,
 } from 'lucide-react';
 import { ContextMenuState, NodeType } from '../types';
-import { canConnectNodeKinds, VELA_NODE_CATALOG, type VelaNodeKind } from '../vela/nodeCatalog';
+import { canConnectNodeKinds, VELA_QUICK_ADD_CATALOG, type VelaNodeKind } from '../vela/nodeCatalog';
 
 interface ContextMenuProps {
   state: ContextMenuState;
@@ -192,7 +188,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
 
   // 2. Connector Drag Drop (Add Next)
   const isConnector = state.type === 'node-connector';
-  const userCreatableDefinitions = VELA_NODE_CATALOG.filter((definition) => definition.userCreatable !== false);
+  const userCreatableDefinitions = VELA_QUICK_ADD_CATALOG;
   const visibleNodeDefinitions = isConnector && state.sourceNodeKind
     ? userCreatableDefinitions.filter((definition) => state.connectorSide === 'left'
       ? canConnectNodeKinds(definition.kind, state.sourceNodeKind!)
@@ -291,19 +287,12 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
       className={`vela-add-menu w-56 border rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-100 ${canvasTheme === 'dark' ? 'bg-[#1e1e1e] border-neutral-800' : 'bg-white border-neutral-200'
         }`}
     >
-      <input
-        type="file"
-        ref={fileInputRef}
-        className="hidden"
-        accept="image/*,video/*"
-        onChange={handleFileChange}
-      />
       <div className={`px-4 pt-4 pb-2 text-sm font-medium ${canvasTheme === 'dark' ? 'text-neutral-400' : 'text-neutral-500'
         }`}>
         {title}
       </div>
 
-      <div className="px-2 pb-2 flex flex-col gap-0.5 max-h-[500px] overflow-y-auto">
+      <div className="px-2 pb-2 flex flex-col gap-0.5" data-testid="vela-quick-add-menu">
         {visibleNodeDefinitions.map((definition) => (
           <MenuItem
             key={definition.kind}
@@ -314,27 +303,6 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
             canvasTheme={canvasTheme}
           />
         ))}
-        {!isConnector && (
-          <>
-            <div className={`my-1.5 border-t mx-2 ${canvasTheme === 'dark' ? 'border-neutral-800' : 'border-neutral-100'}`} />
-            <div className={`px-2 pb-1 text-[11px] ${canvasTheme === 'dark' ? 'text-neutral-500' : 'text-neutral-400'}`}>添加资源</div>
-            <MenuItem
-              icon={<Upload size={16} />}
-              label="上传"
-              onClick={handleUploadClick}
-              canvasTheme={canvasTheme}
-            />
-            <MenuItem
-              icon={<Layers size={16} />}
-              label="从生成历史选择"
-              onClick={() => {
-                if (onAddAssets) onAddAssets();
-                onClose();
-              }}
-              canvasTheme={canvasTheme}
-            />
-          </>
-        )}
       </div>
     </div>
   );
@@ -403,11 +371,6 @@ const MenuItem: React.FC<MenuItemProps> = ({ icon, label, desc, badge, shortcut,
 
 const getVelaNodeIcon = (kind: VelaNodeKind) => {
   if (kind === 'prompt') return <Type size={18} />;
-  if (kind === 'image-input') return <Upload size={18} />;
-  if (kind === 'gpt-prompt-optimizer') return <WandSparkles size={18} />;
-  if (kind === 'video-director') return <UserRoundCog size={18} />;
-  if (kind === 'competitor-script-analyzer') return <ScanSearch size={18} />;
-  if (kind === 'gpt-video' || kind === 'h3-video' || kind === 'video-result') return <Video size={18} />;
-  if (kind === 'image-result') return <Film size={18} />;
+  if (kind === 'gpt-video') return <Video size={18} />;
   return <ImageIcon size={18} />;
 };

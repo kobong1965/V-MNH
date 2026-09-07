@@ -55,7 +55,12 @@ export const useNodeDragging = () => {
         }
 
         if (e.target instanceof HTMLElement) {
-            e.target.setPointerCapture(e.pointerId);
+            try {
+                e.target.setPointerCapture(e.pointerId);
+            } catch {
+                // Selection must still work when pointer capture is unavailable
+                // (for example, after a very fast release or in an automated canvas session).
+            }
         }
     };
 

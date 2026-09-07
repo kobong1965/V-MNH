@@ -59,6 +59,8 @@ import { VelaMiniMap } from './vela/components/VelaMiniMap';
 import { createVelaPerformanceFixture } from './vela/performanceFixture';
 import { VelaProjectPanel } from './vela/components/VelaProjectPanel';
 import { VelaHome } from './vela/components/VelaHome';
+import { shouldClearDirtyAfterSave } from './vela/saveState';
+import { createCoalescingSaveQueue } from './vela/saveQueue';
 import { VelaDesktopHeader } from './vela/components/VelaDesktopHeader';
 import { useVelaJobs } from './vela/hooks/useVelaJobs';
 import { useVelaProfiles } from './vela/hooks/useVelaProfiles';
@@ -136,6 +138,7 @@ export default function App() {
   const [isCanvasFileDragActive, setIsCanvasFileDragActive] = useState(false);
   const canvasFileDragDepthRef = useRef(0);
   const [canvasUploadFeedback, setCanvasUploadFeedback] = useState<string | null>(null);
+  const [canvasSaveError, setCanvasSaveError] = useState<string | null>(null);
   const [isResizingNode, setIsResizingNode] = useState(false);
   const [isTaskCenterOpen, setIsTaskCenterOpen] = useState(false);
   const [isAssetTrayOpen, setIsAssetTrayOpen] = useState(false);
@@ -346,12 +349,45 @@ export default function App() {
 
   // Simple dirty flag for unsaved changes tracking
   const [isDirty, setIsDirty] = React.useState(false);
-  const hasUnsavedChanges = isDirty && nodes.length > 0;
+  const hasUnsavedChanges = isDirty;
 
   // Mark as dirty when nodes or title change
   const isInitialMount = React.useRef(true);
   const lastLoadingCountRef = React.useRef(0);
   const ignoreNextChange = React.useRef(false);
+  const changeRevisionRef = React.useRef(0);
+
+  const performLatestSaveRef = React.useRef<() => Promise<void>>(async () => undefined);
+  performLatestSaveRef.current = async () => {
+    const savedRevision = changeRevisionRef.current;
+    try {
+      await handleSaveWorkflow();
+      if (shouldClearDirtyAfterSave(savedRevision, changeRevisionRef.current)) {
+        setIsDirty(false);
+      }
+      setCanvasSaveError(null);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '未知错误';
+      setIsDirty(true);
+      setCanvasSaveError(`项目保存失败：${message}。内容仍保留在当前画布，请检查服务后重试。`);
+      throw error;
+    }
+  };
+  const saveQueueRef = React.useRef<ReturnType<typeof createCoalescingSaveQueue> | null>(null);
+  if (!saveQueueRef.current) {
+    saveQueueRef.current = createCoalescingSaveQueue({
+      getSave: () => performLatestSaveRef.current
+    });
+  }
+  const handleSaveWithTracking = React.useCallback(
+    () => saveQueueRef.current!.request(),
+    []
+  );
+  const handleSaveWithTrackingRef = React.useRef(handleSaveWithTracking);
+
+  React.useEffect(() => {
+    handleSaveWithTrackingRef.current = handleSaveWithTracking;
+  }, [handleSaveWithTracking]);
 
   React.useEffect(() => {
     if (isInitialMount.current) {
@@ -364,22 +400,17 @@ export default function App() {
       return;
     }
 
+    changeRevisionRef.current += 1;
     setIsDirty(true);
 
     // Trigger immediate save if any node JUST entered LOADING state
     const currentLoadingCount = nodes.filter(n => n.status === NodeStatus.LOADING).length;
     if (currentLoadingCount > lastLoadingCountRef.current) {
       console.log('[App] New loading node detected, triggering immediate save for recovery protection');
-      handleSaveWithTracking();
+      void handleSaveWithTrackingRef.current().catch(() => undefined);
     }
     lastLoadingCountRef.current = currentLoadingCount;
-  }, [nodes, groups, canvasTitle]);
-
-  // Update saved state after workflow save
-  const handleSaveWithTracking = async () => {
-    await handleSaveWorkflow();
-    setIsDirty(false);
-  };
+  }, [nodes, groups, canvasTitle, viewport]);
 
   // Load workflow and update tracking
   const handleLoadWithTracking = async (id: string) => {
@@ -387,6 +418,7 @@ export default function App() {
     const loaded = await handleLoadWorkflow(id);
     if (!loaded) throw new Error('无法打开该项目');
     setIsDirty(false);
+    setCanvasSaveError(null);
     setAppView('canvas');
   };
 
@@ -754,9 +786,24 @@ export default function App() {
     handleGenerateRef.current = handleGenerate;
   }, [handleGenerate]);
 
+  const persistBeforeNavigation = async () => {
+    if (!isDirty) return true;
+    const revisionAtStart = changeRevisionRef.current;
+    try {
+      await handleSaveWithTracking();
+      if (!shouldClearDirtyAfterSave(revisionAtStart, changeRevisionRef.current)) {
+        setCanvasSaveError('保存期间画布又发生了变化。为避免丢失内容，本次跳转已取消，请稍后重试。');
+        return false;
+      }
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
   // Create a persisted project first, then enter its independent blank canvas.
   const handleNewCanvas = async () => {
-    if (isDirty && workflowId) await handleSaveWithTracking();
+    if (!await persistBeforeNavigation()) return;
     const project = await saveVelaProject({
       name: '未命名项目',
       nodes: [],
@@ -767,13 +814,13 @@ export default function App() {
   };
 
   const handleCreateEcommerceWorkflow = async (workflowTemplateId: string) => {
-    if (isDirty && workflowId) await handleSaveWithTracking();
+    if (!await persistBeforeNavigation()) return;
     const project = await createEcommerceWorkflowProject(workflowTemplateId);
     await handleLoadWithTracking(project.id);
   };
 
   const handleReturnHome = async () => {
-    if (isDirty && workflowId) await handleSaveWithTracking();
+    if (!await persistBeforeNavigation()) return;
     closeWorkflowPanel();
     closeHistoryPanel();
     closeAssetLibrary();
@@ -805,6 +852,7 @@ export default function App() {
     setEditingTitleValue('未命名项目');
     resetWorkflowId();
     setIsDirty(false);
+    setCanvasSaveError(null);
   };
 
   // Image editor modal
@@ -1758,10 +1806,10 @@ export default function App() {
             <span>支持图片和视频；将在当前鼠标位置创建素材节点</span>
           </div>
         )}
-        {canvasUploadFeedback && (
-          <div className="vela-canvas-feedback" role="status">
-            <span>{canvasUploadFeedback}</span>
-            <button type="button" onClick={() => setCanvasUploadFeedback(null)} aria-label="关闭提示">关闭</button>
+        {(canvasSaveError || canvasUploadFeedback) && (
+          <div className="vela-canvas-feedback" role={canvasSaveError ? 'alert' : 'status'}>
+            <span>{canvasSaveError || canvasUploadFeedback}</span>
+            <button type="button" onClick={() => { setCanvasSaveError(null); setCanvasUploadFeedback(null); }} aria-label="关闭提示">关闭</button>
           </div>
         )}
         {nodes.length === 0 && (

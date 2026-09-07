@@ -8,6 +8,7 @@
 import React, { useState, useCallback, Dispatch, SetStateAction } from 'react';
 import { NodeData, NodeGroup, NodeType, Viewport } from '../types';
 import { loadVelaProject, saveVelaProject } from '../vela/services/projectService';
+import { hydrateLoadedVelaNode } from '../vela/projectHydration';
 
 interface UseWorkflowOptions {
     nodes: NodeData[];
@@ -45,21 +46,21 @@ export const useWorkflow = ({
      * Save current workflow to server
      */
     const handleSaveWorkflow = useCallback(async () => {
+        const workflow = {
+            id: workflowId,
+            name: canvasTitle,
+            nodes,
+            groups,
+            viewport
+        };
         try {
-            const workflow = {
-                id: workflowId,
-                name: canvasTitle,
-                nodes,
-                groups,
-                viewport
-            };
             const result = await saveVelaProject(workflow);
             setWorkflowId(result.id);
             console.log('Vela project saved:', result.id);
             return result.id;
         } catch (error) {
             console.error('Failed to save workflow:', error);
-            return null;
+            throw error;
         }
     }, [workflowId, canvasTitle, nodes, groups, viewport]);
 
@@ -74,7 +75,8 @@ export const useWorkflow = ({
                 setWorkflowId(workflow.id);
                 setCanvasTitle(workflow.name || '未命名工作区');
                 setEditingTitleValue(workflow.name || '未命名工作区');
-                setNodes((workflow.nodes || []).map((node) => {
+                setNodes((workflow.nodes || []).map((savedNode) => {
+                    const node = hydrateLoadedVelaNode(savedNode);
                     if (node.kind === 'h3-video') return {
                         ...node,
                         videoGenerationMode: 'reference-to-video' as const,

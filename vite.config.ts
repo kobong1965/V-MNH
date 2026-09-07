@@ -18,6 +18,7 @@ export default defineConfig(({ mode }) => {
     }
   };
   return {
+    cacheDir: env.VELA_VITE_CACHE_DIR || 'node_modules/.vite',
     define: { __VELA_VERSION__: JSON.stringify(packageVersion) },
     server: { port: 5173, strictPort: true, proxy },
     preview: { port: 4173, strictPort: true, proxy },

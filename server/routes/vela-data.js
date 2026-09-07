@@ -112,6 +112,17 @@ router.post('/vela/prompt-templates', (req, res) => {
   catch (error) { handleError(res, error); }
 });
 
+router.get('/vela/prompt-templates/:id/effect-image', (req, res) => {
+  try {
+    const effectImage = runtime(req).promptTemplates.resolveEffectImage(req.params.id);
+    if (!effectImage) return res.status(404).json({ error: '提示词模板效果图不存在' });
+    res.setHeader('Content-Type', effectImage.mime);
+    res.setHeader('Content-Length', String(effectImage.bytes));
+    res.setHeader('Cache-Control', 'private, max-age=3600');
+    res.sendFile(effectImage.filePath);
+  } catch (error) { handleError(res, error); }
+});
+
 router.delete('/vela/prompt-templates/:id', (req, res) => {
   try {
     if (!runtime(req).promptTemplates.delete(req.params.id)) return res.status(404).json({ error: '提示词模板不存在' });

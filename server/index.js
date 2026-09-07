@@ -21,6 +21,7 @@ import storyboardRoutes from './routes/storyboard.js';
 import velaGenerationRoutes from './routes/vela-generation.js';
 import velaDataRoutes from './routes/vela-data.js';
 import { VelaRuntime } from './vela/runtime.js';
+import { velaJsonErrorHandler } from './vela/httpErrors.js';
 import {
     createRemotePairingAttemptLimiter,
     createPairingService,
@@ -180,6 +181,7 @@ app.use('/api/vela', (req, res, next) => {
     }
     return policy.parser(req, res, next);
 });
+app.use('/api/vela', velaJsonErrorHandler);
 
 // Non-Vela legacy routes still include media-rich project JSON payloads. Keep
 // this parser completely outside the Vela control API so it cannot weaken the

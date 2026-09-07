@@ -57,6 +57,8 @@ export function VelaTopBar({
     try {
       setIsSaving(true);
       await onSave();
+    } catch (error) {
+      console.error('Failed to save project from the top bar:', error);
     } finally {
       setIsSaving(false);
     }

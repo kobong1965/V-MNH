@@ -1,7 +1,7 @@
 {
   "name": "vela-ai-canvas",
   "private": true,
-  "version": "0.5.62",
+  "version": "0.5.65",
   "repository": {
     "type": "git",
     "url": "https://github.com/kobong1965/V-MNH.git"
@@ -18,6 +18,10 @@
     "pack:win": "npm run build && electron-builder --win --dir",
     "build:win": "node scripts/build-win.mjs",
     "test:node": "node --test shared/*.test.js server/providers/*.test.js server/vela/*.test.js server/routes/*.test.js electron/*.test.js",
+    "test:frontend": "node --test src/vela/*.test.ts",
+    "test:browser": "node scripts/run-browser-acceptance.mjs",
+    "typecheck": "tsc --noEmit",
+    "test:acceptance": "node scripts/run-acceptance.mjs",
     "preview": "vite preview",
     "setup:local-models": "node -e \"require('child_process').execSync(process.platform === 'win32' ? 'setup-local-models.bat' : 'bash setup-local-models.sh', {stdio: 'inherit'})\""
   },

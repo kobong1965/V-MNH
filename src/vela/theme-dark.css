@@ -138,19 +138,16 @@
 .vela-app[data-theme="dark"] .vela-asset-tray__filters button[data-active="true"] { background: #30342f; color: #fff; }
 .vela-app[data-theme="dark"] .vela-asset-tray__empty strong { color: #d9ddd6; }
 .vela-app[data-theme="dark"] .vela-media-toolbar button { color: #edf0ea; }
-.vela-app[data-theme="dark"] .vela-media-toolbar button:hover { background: #30342f; }
-.vela-app[data-theme="dark"] .vela-image-node-quick-actions,
+.vela-app[data-theme="dark"] .vela-media-toolbar button:hover,
+.vela-app[data-theme="dark"] .vela-media-toolbar button:focus-visible,
+.vela-app[data-theme="dark"] .vela-media-toolbar button[data-active="true"] { background: #30342f; }
 .vela-app[data-theme="dark"] .vela-canvas-text-editor,
 .vela-app[data-theme="dark"] .vela-group-label {
   background: rgba(32, 35, 31, .98);
   border-color: #3b403a;
   color: #edf0ea;
 }
-.vela-app[data-theme="dark"] .vela-image-node-quick-actions button,
 .vela-app[data-theme="dark"] .vela-canvas-text-editor button { color: #edf0ea; }
-.vela-app[data-theme="dark"] .vela-image-node-quick-actions button:hover,
-.vela-app[data-theme="dark"] .vela-image-node-quick-actions button:focus-visible,
-.vela-app[data-theme="dark"] .vela-image-node-quick-actions button[data-active="true"],
 .vela-app[data-theme="dark"] .vela-canvas-text-editor button:hover { background: #30342f; }
 .vela-app[data-theme="dark"] .vela-canvas-text-editor label > span { color: #a9aea6; }
 .vela-app[data-theme="dark"] .vela-canvas-text-editor textarea,

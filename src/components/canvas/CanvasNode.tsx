@@ -735,30 +735,6 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
       <div className={`relative group/nodecard ${data.kind ? 'vela-node-stack' : ''}`}>
         {isImageNode && (
           <>
-            <div
-              className="vela-image-node-quick-actions"
-              role="toolbar"
-              aria-label="图片节点操作"
-              onPointerDown={(event) => event.stopPropagation()}
-            >
-              <button
-                type="button"
-                aria-label="替换图片"
-                title="上传新图片并覆盖当前节点"
-                onClick={() => fileInputRef.current?.click()}
-              >
-                <Upload size={16} aria-hidden="true" />
-              </button>
-              <button
-                type="button"
-                aria-label="编辑文字标注"
-                title="添加或修改节点说明"
-                data-active={isAnnotationEditorOpen}
-                onClick={() => setIsAnnotationEditorOpen((open) => !open)}
-              >
-                <Type size={16} aria-hidden="true" />
-              </button>
-            </div>
             <input
               ref={fileInputRef}
               type="file"
@@ -821,7 +797,7 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
             )}
           </>
         )}
-        {selected && showControls && isMediaResult && (
+        {selected && showControls && (isMediaResult || isImageNode) && (
           <div
             className={`vela-media-toolbar ${isSelectingResultDownloads ? 'is-result-selection' : ''}`}
             data-testid="vela-media-toolbar"
@@ -871,11 +847,44 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
               </>
             ) : (
               <>
-                <span>{isVideoResult ? <Film size={15} /> : <ImageIcon size={15} />}{isVideoResult ? '视频素材' : '图片素材'}</span>
-                {!isVideoResult && (
+                {isMediaResult && (
+                  <span>{isVideoResult ? <Film size={15} /> : <ImageIcon size={15} />}{isVideoResult ? '视频素材' : '图片素材'}</span>
+                )}
+                {isImageNode && (
+                  <>
+                    <button
+                      type="button"
+                      aria-label="替换图片"
+                      title="上传新图片并覆盖当前节点"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        fileInputRef.current?.click();
+                      }}
+                    >
+                      <Upload size={15} aria-hidden="true" />上传
+                    </button>
+                    <button
+                      type="button"
+                      aria-label="编辑文字标注"
+                      title="添加或修改节点说明"
+                      aria-pressed={isAnnotationEditorOpen}
+                      aria-expanded={isAnnotationEditorOpen}
+                      data-active={isAnnotationEditorOpen}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setIsAnnotationEditorOpen((open) => !open);
+                      }}
+                    >
+                      <Type size={15} aria-hidden="true" />备注
+                    </button>
+                  </>
+                )}
+                {isMediaResult && !isVideoResult && (
                   <button type="button" onClick={() => onOpenEditor?.(data.id)}><Crop size={15} aria-hidden="true" />裁剪</button>
                 )}
-                <button type="button" onClick={() => void downloadResult()}><Download size={15} aria-hidden="true" />下载</button>
+                {isMediaResult && (
+                  <button type="button" onClick={() => void downloadResult()}><Download size={15} aria-hidden="true" />下载</button>
+                )}
               </>
             )}
           </div>

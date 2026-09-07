@@ -19,6 +19,7 @@ const createFixture = () => {
   const mediaStore = new ProjectMediaStore(projectStore);
   const submissions = [];
   const jobsByGroup = new Map();
+  const retryCalls = [];
   const store = new BatchWorkflowStore({
     dataDirectory: path.join(root, 'data'),
     projectStore,
@@ -48,9 +49,16 @@ const createFixture = () => {
       .filter((job) => !groupId || job.groupId === groupId)
       .slice(0, limit),
     findLatestNodeJob: (projectId, nodeId) => [...jobsByGroup.values()].flat().reverse()
-      .find((job) => job.projectId === projectId && job.nodeId === nodeId) || null
+      .find((job) => job.projectId === projectId && job.nodeId === nodeId) || null,
+    retryFailedGroup: (groupId) => {
+      const retried = (jobsByGroup.get(groupId) || [])
+        .filter((job) => ['failed', 'submission_uncertain'].includes(job.status));
+      retried.forEach((job) => Object.assign(job, { status: 'queued', progress: 0, error: null }));
+      retryCalls.push({ groupId, jobIds: retried.map((job) => job.id) });
+      return retried;
+    }
   });
-  return { root, store, projectStore, submissions, jobsByGroup };
+  return { root, store, projectStore, submissions, jobsByGroup, retryCalls };
 };
 
 test('creates one project with one independent workflow group per uploaded image', () => {
@@ -243,6 +251,70 @@ test('starts selected draft workflows once and publishes a Storyworks sync manif
     assert.equal(fixture.store.getSyncManifest(batch.id, 'client-123').targetApp.name, '我的选品软件');
     assert.equal(fixture.store.getBatch(batch.id).lastSync.targets.length, 2);
     assert.throws(() => fixture.store.syncBatch(batch.id, { targets: [{ id: '../escape', name: '非法软件', kind: 'paired' }] }), /无效/);
+  } finally {
+    fs.rmSync(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test('missing, malformed, empty, or unknown batch selections never start workflows', () => {
+  const fixture = createFixture();
+  try {
+    const batch = fixture.store.createBatch({
+      name: '空选择保护',
+      prompt: '把裤子换成黑色',
+      profileId: 'gpt-clothes',
+      aspectRatio: '1:1',
+      resolution: '2K',
+      outputCount: 1,
+      images: [{ name: 'a.png', data: PNG_DATA }, { name: 'b.png', data: PNG_DATA }]
+    });
+
+    for (const input of [undefined, {}, { itemIds: null }, { itemIds: 'bad-client-value' }, { itemIds: [] }]) {
+      assert.throws(
+        () => input === undefined ? fixture.store.startBatch(batch.id) : fixture.store.startBatch(batch.id, input),
+        (error) => error?.status === 400 && /至少选择一个工作流/.test(error.message)
+      );
+    }
+    assert.throws(
+      () => fixture.store.startBatch(batch.id, { itemIds: ['missing-item'] }),
+      (error) => error?.status === 400 && /有效工作流/.test(error.message)
+    );
+    assert.throws(
+      () => fixture.store.startBatch(batch.id, { itemIds: [batch.items[0].id, 42] }),
+      (error) => error?.status === 400 && /工作流 ID/.test(error.message)
+    );
+    assert.equal(fixture.submissions.length, 0);
+    assert.equal(fixture.store.getBatch(batch.id).items.every((item) => item.status === 'draft'), true);
+  } finally {
+    fs.rmSync(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test('a partially failed batch item stays failed and retries only its failed jobs', () => {
+  const fixture = createFixture();
+  try {
+    const batch = fixture.store.createBatch({
+      name: '失败重试',
+      prompt: '把裤子换成黑色',
+      profileId: 'gpt-clothes',
+      aspectRatio: '1:1',
+      resolution: '2K',
+      outputCount: 2,
+      images: [{ name: 'source.png', data: PNG_DATA }]
+    });
+    fixture.store.startBatch(batch.id, { itemIds: [batch.items[0].id] });
+    const jobs = fixture.jobsByGroup.get('group-1');
+    Object.assign(jobs[0], { status: 'succeeded', progress: 1, output: { media: { url: '/output/success.png' } } });
+    Object.assign(jobs[1], { status: 'failed', progress: 0.4, error: { code: 'NETWORK_ERROR', message: '连接中断' } });
+
+    assert.equal(fixture.store.getBatch(batch.id).items[0].status, 'failed');
+    const retried = fixture.store.startBatch(batch.id, { itemIds: [batch.items[0].id] });
+
+    assert.equal(retried.started, 1);
+    assert.equal(retried.skipped, 0);
+    assert.equal(fixture.submissions.length, 1);
+    assert.deepEqual(fixture.retryCalls, [{ groupId: 'group-1', jobIds: ['group-1-job-1'] }]);
+    assert.equal(retried.batch.items[0].status, 'running');
   } finally {
     fs.rmSync(fixture.root, { recursive: true, force: true });
   }
@@ -706,6 +778,41 @@ test('recovers an already persisted node job before submitting a batch item agai
     assert.equal(result.skipped, 1);
     assert.equal(fixture.submissions.length, 0);
     assert.equal(fixture.store.getBatch(batch.id).items[0].jobGroupId, 'recovered-group');
+  } finally {
+    fs.rmSync(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test('recovers and retries a failed persisted node job in the same start request', () => {
+  const fixture = createFixture();
+  try {
+    const batch = fixture.store.createBatch({
+      name: '失败断点恢复',
+      prompt: '把裤子换成黑色',
+      profileId: 'gpt-clothes',
+      aspectRatio: '1:1',
+      resolution: '2K',
+      outputCount: 1,
+      images: [{ name: 'recover-failed.png', data: PNG_DATA }]
+    });
+    fixture.jobsByGroup.set('recovered-failed-group', [{
+      id: 'recovered-failed-job',
+      groupId: 'recovered-failed-group',
+      projectId: batch.items[0].projectId,
+      nodeId: batch.items[0].generationNodeId,
+      status: 'submission_uncertain',
+      output: null
+    }]);
+
+    const result = fixture.store.startBatch(batch.id, { itemIds: [batch.items[0].id] });
+    assert.equal(result.started, 1);
+    assert.equal(result.skipped, 0);
+    assert.equal(fixture.submissions.length, 0);
+    assert.deepEqual(fixture.retryCalls, [{
+      groupId: 'recovered-failed-group',
+      jobIds: ['recovered-failed-job']
+    }]);
+    assert.equal(fixture.store.getBatch(batch.id).items[0].jobGroupId, 'recovered-failed-group');
   } finally {
     fs.rmSync(fixture.root, { recursive: true, force: true });
   }

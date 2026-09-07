@@ -433,7 +433,8 @@
   .vela-batch__suffix { grid-template-columns: minmax(220px, .8fr) 140px minmax(280px, 1.4fr); }
 }
 
-@media (max-width: 720px) {
+/* The content column becomes narrow early while the persistent sidebar is visible. */
+@media (max-width: 900px) {
   .vela-batch { padding: 28px 16px 48px; }
   .vela-batch__builder { padding: 16px; }
   .vela-batch__dropzone > button { align-items: flex-start; flex-direction: column; }
@@ -441,7 +442,9 @@
   .vela-batch__benchmark > button:not(.vela-batch__benchmark-replace):not(.vela-batch__benchmark-remove) { align-items: flex-start; flex-direction: column; }
   .vela-batch__benchmark > button > small { margin-left: 0; }
   .vela-batch__form-grid { grid-template-columns: 1fr; }
-  .vela-batch__prompt { grid-column: 1; }
+  .vela-batch__prompt { grid-column: 1; min-width: 0; }
+  .vela-batch .vela-prompt-workbench { min-width: 0; }
+  .vela-batch .vela-prompt-workbench__analysis-grid { grid-template-columns: minmax(0, 1fr); }
   .vela-batch__suffix { grid-template-columns: 1fr; }
   .vela-batch__create-bar,
   .vela-batch__runs > header,

@@ -4,6 +4,7 @@ import path from 'node:path';
 
 import { MAX_BATCH_SIZE, assertNoPlaintextSecrets } from '../../shared/vela-contracts.js';
 import { atomicWriteJson } from './projectStore.js';
+import { decodedBase64ByteLength } from './base64Size.js';
 
 const ACTIVE_JOB_STATUSES = new Set(['queued', 'preparing', 'submitting', 'running', 'reconnecting', 'downloading']);
 const IMAGE_ASPECT_RATIOS = new Set(['1:1', '3:2', '2:3', '4:3', '3:4', '16:9', '9:16']);
@@ -35,7 +36,7 @@ const normalizeImageDraft = (image, label, fallbackName) => {
   const match = data.match(/^data:(image\/[a-z0-9.+-]+);base64,([a-z0-9+/=]+)$/i);
   if (!match) throw new Error(`${label}不是有效的图片文件`);
   if (!SUPPORTED_IMAGE_MIMES.has(match[1].toLowerCase())) throw new Error(`${label}图片格式不受支持`);
-  const estimatedBytes = Math.floor((match[2].length * 3) / 4);
+  const estimatedBytes = decodedBase64ByteLength(match[2]);
   if (!estimatedBytes || estimatedBytes > MAX_IMAGE_BYTES) throw new Error(`${label}图片为空或超过 100MB`);
   return {
     name: String(image?.name || fallbackName).slice(0, 255),
@@ -158,9 +159,9 @@ const resolveItemStatus = (item, jobs) => {
   const groupJobs = jobs.filter((job) => job.groupId === item.jobGroupId);
   if (!groupJobs.length) return 'submitted';
   if (groupJobs.some((job) => ACTIVE_JOB_STATUSES.has(job.status))) return 'running';
-  if (groupJobs.some((job) => job.status === 'succeeded')) return 'succeeded';
   if (groupJobs.some((job) => ['failed', 'submission_uncertain'].includes(job.status))) return 'failed';
   if (groupJobs.every((job) => job.status === 'cancelled')) return 'cancelled';
+  if (groupJobs.some((job) => job.status === 'succeeded')) return 'succeeded';
   return 'submitted';
 };
 
@@ -232,7 +233,8 @@ export class BatchWorkflowStore {
     profileRepository,
     createJobGroup,
     listJobs,
-    findLatestNodeJob
+    findLatestNodeJob,
+    retryFailedGroup
   }) {
     if (!dataDirectory) throw new Error('dataDirectory is required');
     this.directory = path.join(path.resolve(dataDirectory), 'batch-workflows');
@@ -247,6 +249,7 @@ export class BatchWorkflowStore {
     this.createJobGroup = createJobGroup;
     this.listJobs = listJobs;
     this.findLatestNodeJob = findLatestNodeJob;
+    this.retryFailedGroup = retryFailedGroup;
     ensureDirectory(this.directory);
     ensureDirectory(this.outboxDirectory);
     ensureDirectory(this.inboxAcknowledgementsDirectory);
@@ -839,18 +842,64 @@ export class BatchWorkflowStore {
     return this.decorate(batch);
   }
 
-  startBatch(batchId, { itemIds } = {}) {
+  startBatch(batchId, options = {}) {
+    const itemIds = options?.itemIds;
     const batch = this.migrateLegacyBatches().find((candidate) => candidate.id === batchId);
     if (!batch) throw new Error('批次不存在');
-    const selectedIds = new Set(Array.isArray(itemIds) && itemIds.length ? itemIds : batch.items.map((item) => item.id));
+    const invalidInput = (message) => Object.assign(new Error(message), {
+      status: 400,
+      code: 'INVALID_INPUT'
+    });
+    if (!Array.isArray(itemIds) || itemIds.length === 0) {
+      throw invalidInput('请至少选择一个工作流');
+    }
+    if (itemIds.some((itemId) => typeof itemId !== 'string' || itemId.trim().length === 0)) {
+      throw invalidInput('工作流 ID 必须是非空字符串');
+    }
+    const knownItemIds = new Set(batch.items.map((item) => item.id));
+    if (itemIds.some((itemId) => !knownItemIds.has(itemId))) {
+      throw invalidInput('没有找到有效工作流，请刷新批次后重试');
+    }
+    const selectedIds = new Set(itemIds);
     let started = 0;
     let skipped = 0;
     const errors = [];
 
+    const retryExistingGroup = (item, groupId, project = null) => {
+      const groupJobs = this.listJobs({ groupId, limit: 2000 });
+      const hasRetryableFailure = groupJobs.some((job) => ['failed', 'submission_uncertain'].includes(job.status));
+      if (!hasRetryableFailure || !this.retryFailedGroup) {
+        skipped += 1;
+        return;
+      }
+      try {
+        const retriedJobs = this.retryFailedGroup(groupId);
+        if (!retriedJobs.length) {
+          skipped += 1;
+          return;
+        }
+        const currentProject = project || this.projectStore.getProject(item.projectId);
+        if (currentProject) {
+          this.projectStore.saveProject({
+            ...currentProject,
+            nodes: currentProject.nodes.map((node) => node.id === item.generationNodeId ? {
+              ...node,
+              status: 'loading',
+              generationProgress: 0,
+              errorMessage: undefined
+            } : node)
+          });
+        }
+        started += 1;
+      } catch (error) {
+        errors.push({ itemId: item.id, message: error instanceof Error ? error.message : '失败任务重试失败' });
+      }
+    };
+
     for (const item of batch.items) {
       if (!selectedIds.has(item.id)) continue;
       if (item.jobGroupId) {
-        skipped += 1;
+        retryExistingGroup(item, item.jobGroupId);
         continue;
       }
       try {
@@ -870,7 +919,7 @@ export class BatchWorkflowStore {
           item.jobGroupId = existingJob.groupId;
           batch.updatedAt = new Date().toISOString();
           this.replaceBatch(batch);
-          skipped += 1;
+          retryExistingGroup(item, existingJob.groupId, project);
           continue;
         }
 

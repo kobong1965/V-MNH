@@ -8,6 +8,7 @@ import {
   Plus,
   RefreshCw,
   Send,
+  TriangleAlert,
   UploadCloud,
   X
 } from 'lucide-react';
@@ -26,6 +27,7 @@ import {
 import type { VelaProfile } from '../services/profileService';
 import { VelaSyncTargetsDialog } from './VelaSyncTargetsDialog';
 import { VelaPromptWorkbench } from './VelaPromptWorkbench';
+import { getBatchImageValidationError } from '../batchImageValidation';
 import './VelaBatchFactory.css';
 
 interface PendingImage {
@@ -42,7 +44,6 @@ interface VelaBatchFactoryProps {
 }
 
 const MAX_FILES = 50;
-const MAX_FILE_BYTES = 32 * 1024 * 1024;
 const MAX_TOTAL_FILE_BYTES = 192 * 1024 * 1024;
 const DEFAULT_PROMPT = '将人物正在穿着的裤子改成纯黑色。保持裤子的款式、材质纹理、褶皱和版型真实，人物身份、肤色、上衣、鞋子、姿势、背景、构图和光线不变。不要新增文字、水印或其他物体。';
 const BENCHMARK_PROMPT = '将商品原图中裤子的颜色、版型、面料纹理和设计细节准确应用到对标图人物身上。保持对标图中的人物身份、五官、发型、体型、姿势、上衣、鞋子、配饰、背景、构图、镜头、光线和文字排版不变；除裤子外不要修改任何内容。';
@@ -60,7 +61,7 @@ const STATUS_COPY: Record<BatchWorkflowItem['status'], string> = {
   submitted: '已提交',
   running: '生成中',
   succeeded: '已完成',
-  failed: '失败',
+  failed: '生成失败',
   cancelled: '已取消'
 };
 
@@ -87,14 +88,15 @@ export function VelaBatchFactory({ profiles, onOpenProject, onOpenApi, onProject
   const inputRef = useRef<HTMLInputElement>(null);
   const benchmarkInputRef = useRef<HTMLInputElement>(null);
   const previewUrlsRef = useRef(new Set<string>());
+  const startRequestInFlightRef = useRef(false);
 
   const imageProfiles = useMemo(() => profiles.filter((profile) => profile.type === 'gpt' && Boolean(profile.models.image)), [profiles]);
   const activeBatch = batches.find((batch) => batch.id === activeBatchId) || null;
   const activeBatchHasRunningItems = Boolean(
     activeBatch?.items.some((item) => ['submitted', 'running'].includes(item.status))
   );
-  const draftItems = activeBatch?.items.filter((item) => item.status === 'draft') || [];
-  const selectedDraftIds = draftItems.filter((item) => selectedIds.has(item.id)).map((item) => item.id);
+  const startableItems = activeBatch?.items.filter((item) => ['draft', 'failed'].includes(item.status)) || [];
+  const selectedStartableIds = startableItems.filter((item) => selectedIds.has(item.id)).map((item) => item.id);
 
   useEffect(() => {
     if (!profileId && imageProfiles[0]) setProfileId(imageProfiles[0].id);
@@ -151,9 +153,9 @@ export function VelaBatchFactory({ profiles, onOpenProject, onOpenApi, onProject
     setMessage(null);
     setError(null);
     const existing = new Set(pending.map((item) => `${item.file.name}:${item.file.size}:${item.file.lastModified}`));
-    const accepted = files.filter((file) => file.type.startsWith('image/') && file.size <= MAX_FILE_BYTES && !existing.has(`${file.name}:${file.size}:${file.lastModified}`));
-    if (files.some((file) => !file.type.startsWith('image/'))) setError('已跳过非图片文件，仅支持 JPG、PNG、WebP 等图片。');
-    else if (files.some((file) => file.size > MAX_FILE_BYTES)) setError('已跳过超过 32MB 的图片。');
+    const accepted = files.filter((file) => !getBatchImageValidationError(file, 'source') && !existing.has(`${file.name}:${file.size}:${file.lastModified}`));
+    const firstValidationError = files.map((file) => getBatchImageValidationError(file, 'source')).find(Boolean);
+    if (firstValidationError) setError(firstValidationError);
     const available = Math.max(0, MAX_FILES - pending.length);
     const next = accepted.slice(0, available).map((file) => {
       const previewUrl = URL.createObjectURL(file);
@@ -175,12 +177,9 @@ export function VelaBatchFactory({ profiles, onOpenProject, onOpenApi, onProject
     if (!file) return;
     setMessage(null);
     setError(null);
-    if (!file.type.startsWith('image/')) {
-      setError('对标图必须是 JPG、PNG、WebP 等图片文件。');
-      return;
-    }
-    if (file.size > MAX_FILE_BYTES) {
-      setError('对标图不能超过 32MB。');
+    const validationError = getBatchImageValidationError(file, 'benchmark');
+    if (validationError) {
+      setError(validationError);
       return;
     }
     const previewUrl = URL.createObjectURL(file);
@@ -278,17 +277,21 @@ export function VelaBatchFactory({ profiles, onOpenProject, onOpenApi, onProject
   };
 
   const runStart = async () => {
-    if (!activeBatch || !selectedDraftIds.length) return;
+    if (startRequestInFlightRef.current || !activeBatch || !selectedStartableIds.length) return;
+    startRequestInFlightRef.current = true;
     try {
       setBusyAction('start');
       setError(null);
-      const result = await startBatchWorkflow(activeBatch.id, selectedDraftIds);
+      const result = await startBatchWorkflow(activeBatch.id, selectedStartableIds);
       setBatches((current) => current.map((batch) => batch.id === result.batch.id ? result.batch : batch));
       setMessage(`已开始 ${result.started} 个工作流${result.skipped ? `，跳过 ${result.skipped} 个已提交工作流` : ''}。`);
       if (result.errors.length) setError(`${result.errors.length} 个项目未能启动：${result.errors[0].message}`);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : '批量开始失败');
-    } finally { setBusyAction(null); }
+    } finally {
+      startRequestInFlightRef.current = false;
+      setBusyAction(null);
+    }
   };
 
   const runSync = async (targetIds: string[]) => {
@@ -382,7 +385,7 @@ export function VelaBatchFactory({ profiles, onOpenProject, onOpenApi, onProject
         <header><div><h2 id="vela-batch-runs-title">批次控制台</h2><p>勾选待开始项目后统一生成；已提交项目不会重复启动。</p></div><div className="vela-batch__run-tools"><select aria-label="选择批次" value={activeBatchId} onChange={(event) => setActiveBatchId(event.target.value)}><option value="">还没有批次</option>{batches.map((batch) => <option key={batch.id} value={batch.id}>{batch.name} · {batch.items.length} 个 · {new Date(batch.createdAt).toLocaleDateString('zh-CN')}</option>)}</select><button type="button" aria-label="刷新批次" onClick={() => void refreshBatches(true)} disabled={Boolean(busyAction)}><RefreshCw className={busyAction === 'refresh' ? 'vela-spin' : ''} size={16} /></button></div></header>
         {!activeBatch ? <div className="vela-batch__empty"><Clock3 size={24} /><strong>创建后的独立工作流会显示在这里</strong><span>所有工作流属于同一个项目，创建动作不会自动调用模型。</span></div> : <>
           <BatchItems batch={activeBatch} selectedIds={selectedIds} onSelectionChange={setSelectedIds} onOpenProject={onOpenProject} />
-          <footer className="vela-batch__actions"><div><span>同步目标</span><strong>点击选择一个或多个软件</strong>{(activeBatch.lastSync || activeBatch.sync) && <small><CheckCircle2 size={13} />上次同步 {new Date(activeBatch.lastSync?.syncedAt || activeBatch.sync!.syncedAt).toLocaleString('zh-CN')}{activeBatch.lastSync ? ` · ${activeBatch.lastSync.targets.filter((target) => target.status === 'succeeded').length} 个软件` : ''}</small>}</div><button type="button" className="vela-batch__sync" onClick={() => setSyncDialogOpen(true)} disabled={Boolean(busyAction)}>{busyAction === 'sync' ? <Loader2 className="vela-spin" size={16} /> : <Send size={16} />}一键同步</button><button type="button" className="vela-batch__start" onClick={() => void runStart()} disabled={Boolean(busyAction) || selectedDraftIds.length === 0}>{busyAction === 'start' ? <Loader2 className="vela-spin" size={17} /> : <Play size={17} />}批量开始生成（{selectedDraftIds.length}）</button></footer>
+          <footer className="vela-batch__actions"><div><span>同步目标</span><strong>点击选择一个或多个软件</strong>{(activeBatch.lastSync || activeBatch.sync) && <small><CheckCircle2 size={13} />上次同步 {new Date(activeBatch.lastSync?.syncedAt || activeBatch.sync!.syncedAt).toLocaleString('zh-CN')}{activeBatch.lastSync ? ` · ${activeBatch.lastSync.targets.filter((target) => target.status === 'succeeded').length} 个软件` : ''}</small>}</div><button type="button" className="vela-batch__sync" onClick={() => setSyncDialogOpen(true)} disabled={Boolean(busyAction)}>{busyAction === 'sync' ? <Loader2 className="vela-spin" size={16} /> : <Send size={16} />}一键同步</button><button type="button" className="vela-batch__start" onClick={() => void runStart()} disabled={Boolean(busyAction) || selectedStartableIds.length === 0}>{busyAction === 'start' ? <Loader2 className="vela-spin" size={17} /> : <Play size={17} />}批量开始生成（{selectedStartableIds.length}）</button></footer>
         </>}
       </section>
     </main>
@@ -392,13 +395,13 @@ export function VelaBatchFactory({ profiles, onOpenProject, onOpenApi, onProject
 }
 
 function BatchItems({ batch, selectedIds, onSelectionChange, onOpenProject }: { batch: BatchWorkflow; selectedIds: Set<string>; onSelectionChange: (ids: Set<string>) => void; onOpenProject: (projectId: string) => Promise<void> }) {
-  const draftIds = batch.items.filter((item) => item.status === 'draft').map((item) => item.id);
-  const allSelected = draftIds.length > 0 && draftIds.every((id) => selectedIds.has(id));
-  const toggleAll = () => onSelectionChange(allSelected ? new Set() : new Set(draftIds));
+  const startableIds = batch.items.filter((item) => ['draft', 'failed'].includes(item.status)).map((item) => item.id);
+  const allSelected = startableIds.length > 0 && startableIds.every((id) => selectedIds.has(id));
+  const toggleAll = () => onSelectionChange(allSelected ? new Set() : new Set(startableIds));
   const toggleOne = (id: string) => {
     const next = new Set(selectedIds);
     if (next.has(id)) next.delete(id); else next.add(id);
     onSelectionChange(next);
   };
-  return <div className="vela-batch__table-wrap"><table className="vela-batch__table"><thead><tr><th><input type="checkbox" aria-label="选择全部待开始工作流" checked={allSelected} onChange={toggleAll} /></th><th>原图 / 工作流</th><th>参数</th><th>状态</th><th>结果</th><th><span className="vela-batch__sr-only">操作</span></th></tr></thead><tbody>{batch.items.map((item) => <tr key={item.id}><td><input type="checkbox" aria-label={`选择 ${item.workflowName || item.projectName}`} checked={selectedIds.has(item.id)} disabled={item.status !== 'draft'} onChange={() => toggleOne(item.id)} /></td><td><div className="vela-batch__project-cell"><img src={item.sourceUrl} alt="" /><span><strong>{item.workflowName || item.projectName}</strong><small>{item.sourceName}{item.benchmarkUrl ? ' · 含对标图' : ''}</small></span></div></td><td><span className="vela-batch__params"><strong>{batch.aspectRatio} · {batch.resolution} · 主图 {batch.outputCount} 张</strong>{batch.poseVariation?.enabled && <small>后缀 {batch.poseVariation.outputCount || 5} 张姿势</small>}</span></td><td><span className="vela-batch__status" data-status={item.status}>{item.status === 'succeeded' ? <CheckCircle2 size={14} /> : item.status === 'running' ? <Loader2 className="vela-spin" size={14} /> : <Clock3 size={14} />}{STATUS_COPY[item.status]}{item.status === 'running' && item.progress > 0 ? ` ${item.progress}%` : ''}</span></td><td>{item.outputs[0]?.url ? <img className="vela-batch__result" src={item.outputs[0].url} alt={`${item.workflowName || item.projectName} 生成结果`} /> : <span className="vela-batch__no-result">—</span>}</td><td><button type="button" className="vela-batch__open" onClick={() => void onOpenProject(item.projectId)}>{item.status === 'succeeded' && item.poseNodeId ? '打开并裂变' : '打开画布'}<ExternalLink size={13} /></button></td></tr>)}</tbody></table></div>;
+  return <div className="vela-batch__table-wrap"><table className="vela-batch__table"><thead><tr><th><input type="checkbox" aria-label="选择全部待开始或生成失败的工作流" checked={allSelected} onChange={toggleAll} /></th><th>原图 / 工作流</th><th>参数</th><th>状态</th><th>结果</th><th><span className="vela-batch__sr-only">操作</span></th></tr></thead><tbody>{batch.items.map((item) => <tr key={item.id}><td><input type="checkbox" aria-label={`选择 ${item.workflowName || item.projectName}`} checked={selectedIds.has(item.id)} disabled={!['draft', 'failed'].includes(item.status)} onChange={() => toggleOne(item.id)} /></td><td><div className="vela-batch__project-cell"><img src={item.sourceUrl} alt="" /><span><strong>{item.workflowName || item.projectName}</strong><small>{item.sourceName}{item.benchmarkUrl ? ' · 含对标图' : ''}</small></span></div></td><td><span className="vela-batch__params"><strong>{batch.aspectRatio} · {batch.resolution} · 主图 {batch.outputCount} 张</strong>{batch.poseVariation?.enabled && <small>后缀 {batch.poseVariation.outputCount || 5} 张姿势</small>}</span></td><td><span className="vela-batch__status" data-status={item.status}>{item.status === 'succeeded' ? <CheckCircle2 size={14} /> : item.status === 'running' ? <Loader2 className="vela-spin" size={14} /> : item.status === 'failed' ? <TriangleAlert size={14} /> : <Clock3 size={14} />}{STATUS_COPY[item.status]}{item.status === 'running' && item.progress > 0 ? ` ${item.progress}%` : ''}</span></td><td>{item.outputs[0]?.url ? <img className="vela-batch__result" src={item.outputs[0].url} alt={`${item.workflowName || item.projectName} 生成结果`} /> : <span className="vela-batch__no-result">—</span>}</td><td><button type="button" className="vela-batch__open" onClick={() => void onOpenProject(item.projectId)}>{item.status === 'succeeded' && item.poseNodeId ? '打开并裂变' : '打开画布'}<ExternalLink size={13} /></button></td></tr>)}</tbody></table></div>;
 }

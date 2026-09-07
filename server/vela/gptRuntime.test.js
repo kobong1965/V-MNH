@@ -158,6 +158,76 @@ test('an interrupted GPT image request becomes failed and can be retried immedia
   }
 });
 
+test('retrying a partially failed GPT group preserves job identity and enqueues the failed job once', async () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'vela-gpt-group-retry-'));
+  const imageBytes = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+    'base64'
+  );
+  let submissions = 0;
+  const runtime = new VelaRuntime({
+    dataDirectory: directory,
+    projectsDirectory: path.join(directory, 'projects'),
+    secretProtector: new SecretProtector({ key: Buffer.alloc(32, 19) }),
+    gptProvider: {
+      listModels: async () => ['image-model'],
+      generateImages: async () => {
+        submissions += 1;
+        if (submissions === 1) {
+          const error = new Error('first image failed');
+          error.retryable = true;
+          throw error;
+        }
+        return [{ kind: 'base64', value: imageBytes.toString('base64') }];
+      }
+    }
+  });
+  try {
+    const project = runtime.projectStore.saveProject({
+      name: 'Partial retry', nodes: [], groups: [], viewport: { x: 0, y: 0, zoom: 1 }
+    });
+    const profile = runtime.createProfile({
+      type: 'gpt', name: 'Relay', baseUrl: 'https://relay.test/v1', apiKey: 'secret',
+      models: { prompt: '', image: 'image-model', video: '' }
+    });
+    const created = runtime.createJobGroup({
+      projectId: project.id,
+      nodeId: 'image-node',
+      profileId: profile.id,
+      providerType: 'gpt',
+      payload: { nodeKind: 'gpt-image', prompt: '更换裤子颜色' },
+      count: 2,
+      seedMode: 'increment',
+      seed: 11
+    });
+    await runtime.scheduler.waitForIdle();
+    const before = runtime.jobs.listJobs({ groupId: created.group.id, limit: 10 });
+    const failedBefore = before.find((job) => job.status === 'failed');
+    const succeededBefore = before.find((job) => job.status === 'succeeded');
+    assert.ok(failedBefore);
+    assert.ok(succeededBefore);
+
+    const firstRetry = runtime.retryFailedGroup(created.group.id);
+    const duplicateRetry = runtime.retryFailedGroup(created.group.id);
+    assert.deepEqual(firstRetry.map((job) => job.id), [failedBefore.id]);
+    assert.deepEqual(duplicateRetry, []);
+    await runtime.scheduler.waitForIdle();
+
+    const after = runtime.jobs.listJobs({ groupId: created.group.id, limit: 10 });
+    assert.equal(after.length, 2);
+    assert.deepEqual(new Set(after.map((job) => job.id)), new Set(before.map((job) => job.id)));
+    assert.equal(runtime.database.connection.prepare('SELECT COUNT(*) AS count FROM job_groups').get().count, 1);
+    assert.equal(after.find((job) => job.id === failedBefore.id).retryCount, 1);
+    assert.equal(after.find((job) => job.id === failedBefore.id).status, 'succeeded');
+    assert.equal(after.find((job) => job.id === succeededBefore.id).retryCount, 0);
+    assert.equal(after.find((job) => job.id === succeededBefore.id).status, 'succeeded');
+    assert.equal(submissions, 3);
+  } finally {
+    runtime.close();
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 test('video director and competitor analyzer read project media and persist text outputs', async () => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'vela-script-runtime-'));
   const calls = [];

@@ -3,6 +3,7 @@ import path from 'node:path';
 
 import { expandJobGroup } from './batch.js';
 import { BatchWorkflowStore } from './batchWorkflowStore.js';
+import { decodedBase64ByteLength } from './base64Size.js';
 import { VelaDatabase } from './database.js';
 import { EventHub } from './eventHub.js';
 import { JobGroupContractConflictError, JobRepository } from './jobRepository.js';
@@ -180,7 +181,8 @@ export class VelaRuntime {
         ...options,
         limit: Math.min(2000, Math.max(1, Number(options.limit) || 2000))
       }),
-      findLatestNodeJob: (projectId, nodeId) => this.jobs.findLatestNodeJob(projectId, nodeId)
+      findLatestNodeJob: (projectId, nodeId) => this.jobs.findLatestNodeJob(projectId, nodeId),
+      retryFailedGroup: (groupId) => this.retryFailedGroup(groupId)
     });
     this.recover();
   }
@@ -739,8 +741,10 @@ export class VelaRuntime {
       if (!/^data:image\/[a-z0-9.+-]+;base64,/i.test(dataUrl)) {
         throw new ProviderError(`${label}不是有效的图片内容`, { code: 'INVALID_INPUT' });
       }
-      if (dataUrl.length > 46 * 1024 * 1024) {
-        throw new ProviderError(`${label}不能超过 32MB`, { code: 'INVALID_INPUT' });
+      const base64Payload = dataUrl.slice(dataUrl.indexOf(',') + 1);
+      const estimatedBytes = decodedBase64ByteLength(base64Payload);
+      if (!estimatedBytes || estimatedBytes > 100 * 1024 * 1024) {
+        throw new ProviderError(`${label}不能超过 100MB`, { code: 'INVALID_INPUT' });
       }
       return { name: String(image?.name || label).slice(0, 120), dataUrl };
     };

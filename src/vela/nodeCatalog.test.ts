@@ -5,8 +5,20 @@ import {
   canConnectNodeKinds,
   getNodeDefinition,
   isKnownVelaNodeKind,
-  VELA_NODE_CATALOG
+  VELA_NODE_CATALOG,
+  VELA_QUICK_ADD_CATALOG
 } from './nodeCatalog.ts';
+
+test('quick add exposes only prompt, image and video blocks', () => {
+  assert.deepEqual(
+    VELA_QUICK_ADD_CATALOG.map(({ label, kind }) => ({ label, kind })),
+    [
+      { label: '提示词', kind: 'prompt' },
+      { label: '图片', kind: 'gpt-image' },
+      { label: '视频', kind: 'gpt-video' }
+    ]
+  );
+});
 
 test('Vela catalog exposes only the first-version canvas nodes', () => {
   assert.deepEqual(

@@ -10,6 +10,7 @@ import velaDataRoutes from './vela-data.js';
 import velaGenerationRoutes from './vela-generation.js';
 import { ProviderError } from '../providers/openAiCompatibleProvider.js';
 import { VelaRuntime } from '../vela/runtime.js';
+import { velaJsonErrorHandler } from '../vela/httpErrors.js';
 import { computeExternalH3ContractFingerprint } from '../vela/externalJobContract.js';
 import { isMaterialsReadOnlyClient, isMaterialsReadRouteAllowed } from '../vela/pairingService.js';
 import { AUTO_COMFY_PROFILE_ID } from '../../shared/vela-contracts.js';
@@ -30,6 +31,7 @@ const createServer = async (runtimeOptions = {}) => {
   const runtime = new VelaRuntime({ dataDirectory: directory, fakeStepDelay: 1, ...velaOptions });
   const app = express();
   app.use(express.json({ limit: '5mb' }));
+  app.use(velaJsonErrorHandler);
   app.locals.velaRuntime = runtime;
   app.locals.pairingService = { listClients: () => pairedClients };
   app.locals.IMAGES_DIR = path.join(directory, 'fake-images');
@@ -383,6 +385,48 @@ test('batch workflow API creates one project with independent workflow groups an
       method: 'POST', body: JSON.stringify({ targetIds: ['missing-client'] })
     });
     assert.equal(unknownTarget.response.status, 400);
+  } finally {
+    await fixture.close();
+  }
+});
+
+test('batch start API rejects implicit or malformed selections without creating jobs', async () => {
+  const fixture = await createServer({ gptProvider: successfulImageProvider });
+  try {
+    const profile = fixture.runtime.createProfile({
+      type: 'gpt',
+      name: '批量请求校验账户',
+      baseUrl: 'https://relay.test/v1',
+      apiKey: 'validation-secret',
+      models: { prompt: 'gpt-text', image: 'gpt-image-1.5' }
+    });
+    const imageData = `data:image/png;base64,${VALID_PNG_BYTES.toString('base64')}`;
+    const created = await requestJson(`${fixture.baseUrl}/batches`, {
+      method: 'POST',
+      body: JSON.stringify({
+        name: '批量请求校验',
+        prompt: '把裤子换成黑色',
+        profileId: profile.id,
+        aspectRatio: '3:4',
+        resolution: '2K',
+        outputCount: 1,
+        images: [{ name: 'a.png', data: imageData }]
+      })
+    });
+    assert.equal(created.response.status, 201);
+
+    for (const body of [null, {}, { itemIds: null }, { itemIds: 'bad-client-value' }, { itemIds: [] }, { itemIds: ['missing-item'] }]) {
+      const result = await requestJson(`${fixture.baseUrl}/batches/${created.data.id}/start`, {
+        method: 'POST',
+        body: JSON.stringify(body)
+      });
+      assert.equal(result.response.status, 400);
+    }
+    assert.equal(fixture.runtime.jobs.listJobs({ limit: 2000 }).length, 0);
+    assert.equal(
+      fixture.runtime.database.connection.prepare('SELECT COUNT(*) AS count FROM job_groups').get().count,
+      0
+    );
   } finally {
     await fixture.close();
   }
@@ -926,9 +970,21 @@ test('batch prompt analysis uses the selected model slot and prompt templates pe
 
     const saved = await requestJson(`${fixture.baseUrl}/prompt-templates`, {
       method: 'POST',
-      body: JSON.stringify({ name: '换裤模板', text: analyzed.data.text })
+      body: JSON.stringify({
+        name: '换裤模板',
+        text: analyzed.data.text,
+        effectImage: {
+          name: '换色效果.png',
+          data: `data:image/png;base64,${VALID_PNG_BYTES.toString('base64')}`
+        }
+      })
     });
     assert.equal(saved.response.status, 201);
+    assert.equal(saved.data.effectImage.name, '换色效果.png');
+    const effectImage = await fetch(`${fixture.baseUrl}/prompt-templates/${saved.data.id}/effect-image`);
+    assert.equal(effectImage.status, 200);
+    assert.equal(effectImage.headers.get('content-type'), 'image/png');
+    assert.deepEqual(Buffer.from(await effectImage.arrayBuffer()), VALID_PNG_BYTES);
     const listed = await requestJson(`${fixture.baseUrl}/prompt-templates`);
     assert.equal(listed.data.length, 1);
     assert.equal(listed.data[0].text, analyzed.data.text);
